@@ -64,6 +64,13 @@ export async function dispararBreaking(jogo, ctx = {}) {
   // A IA escreve enquanto a fila anda; quando chegar a vez, o texto já está pronto.
   const texto = await gerarManchete(veiculo, ctx);
   fila.push({ veiculo, texto, tom: ctx.tom || 'quente' });
+  // ECO NO X: a regra editorial da casa — nem toda notícia do X é breaking, mas TODO
+  // breaking aparece no X. A faixa some em ~7,5s; o post fica, com o card de link do
+  // veículo, pra quem perdeu o plantão poder reler (e pro online, pro mundo comentar).
+  jogo?._empilharFeed?.([{
+    tipo: 'veiculo', veiculo: veiculo.nome, handle: veiculo.handle,
+    texto: `🔴 PLANTÃO — ${texto}`, manchete: texto, tom: 'breaking',
+  }]);
   bombear();
 }
 
