@@ -9,6 +9,9 @@ import { PAISES } from '../dados/paises.js';
 import { techDaFrota } from '../dados/forcas.js';
 import { equipamentosDoPais } from '../dados/registro.js';
 import { FOTO_UNIDADE } from '../dados/imagens.js';
+import { frotasDetectadas, poderNaval, distGraus } from '../jogo/frotas.js';
+import { todosEstados } from '../jogo/territorio.js';
+import { abrirEnvio } from './envio.js';
 import { ico } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -59,14 +62,16 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
       ${barra('Detecção', pctDe(tech.deteccao, 20), `radar ${classeDeteccao(tech.deteccao)}`)}
       ${barra('Furtividade', pctDe(tech.furtividade, 100), classeFurtiv(tech.furtividade) + (soSub ? ' 🥷' : ''), 'furtiva')}
     </div>
-    ${alvo ? `<div class="nva-alvo ${alvo.hostil ? 'hostil' : alvo.parceiro ? 'amigo' : 'neutro'}">
-      ${ico(alvo.hostil ? 'swords' : alvo.parceiro ? 'handshake' : 'radar', 14)}
-      <span><b>${esc(alvo.nome)}</b> a ${alvo.d.toFixed(0)}° · relação ${alvo.rel} — ${alvo.hostil ? 'HOSTIL, um estopim' : alvo.parceiro ? 'parceiro, presença amistosa' : 'neutro, observando'}</span>
-    </div>` : ''}
-    <div class="nva-acoes">
-      <button class="nva-btn mover" id="nva-mover">${ico('move', 15)} <span>Reposicionar<small>arraste o pino no globo</small></span></button>
-      ${alvo && alvo.hostil ? `<button class="nva-btn atacar" id="nva-atacar">${ico('swords', 15)} <span>Partir pra cima de ${esc(alvo.nome)}<small>vira guerra aberta</small></span></button>` : ''}
-      <button class="nva-btn casa" id="nva-casa">${ico('home', 15)} <span>Mandar de volta pra casa<small>libera as tropas e esfria o clima</small></span></button>
+    <div id="nva-corpo">
+      ${alvo ? `<div class="nva-alvo ${alvo.hostil ? 'hostil' : alvo.parceiro ? 'amigo' : 'neutro'}">
+        ${ico(alvo.hostil ? 'swords' : alvo.parceiro ? 'handshake' : 'radar', 14)}
+        <span><b>${esc(alvo.nome)}</b> a ${alvo.d.toFixed(0)}° · relação ${alvo.rel} — ${alvo.hostil ? 'HOSTIL, um estopim' : alvo.parceiro ? 'parceiro, presença amistosa' : 'neutro, observando'}</span>
+      </div>` : ''}
+      <div class="nva-acoes">
+        <button class="nva-btn mover" id="nva-mover">${ico('move', 15)} <span>Reposicionar<small>arraste o pino no globo</small></span></button>
+        <button class="nva-btn atacar" id="nva-atacar">${ico('crosshair', 15)} <span>Iniciar ataque<small>varredura de radar: revela o que a frota enxerga</small></span></button>
+        <button class="nva-btn casa" id="nva-casa">${ico('home', 15)} <span>Mandar de volta pra casa<small>libera as tropas e esfria o clima</small></span></button>
+      </div>
     </div>
   </div>`;
 
@@ -87,16 +92,108 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
     fechar();
   });
 
-  // ATACAR o hostil próximo: declara guerra e parte a ofensiva pelo mar.
-  modal.querySelector('#nva-atacar')?.addEventListener('click', () => {
-    if (!alvo) return;
+  // ── INICIAR ATAQUE → MODO VARREDURA ─────────────────────────────────────
+  // O botão não atira em nada: ele LIGA O RADAR. Um sweep cônico gira ~1.6s (CSS puro,
+  // prefixo .nvr-) + a onda no globo, e os CONTATOS vão pingando na lista com stagger —
+  // frotas inimigas dentro da detecção e estados costeiros dentro do alcance. Só então
+  // o jogador escolhe o alvo, com o custo dito na cara (hostil = guerra aberta; neutro
+  // = ato de guerra). O velho "partir pra cima do hostil" sobrevive como um dos alvos.
+  modal.querySelector('#nva-atacar')?.addEventListener('click', () => varrer());
+
+  // Comportamento ANTIGO do botão de ataque: guerra aberta contra o país hostil próximo.
+  function atacarPais(p) {
     e.emGuerra = e.emGuerra || [];
-    if (!e.emGuerra.includes(alvo.code)) e.emGuerra.push(alvo.code);
-    const chave = PAISES[alvo.code]?.rel; if (chave) e[chave] = Math.max(-100, (e[chave] || 0) - 40);
+    if (!e.emGuerra.includes(p.code)) e.emGuerra.push(p.code);
+    const chave = PAISES[p.code]?.rel; if (chave) e[chave] = Math.max(-100, (e[chave] || 0) - 40);
     e.temp_guerra = Math.min(100, (e.temp_guerra || 0) + 20);
     helpers.ondaRadar?.({ lat: fr.lat, lng: fr.lng }, { cor: 0xff3b5c, max: 60 });
-    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', texto: `⚔️ Sua frota abriu fogo contra ${esc(alvo.nome)}. É guerra no mar.`, cor: '#ff3b5c' }]);
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', texto: `⚔️ Sua frota abriu fogo contra ${esc(p.nome)}. É guerra no mar.`, cor: '#ff3b5c' }]);
     helpers.atualizar?.();
     fechar();
-  });
+  }
+
+  // O que o radar ENXERGA agora: frotas inimigas (detecção × furtividade, jogo/frotas.js)
+  // e estados costeiros de países não-parceiros dentro do ALCANCE da frota (territorio.js).
+  function colherAlvos() {
+    const eu = e.iso || 'USA';
+    const alvos = [];
+    for (const v of frotasDetectadas([fr], e.frotasInimigas || [])) {
+      alvos.push({ tipo: 'frota', d: v.distancia, frota: v.frota });
+    }
+    if (alvo && alvo.hostil) alvos.push({ tipo: 'pais', d: alvo.d, pais: alvo });
+    const estados = todosEstados()
+      .map((s) => ({ s, d: distGraus(s, fr) }))
+      .filter((x) => x.d <= tech.alcance && x.s.pais !== eu && x.s.lat != null)
+      .filter((x) => {
+        const info = PAISES[x.s.pais]; if (!info) return false;
+        return Number(e[info.rel] ?? 0) < 30;   // parceiro não é alvo
+      })
+      .sort((a, b) => a.d - b.d).slice(0, 6);
+    for (const x of estados) {
+      const rel = Number(e[PAISES[x.s.pais].rel] ?? 0);
+      alvos.push({ tipo: 'estado', d: x.d, estado: x.s, hostil: rel <= -20 });
+    }
+    return alvos.sort((a, b) => a.d - b.d);
+  }
+
+  function linhaAlvo(a, i) {
+    const delay = `style="animation-delay:${(420 + i * 190)}ms"`;
+    if (a.tipo === 'frota') {
+      const nomeF = PAISES[a.frota.code]?.nome || a.frota.nome || a.frota.code;
+      return `<button class="nvr-item frota" data-i="${i}" ${delay}>${ico('ship', 15)}
+        <span><b>Esquadra de ${esc(nomeF)}</b><small>poder naval ${poderNaval(a.frota)} — engajar: briga de esquadra em mar aberto</small></span>
+        <em class="nvr-d">${a.d.toFixed(0)}°</em></button>`;
+    }
+    if (a.tipo === 'pais') {
+      return `<button class="nvr-item hostil" data-i="${i}" ${delay}>${ico('swords', 15)}
+        <span><b>Partir pra cima de ${esc(a.pais.nome)}</b><small>hostil — vira guerra aberta no mar</small></span>
+        <em class="nvr-d">${a.d.toFixed(0)}°</em></button>`;
+    }
+    const nomeP = PAISES[a.estado.pais]?.nome || a.estado.pais;
+    return `<button class="nvr-item ${a.hostil ? 'hostil' : 'neutro'}" data-i="${i}" ${delay}>${ico('crosshair', 15)}
+      <span><b>${esc(a.estado.nome)} · ${esc(nomeP)}</b><small>${a.hostil ? 'hostil — desembarcar é guerra aberta' : 'neutro — ato de guerra, e o mundo reage'}</small></span>
+      <em class="nvr-d">${a.d.toFixed(0)}°</em></button>`;
+  }
+
+  function varrer() {
+    helpers.ondaRadar?.({ lat: fr.lat, lng: fr.lng }, { cor: 0x35e0ff, max: 40 });
+    const corpo = modal.querySelector('#nva-corpo');
+    const alvos = colherAlvos();
+    corpo.innerHTML = `<div class="nvr-scan">
+      <div class="nvr-radar"><i class="nvr-anel"></i><i class="nvr-anel a2"></i><i class="nvr-sweep"></i></div>
+      <div class="nvr-status" id="nvr-status">VARRENDO O MAR…</div>
+      <div class="nvr-lista">${alvos.map((a, i) => linhaAlvo(a, i)).join('')}</div>
+    </div>`;
+    setTimeout(() => {
+      if (!modal.isConnected) return;
+      const st = modal.querySelector('#nvr-status');
+      const radar = modal.querySelector('.nvr-radar');
+      radar?.classList.add('fim');
+      if (alvos.length) { if (st) st.textContent = `${alvos.length} CONTATO${alvos.length > 1 ? 'S' : ''} NO ALCANCE — ESCOLHA O ALVO`; }
+      else {
+        if (st) st.textContent = 'VARREDURA CONCLUÍDA';
+        modal.querySelector('.nvr-scan')?.insertAdjacentHTML('beforeend',
+          `<div class="nvr-vazio">Mar vazio no alcance. Aproxime a frota e varra de novo.</div>
+           <button class="nvr-acao" id="nvr-refazer">${ico('radar', 13)} VARRER DE NOVO</button>`);
+        modal.querySelector('#nvr-refazer')?.addEventListener('click', () => varrer());
+      }
+    }, 1600);
+    corpo.querySelectorAll('.nvr-item').forEach((btn) => btn.addEventListener('click', () => {
+      const a = alvos[Number(btn.dataset.i)];
+      if (!a) return;
+      if (a.tipo === 'pais') { atacarPais(a.pais); return; }
+      if (a.tipo === 'frota') {
+        // Engajar de verdade é papel do globo (onFrotaInimigaClick). Sem o helper, o
+        // caminho continua existindo: feche e clique no pino inimigo.
+        if (helpers.engajarFrota) { fechar(); helpers.engajarFrota(a.frota); return; }
+        fechar();
+        jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Marinha', cor: '#ffb020',
+          texto: `Contato marcado: esquadra de ${esc(PAISES[a.frota.code]?.nome || a.frota.code)}. Aproxime-se e clique no pino inimigo para engajar.` }]);
+        return;
+      }
+      // ESTADO COSTEIRO → o fluxo existente de DESIGNAR ALVO (envio.js) — desembarque pelo mar.
+      fechar();
+      abrirEnvio({ properties: { ...a.estado } }, jogo, { onFim: () => helpers.atualizar?.() });
+    }));
+  }
 }

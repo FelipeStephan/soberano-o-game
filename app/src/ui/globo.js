@@ -18,6 +18,7 @@ import { bandeiraDeFeature, bandeira, ISO2_DE, FOTO_UNIDADE } from '../dados/ima
 import { techDaFrota, forcaCombate } from '../dados/forcas.js';
 import { equipamentosDoPais } from '../dados/registro.js';
 import { abrirAcoesNaval } from './navalAcoes.js';
+import { abrirGovernanca } from './governanca.js';
 import { estaOcupado, ocupacaoDe } from '../jogo/ocupacao.js';
 import { MODELOS, luzes } from './modelos3d.js';
 import { TIPOS_BASE } from '../dados/bases.js';
@@ -1195,7 +1196,8 @@ export async function montarGlobo(container, jogo, {
             <div class="ins-id"><b>${esc(k.nome)}</b><span class="ins-st">${esc(k.status)}</span></div>
           </div>
           <div class="ins-meta">${k.capital ? `<span>${ico('map-pin', 9)} ${esc(k.capital)}</span>` : ''}<span>${ico('users', 9)} ${(k.reserva || 0).toLocaleString('pt-BR')} em reserva</span></div>
-          <button class="ins-go" type="button">${ico('network', 12)} <span class="ins-go-txt">DISTRIBUIR TROPAS</span></button>`
+          <button class="ins-go" type="button">${ico('network', 12)} <span class="ins-go-txt">DISTRIBUIR TROPAS</span></button>
+          <button class="ins-go ins-governar" type="button">${ico('landmark', 12)} <span>GOVERNAR</span></button>`
         : `<div class="ins-cab">
             ${k.flag ? `<img class="ins-flag" src="${k.flag}" alt="">` : ''}
             <div class="ins-id"><b>${esc(k.nome)}</b><span class="ins-st">${esc(k.status)}${Number.isFinite(k.rel) ? ` · ${k.rel}` : ''}</span></div>
@@ -1223,6 +1225,12 @@ export async function montarGlobo(container, jogo, {
           if (k.self) onDistribuir?.(); else if (alvo) onPaisClick(alvo);
           btn.dataset.abrindo = ''; insDock.classList.remove('abrindo'); txt.textContent = rot;
         }, 520);
+      });
+      // GOVERNAR — só na SUA nação: abre o gabinete civil (impostos, leis, panorama).
+      // Guerra fica no DISTRIBUIR acima; aqui é governo. onFim re-renderiza o dock.
+      insDock.querySelector('.ins-governar')?.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        abrirGovernanca(jogo, { onFim: () => { dockCodigo = null; atualizarDock(); } });
       });
     }
     posicionarConexao();   // posição inicial já correta (o rAF só mantém viva depois)

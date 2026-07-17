@@ -17,9 +17,9 @@ import { tickMundo, tickReconquista } from './mundo.js';
 import { snapshotIndice } from './indiceMundial.js';
 import { temaDoTurno, reacoesSociais } from '../dados/opiniao.js';
 import { tickForcasMundo } from './forcasMundo.js';
-import { tickEspionagem, mancheteVazamento, investirEspionagem } from './espionagem.js';
+import { tickEspionagem, mancheteVazamento, investirEspionagem, temIntel } from './espionagem.js';
 import { PAISES } from '../dados/paises.js';
-import { sortearAgressao, resolverAgressao, duracaoMobilizacao, chanceDeteccao } from './agressao.js';
+import { sortearAgressao, resolverAgressao, duracaoMobilizacao, chanceDeteccao, alvoProvavel } from './agressao.js';
 import { idsDesbloqueados, novasDesbloqueadas } from './desbloqueios.js';
 import { prepararContexto, gerarTurno } from '../maquina/gerador.js';
 import { criarFio, atualizarFios, anotarNoFio } from '../maquina/fios.js';
@@ -505,15 +505,20 @@ export class Jogo {
       mob.restante -= 1;
       if (!mob.detectado && Math.random() < chanceDeteccao(est, mob)) {
         mob.detectado = true; mob.novoAviso = true;
+        const alvoTxt = this._revelarAlvo(mob);
         est._toastsGlobo = est._toastsGlobo || [];
-        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} está mobilizando forças contra você. Ataque em ~${Math.max(1, mob.restante)} ${Math.max(1, mob.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa.` });
-        this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Inteligência', texto: `ALERTA: ${mob.nome} concentra tropas na nossa direção — ataque iminente.`, cor: '#ffb020' }]);
+        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} está mobilizando forças contra você. Ataque em ~${Math.max(1, mob.restante)} ${Math.max(1, mob.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa.${alvoTxt}` });
+        this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Inteligência', texto: `ALERTA: ${mob.nome} concentra tropas na nossa direção — ataque iminente.${alvoTxt}`, cor: '#ffb020' }]);
+      } else if (mob.detectado) {
+        // a mobilização já era conhecida, mas o ALVO ainda não: se a inteligência
+        // melhorou (ou um vazamento entregou os planos), a revelação chega atrasada.
+        this._revelarAlvo(mob);
       }
     }
     const pronta = est.mobilizacoes.find((m) => m.restante <= 0);
     if (pronta) {
       est.mobilizacoes = est.mobilizacoes.filter((m) => m !== pronta);
-      return this._resolverInvasao({ iso: pronta.iso, nome: pronta.nome, forca: pronta.forca, rel: pronta.rel, motivo: pronta.motivo });
+      return this._resolverInvasao({ iso: pronta.iso, nome: pronta.nome, forca: pronta.forca, rel: pronta.rel, motivo: pronta.motivo, alvoEstadoId: pronta.alvoEstadoId || null, alvoEstadoNome: pronta.alvoEstadoNome || null });
     }
 
     // 2) NOVO agressor? Não ataca na hora — começa a se MOBILIZAR (a inteligência ganha
@@ -521,16 +526,40 @@ export class Jogo {
     const agressor = sortearAgressao(est);
     if (agressor && !est.mobilizacoes.some((m) => m.iso === agressor.iso) && !est.emGuerra?.includes?.(agressor.iso)) {
       const total = duracaoMobilizacao(agressor);
-      const mob = { iso: agressor.iso, nome: agressor.nome, forca: agressor.forca, rel: agressor.rel, motivo: agressor.motivo, total, restante: total, detectado: false, novoAviso: false };
+      const mob = { iso: agressor.iso, nome: agressor.nome, forca: agressor.forca, rel: agressor.rel, motivo: agressor.motivo, total, restante: total, detectado: false, novoAviso: false, alvoEstadoId: null, alvoEstadoNome: null, alvoRevelado: false };
+      // O ALVO da primeira onda nasce COM a mobilização: meu estado mais próximo do
+      // agressor. Fica gravado no mob (JSON puro) — a inteligência decide QUANDO revelar.
+      const alvo = alvoProvavel(est, agressor.iso);
+      if (alvo) { mob.alvoEstadoId = alvo.id; mob.alvoEstadoNome = alvo.nome; }
       if (Math.random() < chanceDeteccao(est, mob)) {
         mob.detectado = true; mob.novoAviso = true;
+        const alvoTxt = this._revelarAlvo(mob);
         est._toastsGlobo = est._toastsGlobo || [];
-        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} iniciou uma mobilização militar na nossa direção. Ataque em ~${total} ${total > 1 ? 'meses' : 'mês'}.` });
-        this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Inteligência', texto: `ALERTA: ${mob.nome} inicia mobilização militar — os satélites já veem o movimento.`, cor: '#ffb020' }]);
+        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} iniciou uma mobilização militar na nossa direção. Ataque em ~${total} ${total > 1 ? 'meses' : 'mês'}.${alvoTxt}` });
+        this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Inteligência', texto: `ALERTA: ${mob.nome} inicia mobilização militar — os satélites já veem o movimento.${alvoTxt}`, cor: '#ffb020' }]);
       }
       est.mobilizacoes.push(mob);
     }
     return null;
+  }
+
+  // REVELAÇÃO EM CAMADAS: detectar a mobilização diz QUE vêm; inteligência BOA
+  // (>= 65) ou um vazamento de planos de ataque (temIntel 'mobilizacao') diz ONDE.
+  // Marca alvoRevelado, dispara o toast de ALVO IDENTIFICADO no globo e devolve o
+  // sufixo de texto pro aviso corrente ('' quando não há nada a revelar).
+  _revelarAlvo(mob) {
+    const est = this.estado;
+    if (!mob || mob.alvoRevelado || !mob.alvoEstadoId || !mob.alvoEstadoNome) return '';
+    const intelBoa = Number(est.inteligencia || 0) >= 65 || temIntel(est, mob.iso, 'mobilizacao');
+    if (!intelBoa) return '';
+    mob.alvoRevelado = true;
+    const meses = Math.max(1, mob.restante ?? mob.total ?? 1);
+    est._toastsGlobo = est._toastsGlobo || [];
+    est._toastsGlobo.push({
+      tom: 'perda', titulo: 'ALVO IDENTIFICADO', estadoId: mob.alvoEstadoId, nome: mob.alvoEstadoNome,
+      texto: `Inteligência confirma: ${mob.nome} mira ${mob.alvoEstadoNome}. Janela de ~${meses} ${meses > 1 ? 'meses' : 'mês'}.`,
+    });
+    return ` — a ofensiva mira ${mob.alvoEstadoNome}. Reforce antes que cheguem.`;
   }
 
   // Resolve de fato o ataque (quando a mobilização amadurece). Extraído pra ser reusado.

@@ -21,6 +21,9 @@ import { forcaCombate, UNIDADES } from '../dados/forcas.js';
 import { forcaDe, ajustarBase, fichaForca } from './forcasMundo.js';
 import { coalizaoDoJogador, materializarCoalizao } from './coalizao.js';
 import { aplicarEfeitos } from './efeitos.js';
+import { estadosCarregados, estadosDe, estadoPorId, ehMeu, resolverAtaqueAoEstado, aplicarAtaqueAoEstado } from './territorio.js';
+import { planoDeCampanha, aplicarCampanha } from './campanha.js';
+import { portoDe } from '../dados/portosNavais.js';
 
 const BONUS_OGIVA = 3;
 
@@ -56,6 +59,38 @@ export function chanceDeteccao(estado, mob) {
   const intel = Number(estado.inteligencia || 0);
   const elapsed = 1 - (mob.restante / Math.max(1, mob.total));
   return Math.max(0, Math.min(0.98, (intel / 100) * 0.55 + elapsed * 0.4));
+}
+
+// ── O ALVO DA PRIMEIRA ONDA ───────────────────────────────────────────
+// De onde o agressor parte: o porto naval dele (base real de projeção) ou, sem
+// porto, o centro dos estados dele já carregados no catálogo. Sem nada, null.
+function posicaoDoAgressor(iso) {
+  const porto = portoDe(iso);
+  if (porto) return { lat: porto.lat, lng: porto.lng };
+  const deles = estadosDe(iso);
+  if (!deles.length) return null;
+  return {
+    lat: deles.reduce((a, e) => a + e.lat, 0) / deles.length,
+    lng: deles.reduce((a, e) => a + e.lng, 0) / deles.length,
+  };
+}
+
+// O MEU estado mais provável de receber a primeira onda: o mais próximo do ponto
+// de partida do agressor. É o que a inteligência revela ("a ofensiva mira a Flórida")
+// e o que a invasão prioriza quando amadurece. Puro; devolve {id, nome} ou null
+// (fallback silencioso quando o mapa ainda não carregou).
+export function alvoProvavel(estado, agressorIso) {
+  if (!estadosCarregados()) return null;
+  const meus = estadosDe(estado.iso || 'USA').filter((e) => ehMeu(estado, e.id));
+  if (!meus.length) return null;
+  const pos = posicaoDoAgressor(agressorIso);
+  if (!pos) return null;
+  let melhor = null; let dMin = Infinity;
+  for (const e of meus) {
+    const d = Math.hypot(e.lat - pos.lat, (e.lng - pos.lng) * 0.7);
+    if (d < dMin) { dMin = d; melhor = e; }
+  }
+  return melhor ? { id: melhor.id, nome: melhor.nome } : null;
 }
 
 // Quem tem motivo pra me atacar, e quanto. Devolve a lista ordenada por risco.
@@ -168,10 +203,48 @@ export function resolverAgressao(estado, agressor) {
   estado.emGuerra = estado.emGuerra || [];
   if (!estado.emGuerra.includes(agressor.iso)) estado.emGuerra.push(agressor.iso);
 
+  // 6. TERRITÓRIO DE VERDADE: se a invasão avançou e o mapa está carregado, a primeira
+  //    onda morde estados reais — PRIORIZANDO o alvo que a mobilização apontou
+  //    (mob.alvoEstadoId). É aqui que reforçar o alvo revelado defende de fato: a
+  //    guarnição posicionada nele entra na conta da razão (com a vantagem do defensor)
+  //    e pode segurar o estado mesmo com a invasão "vencida" no agregado.
+  let campanha = null;
+  if (!repeliu && estadosCarregados() && estadosDe(eu).length) {
+    const alvoId = agressor.alvoEstadoId && estadoPorId(agressor.alvoEstadoId) ? agressor.alvoEstadoId : null;
+    // A PRIMEIRA ONDA (60% da força do agressor) bate primeiro no alvo apontado — e a
+    // guarnição que você posicionou LÁ resolve o combate local com a vantagem do
+    // defensor (1,6×, ver territorio.js). Se ela segura, a ofensiva morre na praia e
+    // nenhum estado cai. É isto que faz "reforce antes que cheguem" ser conselho real.
+    const primeiraOnda = poderDele * 0.6;
+    let choque = null;
+    if (alvoId) {
+      choque = resolverAtaqueAoEstado(estado, alvoId, primeiraOnda);
+      aplicarAtaqueAoEstado(estado, choque, agressor.iso);
+    }
+    if (choque?.segurou) {
+      campanha = { segurou: true, caem: [], alvoId, alvoNome: choque.nome };
+    } else {
+      const razao = poderDele / Math.max(1, meuPoder);
+      const plano = planoDeCampanha(estado, eu, razao, posicaoDoAgressor(agressor.iso), alvoId ? [alvoId] : null);
+      if (plano.caem.length) aplicarCampanha(estado, plano, agressor.iso);
+      const caem = plano.caem.map((e) => ({ id: e.id, nome: e.nome }));
+      // o choque já tomou o alvo mesmo que a fração da campanha tenha arredondado a zero
+      if (choque && !caem.some((e) => e.id === alvoId)) caem.unshift({ id: alvoId, nome: choque.nome });
+      campanha = { segurou: false, caem, alvoId };
+    }
+  }
+
+  let resumo = resumoDaInvasao(agressor, coalizao, repeliu);
+  if (campanha?.caem?.length) {
+    resumo += ` A primeira onda tomou ${campanha.caem.map((e) => e.nome).join(', ')}.`;
+  } else if (campanha?.segurou && campanha.alvoNome) {
+    resumo += ` A guarnição de ${campanha.alvoNome} segurou o alvo da primeira onda.`;
+  }
+
   return {
-    agressor, coalizao, apoios, rounds, repeliu, perdas, mudancas,
+    agressor, coalizao, apoios, rounds, repeliu, perdas, mudancas, campanha,
     meuInventario, boostAliado, minhaDefesa: Math.round(minhaDefesa), poderDele: Math.round(poderDele),
-    resumo: resumoDaInvasao(agressor, coalizao, repeliu),
+    resumo,
   };
 }
 
