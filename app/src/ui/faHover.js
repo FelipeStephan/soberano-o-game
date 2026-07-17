@@ -12,10 +12,33 @@
 // document — os botões podem nem existir quando isto roda. O conteúdo de cada card
 // vem de um `resolver(equipId)` que o jogo injeta (ele conhece o arsenal e o estado).
 
+import { equipamentosDoPais } from '../dados/registro.js';
+
 let caixa = null;
 let alvoAtual = null;
 let resolver = null;
 let ligado = false;
+
+// ── A FONTE CERTA DA FOTO (bug do "soldado-tanque") ─────────────────────
+// O resolver injetado pelo jogo consulta o catálogo VELHO (dados/equipamentos.js,
+// via equipamentoDe), que nem tem `infantaria` — o hover de "Soldados" caía no
+// genérico e mostrava artilharia. A coluna e o clique já usam a fonte com
+// precedência por país (dados/registro.js). Aqui a gente re-resolve pela mesma
+// fonte: o que o arquivo do país disser (foto do SOLDADO incluída) vence o que
+// veio do resolver. O iso do jogador sai do estado do jogo (window.__jogo).
+function corrigirPelaFontePais(equipId, d) {
+  const iso = (typeof window !== 'undefined' && window.__jogo?.ficha?.iso) || null;
+  if (!iso) return d;
+  const eq = equipamentosDoPais(iso)?.[equipId];
+  if (!eq) return d;
+  return {
+    ...d,
+    foto: eq.foto ?? null,                      // null explícito → sem foto (melhor que foto errada)
+    nome: eq.nome || d.nome,
+    fab: eq.fab ?? d.fab,
+    origem: eq.proprio === true ? 'nacional' : eq.proprio === 'licenca' ? 'licenca' : d.origem,
+  };
+}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -42,16 +65,17 @@ function posicionar(el) {
 }
 
 function mostrar(el) {
-  const d = resolver?.(el.dataset.equip);
-  if (!d) return;
+  const bruto = resolver?.(el.dataset.equip);
+  if (!bruto) return;
+  const d = corrigirPelaFontePais(el.dataset.equip, bruto);
   alvoAtual = el;
   montar();
   const origemCls = d.origem === 'nacional' ? 'nac' : d.origem === 'licenca' ? 'lic' : 'imp';
   const origemTxt = d.origem === 'nacional' ? 'Produção nacional'
     : d.origem === 'licenca' ? 'Montado sob licença' : 'Importado';
   caixa.innerHTML = `
-    <div class="fah-foto">
-      <img src="${esc(d.foto)}" alt="" onerror="this.style.display='none';this.parentNode.classList.add('sem-foto')">
+    <div class="fah-foto${d.foto ? '' : ' sem-foto'}">
+      ${d.foto ? `<img src="${esc(d.foto)}" alt="" onerror="this.style.display='none';this.parentNode.classList.add('sem-foto')">` : ''}
       <span class="fah-emoji">${d.icone || ''}</span>
       <span class="fah-dom">${esc(d.dominio)}</span>
     </div>

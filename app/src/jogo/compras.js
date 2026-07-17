@@ -16,9 +16,57 @@
 import { ARSENAL_POR_ID, podeComprar, precoEfetivo } from '../dados/arsenal.js';
 import { PAISES } from '../dados/paises.js';
 import { tetoSoldados } from '../dados/efetivoMilitar.js';
+import { UNIDADE_POR_ID } from '../dados/forcas.js';
+import { filaRegistrada, enfileirarNaFila } from './filaComando.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const round4 = (n) => Math.round(n * 1e4) / 1e4;
+
+// ── TEMPO DE ENTREGA ──────────────────────────────────────────────────
+// Nenhuma arma cai do céu: TODA aquisição entra na FILA DE COMANDO com um
+// tempo de produção/entrega proporcional ao PESO industrial do item.
+//
+//   infantaria / material leve ......... ~15s   (recrutar e fardar é rápido)
+//   blindados / artilharia / def.aérea . ~25s   (linha de montagem pesada)
+//   helicópteros / drones .............. ~30s   (aviação leve)
+//   caças / bombardeiros / mísseis ..... ~40s   (aviação de combate, alta tecnologia)
+//   navios / submarinos ................ ~60s   (estaleiro: meses viram anos)
+//   porta-aviões ....................... ~90s   (a obra de engenharia de uma década)
+//
+// Modificadores: produção NACIONAL é 30% mais rápida (a fábrica é sua, sem
+// alfândega nem navio de carga); pedido GRANDE (mais de 3 passos da unidade)
+// custa +20% (a linha satura). Clamp final 10s–120s.
+const TEMPO_ENTREGA_BASE = {
+  infantaria: 15,
+  blindados: 25, artilharia: 25, defesa_aerea: 25,
+  helicopteros: 30, drones: 30,
+  cacas: 40, bombardeiros: 40, misseis: 40,
+  navios: 60, submarinos: 60,
+  porta_avioes: 90,
+};
+
+export function tempoEntrega(unidadeId, qtd = 1, nacional = false) {
+  let t = TEMPO_ENTREGA_BASE[unidadeId] || 25;
+  const passo = UNIDADE_POR_ID[unidadeId]?.passo || 1;
+  if (qtd > passo * 3) t *= 1.2;      // encomenda grande satura a linha
+  if (nacional) t *= 0.7;             // fábrica própria: 30% mais rápido
+  return clamp(Math.round(t), 10, 120);
+}
+
+// Monta a ação sintética de encomenda que roda na fila de comando. Quando o
+// tempo dela acaba, motor.executarAcaoTempo reconhece `_compraArsenal` e
+// incorpora as unidades ao arsenal.
+export function acaoDeEncomenda({ unidadeId, qtd, nome, custo, nacional }) {
+  return {
+    id: `compra_${unidadeId}_${Date.now()}`,
+    nome: `Encomenda: ${nome} ×${qtd.toLocaleString('pt-BR')}`,
+    icone: '📦', categoria: 'Arsenal',
+    custo, custoPA: 1,
+    tempo: tempoEntrega(unidadeId, qtd, nacional),
+    prob: 1,
+    _compraArsenal: { unidadeId, qtd, nomeItem: nome },
+  };
+}
 
 // Chave de relação de um país (rel_brasil, rel_china...) ou sintetizada pelo ISO.
 export function chaveRelDe(estado, isoCode) {
@@ -61,8 +109,25 @@ export function solicitar(estado, itemId, qtd) {
   estado.tesouro = round4(estado.tesouro - total);
   estado.pedidos = estado.pedidos || [];
 
-  // Produção nacional entrega na hora — não há a quem pedir licença.
+  // Produção nacional não pede licença a ninguém — mas fabricar leva TEMPO.
+  // Com o tempo real ativo, a encomenda entra na FILA DE COMANDO e as unidades
+  // só chegam quando a linha de montagem termina (motor resolve _compraArsenal).
   if (av.nacional) {
+    if (filaRegistrada()) {
+      // Devolve a custódia: quem debita o caixa é a própria fila ao enfileirar.
+      estado.tesouro = round4(estado.tesouro + total);
+      const acao = acaoDeEncomenda({ unidadeId: item.unidade, qtd, nome: item.nome, custo: total, nacional: true });
+      const r = enfileirarNaFila(acao);
+      if (!r.ok) return { falha: r.motivo || 'Fila de comando cheia — espere concluir uma ordem.' };
+      registrarNoHistorico(estado, {
+        id: acao.id, itemId, qtd, total, origem: item.origem, nomeItem: item.nome, unidade: item.unidade,
+        pedidoNoTurno: estado.turno || 0, turnoResposta: estado.turno || 0,
+        status: 'produzido', chance: 1,
+        motivo: `Produção nacional — a linha de montagem é nossa. Encomenda na fila de comando; entrega em ~${acao.tempo}s.`,
+      });
+      return { encomendado: true, item, qtd, total, nacional: true, tempo: acao.tempo };
+    }
+    // Compat (modo antigo / testes, sem fila registrada): entrega imediata.
     estado.forcas[item.unidade] = (estado.forcas[item.unidade] || 0) + qtd;
     registrarNoHistorico(estado, {
       id: `nac_${itemId}_${(estado.historicoPedidos || []).length}`,

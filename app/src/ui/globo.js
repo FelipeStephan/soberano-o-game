@@ -27,7 +27,7 @@ import { NACOES } from '../dados/registro.js';
 import { ico } from './icones.js';
 
 import { registrarEstados, registrarCidades, semearGuarnicoes, todosEstados, paisCarregado, tropaLivre } from '../jogo/territorio.js';
-import { tickTransito, emTransito, frotasDetectadas, resolverBatalhaNaval, forcaFrota, poderNaval, semearFrotasInimigas, distGraus, setProvedorRota } from '../jogo/frotas.js';
+import { tickTransito, emTransito, iniciarTransito, comprimentoRota, frotasDetectadas, resolverBatalhaNaval, forcaFrota, poderNaval, semearFrotasInimigas, distGraus, setProvedorRota } from '../jogo/frotas.js';
 import { temIntel } from '../jogo/espionagem.js';
 import { corEstado, linhaEstado, alturaEstado, tipEstado, montarPontos, tipPonto, estadosVisiveis, resumoDominios } from './tatico.js';
 
@@ -196,8 +196,8 @@ export async function montarGlobo(container, jogo, {
   let sinoNotif = null; let painelNotif = null; let notifLidas = 0; // central de alertas
   let arcos = [];        // efêmeros: ações do jogador, somem sozinhos
   let arcosMundo = [];   // persistentes: guerras NPC — vivem enquanto o conflito viver
-  let arcoGuia = null;   // a linha que segue o mouse enquanto arrasta a frota
-  const pintarArcos = () => globe.arcsData([...arcosMundo, ...arcos, ...(arcoGuia ? [arcoGuia] : [])]);
+  let arcoGuia = null;   // ARRAY de segmentos: a rota que o jogador DESENHA arrastando a frota
+  const pintarArcos = () => globe.arcsData([...arcosMundo, ...arcos, ...(arcoGuia || [])]);
 
   // ── TERRITÓRIOS ─────────────────────────────────────────────────────
   // Os 862 KB de estados + 126 KB de cidades NÃO entram no carregamento inicial —
@@ -304,6 +304,13 @@ export async function montarGlobo(container, jogo, {
     // MARCADORES colados na superfície
     .htmlElementsData(marcadores)
     .htmlLat('lat').htmlLng('lng').htmlAltitude(0.03)
+    // SEM TWEEN de posição: o padrão do three-globe é animar CADA reposicionamento por
+    // 1000ms (Quadratic.InOut) — e ele NÃO cancela tweens antigos. Re-setar os dados no
+    // meio de um trânsito criava dezenas de tweens simultâneos brigando pela mesma
+    // posição: o pino andava atrasado, travado, e "saltava" quando um tween velho
+    // terminava por cima do novo. Com 0, o digest ASSENTA na posição real na hora —
+    // quem anima o pino da frota é o loop anima() (por frame, direto no objeto 3D).
+    .htmlTransitionDuration(0)
     .htmlElement((d) => {
       const el = document.createElement('div');
       el.className = 'mm';                       // SEM transform aqui!
@@ -393,80 +400,102 @@ export async function montarGlobo(container, jogo, {
     return { lat: g.lat, lng: g.lng };
   }
 
-  // Anima o navio NAVEGANDO devagar até o destino (não teleporta). Interpola a posição
-  // do pino ao longo de ~2,6s, reposicionando com throttle pra não travar. Deixa um
-  // traçado de esteira e, ao chegar, roda a detecção de proximidade.
-  function navegarFrota(d, origem, destino, aoChegar) {
+  // wrap de longitude no antimeridiano (rota cruzando o Pacífico salta de +179 pra -179)
+  const dLngW = (a, b) => { let x = b - a; if (x > 180) x -= 360; else if (x < -180) x += 360; return x; };
+  const dSeg = (p, q) => Math.hypot(q.lat - p.lat, dLngW(p.lng, q.lng) * 0.7);
+
+  // Corta a polilinha no COMPRIMENTO máximo (o alcance da frota vale pro caminho REAL,
+  // não pra reta). Devolve a rota truncada — o último ponto vira o novo destino.
+  function cortarRota(rota, maxLen) {
+    if (!rota || rota.length < 2 || comprimentoRota(rota) <= maxLen) return rota;
+    const out = [rota[0]];
+    let acc = 0;
+    for (let i = 1; i < rota.length; i += 1) {
+      const seg = dSeg(rota[i - 1], rota[i]);
+      if (acc + seg >= maxLen) {
+        const t = seg > 0 ? (maxLen - acc) / seg : 0;
+        let lng = rota[i - 1].lng + dLngW(rota[i - 1].lng, rota[i].lng) * t;
+        if (lng > 180) lng -= 360; else if (lng < -180) lng += 360;
+        out.push({ lat: rota[i - 1].lat + (rota[i].lat - rota[i - 1].lat) * t, lng });
+        return out;
+      }
+      acc += seg;
+      out.push(rota[i]);
+    }
+    return out;
+  }
+
+  // CALLBACKS DE CHEGADA por id de frota: quando o tickTransito (no anima()) reporta que
+  // a frota assentou, disparamos o que ficou agendado aqui (ex.: abrir as ações navais
+  // porque o jogador arrastou o pino pra cima de um país hostil).
+  const aoChegarFrota = new Map();
+
+  // Põe a frota pra NAVEGAR até o destino pelo TRILHO ÚNICO de trânsito (jogo/frotas.js):
+  // iniciarTransito grava origem/destino/rota/chegaEm no objeto e o tique em anima()
+  // interpola TODO frame — nada de rAF paralelo mutando lat/lng por fora (era isso que
+  // fazia o pino brigar consigo mesmo e saltar). Aqui só sobra: disparar o trânsito,
+  // desenhar a esteira UMA vez e agendar o aoChegar.
+  function navegarFrota(d, origem, destino, aoChegar, rotaManual) {
     esconderTipMarcador();
-    // ROTA POR ÁGUA: a mesma rotaMaritima do resto do jogo (A* sobre a máscara de terra).
-    // Sem malha pronta (ou bacia desconexa), cai na reta antiga — nunca trava.
-    const marinha = rotaMaritima(origem, destino);
-    const rota = (marinha && marinha.length >= 2) ? marinha : [origem, destino];
-    // wrap de longitude no antimeridiano (rota cruzando o Pacífico salta de +179 pra -179)
-    const dLngW = (a, b) => { let x = b - a; if (x > 180) x -= 360; else if (x < -180) x += 360; return x; };
-    const dSeg = (p, q) => Math.hypot(q.lat - p.lat, dLngW(p.lng, q.lng) * 0.7);
-    const acum = [0];
-    for (let i = 1; i < rota.length; i += 1) acum.push(acum[i - 1] + dSeg(rota[i - 1], rota[i]));
-    const compTotal = acum[acum.length - 1] || 0.0001;
-    // DURAÇÃO ∝ DISTÂNCIA REAL da rota: um navio não teleporta. Travessia curta ~7s,
-    // transoceânica até ~60s — e contornar a África conta o contorno, não a reta.
-    const dur = Math.max(7000, Math.min(60000, compTotal * 1100));
-    // A ESTEIRA segue a rota: desenha a polilinha em trechos (em vez de um arco reto
-    // atravessando o continente). Poucos trechos bastam — a leitura é da rota, não do px.
+    const fr = d.frotaRef;
+    // rota manual (desenhada no arrasto) ou automática por ÁGUA; reta como último recurso
+    let rota = (Array.isArray(rotaManual) && rotaManual.length >= 2) ? rotaManual : null;
+    if (!rota) {
+      const marinha = rotaMaritima(origem, destino);
+      rota = (marinha && marinha.length >= 2) ? marinha : [origem, destino];
+    }
+    // ALCANCE vale pro COMPRIMENTO do caminho: se a rota passa do alcance, corta ali —
+    // e o destino passa a ser o ponto onde o combustível acaba.
+    const alc = d.frotaTech?.alcance || 20;
+    rota = cortarRota(rota, alc);
+    const alvoFinal = rota[rota.length - 1];
+    const dur = iniciarTransito(fr, alvoFinal, Date.now(), rota);
+    // A ESTEIRA segue a rota: desenha a polilinha em trechos, UMA vez, no início — o
+    // movimento em si é do tique de trânsito, não destes arcos efêmeros.
+    const vida = Math.min(9000, dur);
     if (rota.length > 2) {
       const passos = Math.min(8, rota.length - 1);
       for (let i = 0; i < passos; i += 1) {
         const a = rota[Math.round((i / passos) * (rota.length - 1))];
         const b = rota[Math.round(((i + 1) / passos) * (rota.length - 1))];
-        desenharLinha(b, 'foco', Math.min(9000, dur), a);
+        desenharLinha(b, 'foco', vida, a);
       }
-    } else desenharLinha(destino, 'foco', Math.min(9000, dur), origem);
-    // interpola AO LONGO da polilinha por distância acumulada (velocidade constante)
-    const pontoEm = (frac) => {
-      const alvo = frac * compTotal;
-      let i = 1;
-      while (i < acum.length - 1 && acum[i] < alvo) i += 1;
-      const seg = acum[i] - acum[i - 1];
-      const t = seg > 0 ? Math.min(1, Math.max(0, (alvo - acum[i - 1]) / seg)) : 1;
-      let lng = rota[i - 1].lng + dLngW(rota[i - 1].lng, rota[i].lng) * t;
-      if (lng > 180) lng -= 360; else if (lng < -180) lng += 360;
-      return { lat: rota[i - 1].lat + (rota[i].lat - rota[i - 1].lat) * t, lng };
-    };
-    const ini = performance.now(); let ultimo = 0;
-    const passo = (t) => {
-      const k = Math.min(1, (t - ini) / dur);
-      // easing "de embarcação": arrancada suave, longo cruzeiro ~linear, freada suave —
-      // dá sensação de massa/inércia em vez de um salto.
-      const e = k < 0.15 ? (k / 0.15) ** 2 * 0.15
-        : k > 0.85 ? 1 - ((1 - k) / 0.15) ** 2 * 0.15
-          : 0.15 + (k - 0.15) / 0.70 * 0.70;
-      const p = pontoEm(e);
-      d.lat = p.lat;
-      d.lng = p.lng;
-      if (d.frotaRef) { d.frotaRef.lat = d.lat; d.frotaRef.lng = d.lng; }
-      if (t - ultimo > 45) { globe.htmlElementsData(marcadores); ultimo = t; }   // ~22 fps
-      if (k < 1) requestAnimationFrame(passo);
-      else { globe.htmlElementsData(marcadores); onFrotaMovida?.(d.frotaRef); atualizar(); aoChegar?.(); }
-    };
-    requestAnimationFrame(passo);
+    } else desenharLinha(alvoFinal, 'foco', vida, origem);
+    aoChegarFrota.set(fr.id || fr, () => { onFrotaMovida?.(fr); aoChegar?.(); });
   }
 
-  // Liga o arrasto num pino de frota. CLIQUE abre as ações; ARRASTAR desenha uma LINHA
-  // até o cursor (o pino fica parado) e, ao SOLTAR, o navio navega devagar até lá.
+  // Liga o arrasto num pino de frota. CLIQUE abre as ações; ARRASTAR DESENHA A ROTA:
+  // a trilha do cursor vira waypoints (só sobre ÁGUA), mostrada ao vivo em cyan; ao
+  // SOLTAR, o navio navega por ela. Arrasto reto (sem waypoints) cai na rota automática.
   function prepararArrastoFrota(el, d) {
     let moveu = false; let origem = null; let destino = null;
+    let waypoints = []; let ultimoPintar = 0;
+    const ultimoPonto = () => (waypoints.length ? waypoints[waypoints.length - 1] : origem);
+    const pintarGuia = (agora) => {
+      // um segmento cyan por PAR de waypoints + o rabo até o cursor
+      const cam = [origem, ...waypoints, destino];
+      const segs = [];
+      for (let i = 1; i < cam.length; i += 1) {
+        segs.push({
+          startLat: cam[i - 1].lat, startLng: cam[i - 1].lng,
+          endLat: cam[i].lat, endLng: cam[i].lng,
+          cor: ['#35e0ff', i === cam.length - 1 ? '#35e0ff00' : '#35e0ff'], vel: 900,
+        });
+      }
+      arcoGuia = segs;
+      if (agora - ultimoPintar > 50) { pintarArcos(); ultimoPintar = agora; }   // ~20 fps basta pra guia
+    };
     const onMove = (ev) => {
       const geo = telaParaLatLng(ev.clientX, ev.clientY);
       if (!geo) return;
       if (Math.hypot(geo.lat - origem.lat, geo.lng - origem.lng) > 0.8) moveu = true;
-      // limita ao ALCANCE da frota (a tecnologia do veículo importa de verdade)
-      const alc = d.frotaTech?.alcance || 20;
-      const dOrig = Math.hypot(geo.lat - origem.lat, geo.lng - origem.lng);
       destino = geo;
-      if (dOrig > alc) { const t = alc / dOrig; destino = { lat: origem.lat + (geo.lat - origem.lat) * t, lng: origem.lng + (geo.lng - origem.lng) * t }; }
-      // a LINHA-GUIA segue o cursor (não rebuildamos os marcadores — fim do lag)
-      arcoGuia = { startLat: origem.lat, startLng: origem.lng, endLat: destino.lat, endLng: destino.lng, cor: ['#35e0ff', '#35e0ff00'], vel: 900 };
-      pintarArcos();
+      // COLETA DE WAYPOINTS: amostra a trilha do cursor a cada ≥1.5° do último ponto
+      // aceito, e DESCARTA pontos em terra (navio não desenha rota por cima de país).
+      if (dSeg(geo, ultimoPonto()) >= 1.5 && paisDoPonto(geo.lat, geo.lng) === null) {
+        waypoints.push({ lat: geo.lat, lng: geo.lng });
+      }
+      pintarGuia(ev.timeStamp || performance.now());
     };
     const onUp = () => {
       window.removeEventListener('pointermove', onMove);
@@ -475,18 +504,21 @@ export async function montarGlobo(container, jogo, {
       el.style.cursor = 'grab';
       arcoGuia = null; pintarArcos();
       if (moveu && destino) {
+        // ROTA FINAL: o que o jogador desenhou. Com <3 pontos (arrasto reto), deixa a
+        // rota automática por água decidir o caminho (navegarFrota chama rotaMaritima).
+        const rotaManual = waypoints.length ? [origem, ...waypoints, destino] : null;
         // ARRASTAR PARA DENTRO DE UM PAÍS = dispara ação: a frota navega até a costa e, ao
         // chegar, abre as ações navais mirando aquele alvo (pressão/ofensiva a partir do mar).
         const alvoIso = paisDoPonto(destino.lat, destino.lng);
         const meuIso = jogo.estado.iso || 'USA';
         navegarFrota(d, origem, destino, (alvoIso && alvoIso !== meuIso)
           ? () => { esconderTipMarcador(); onFrotaClick?.(d.frotaRef); }
-          : null);
+          : null, rotaManual);
       } else { esconderTipMarcador(); onFrotaClick?.(d.frotaRef); }   // foi só um clique
     };
     el.addEventListener('pointerdown', (ev) => {
       ev.stopPropagation(); ev.preventDefault();
-      moveu = false; destino = null;
+      moveu = false; destino = null; waypoints = []; ultimoPintar = 0;
       origem = { lat: d.frotaRef.lat, lng: d.frotaRef.lng };
       ctrl.enabled = false;                 // trava a órbita enquanto arrasta
       el.style.cursor = 'grabbing';
@@ -1036,12 +1068,19 @@ export async function montarGlobo(container, jogo, {
       const agoraFr = Date.now();
       const todasFr = [...(jogo.estado.frotas || []), ...(jogo.estado.frotasInimigas || [])];
       const emMovimento = todasFr.some((f) => f.destino);
-      if (emMovimento && agoraFr - ultimoTickFrota > 45) {
+      if (emMovimento && agoraFr - ultimoTickFrota > 33) {   // ~30fps: suave, já que htmlTransitionDuration=0
         const chegaram = tickTransito(todasFr, agoraFr);
         for (const d of marcadores) if (d.frotaRef) { d.lat = d.frotaRef.lat; d.lng = d.frotaRef.lng; }
         globe.htmlElementsData(marcadores);
         ultimoTickFrota = agoraFr;
-        if (chegaram.length) atualizar();
+        if (chegaram.length) {
+          // dispara o que ficou agendado pra CHEGADA (ex.: abrir ações navais no alvo)
+          for (const fr of chegaram) {
+            const cb = aoChegarFrota.get(fr.id || fr);
+            if (cb) { aoChegarFrota.delete(fr.id || fr); try { cb(fr); } catch { /* nunca derruba o loop */ } }
+          }
+          atualizar();
+        }
       }
     }
     requestAnimationFrame(anima);

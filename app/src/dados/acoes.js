@@ -30,23 +30,41 @@ export const ACOES = [
   // ── MILITAR ─────────────────────────────────────────────────────────
   // (Não há "Brigada de Infantaria" para encomendar: soldado é GENTE, recrutada em
   // Política ▸ Alistamento/Reserva/Conscrição e no dossiê de Soldados — ver ui/soldados.js.)
-  { id: 'blindados', categoria: 'Militar', icone: '🚜', nome: 'Divisão Blindada (M1 Abrams)', custo: 0.05, custoPA: 1, prob: 1,
-    descricao: 'Tanques de batalha principal.', efeitos: { poder_militar: 6 }, forcas: { blindados: 400 }, politico: { autoridade: 2 } },
-  { id: 'helis', categoria: 'Militar', icone: '🚁', nome: 'Esquadrão de Apache', custo: 0.08, custoPA: 1, prob: 1,
-    descricao: 'Helicópteros de ataque. Mobilidade tática.', efeitos: { poder_militar: 7, seguranca: 2 }, forcas: { helicopteros: 60 }, politico: { autoridade: 2 } },
-  { id: 'cacas', categoria: 'Militar', icone: '✈️', nome: 'Esquadrão F-35', custo: 0.18, custoPA: 1, prob: 0.95,
-    descricao: 'Caça furtivo de 5ª geração.', requer: { capacidade_ind: '>40' }, efeitos: { poder_militar: 10 }, forcas: { cacas: 24 }, efeitos_falha: { tesouro: 0.05 }, politico: { autoridade: 3 } },
-  { id: 'porta_avioes', categoria: 'Militar', icone: '🛳️', nome: 'Porta-aviões Nuclear', custo: 0.45, custoPA: 2, prob: 0.9,
-    descricao: 'Projeção de poder global.', requer: { capacidade_ind: '>55' }, efeitos: { poder_militar: 14, soft_power: 4 }, forcas: { porta_avioes: 1, cacas: 40 }, efeitos_falha: { poder_militar: 3 }, politico: { autoridade: 3 } },
-  { id: 'submarino', categoria: 'Militar', icone: '🌊', nome: 'Submarino de Ataque', custo: 0.16, custoPA: 1, prob: 0.95,
-    descricao: 'Silencioso e letal sob as ondas.', efeitos: { poder_militar: 9, seguranca: 3 }, forcas: { submarinos: 4 }, politico: { autoridade: 2 } },
+  //
+  // FICHAS DE EQUIPAMENTO (compras de material): toda ação com `forcas` vira um chip
+  // "FICHA ▸" na UI (ui/jogo.js) que abre ui/equipamento.js — a compra real acontece lá,
+  // via aplicarForcas. Por isso estas entradas NÃO carregam efeitos/prob/politico/requer:
+  // esses campos nunca rodariam (auditoria 2026-07-17, fato 2 — "ações mortas"). São
+  // fichas puras: id, categoria, icone, nome, custo, custoPA, descricao, forcas
+  // (+ desbloqueio/dica quando houver).
+  { id: 'blindados', categoria: 'Militar', icone: '🚜', nome: 'Divisão Blindada (M1 Abrams)', custo: 0.05, custoPA: 1,
+    descricao: 'Tanques de batalha principal.', forcas: { blindados: 400 } },
+  { id: 'helis', categoria: 'Militar', icone: '🚁', nome: 'Esquadrão de Apache', custo: 0.08, custoPA: 1,
+    descricao: 'Helicópteros de ataque. Mobilidade tática.', forcas: { helicopteros: 60 } },
+  { id: 'cacas', categoria: 'Militar', icone: '✈️', nome: 'Esquadrão F-35', custo: 0.18, custoPA: 1,
+    descricao: 'Caça furtivo de 5ª geração.', forcas: { cacas: 24 } },
+  { id: 'porta_avioes', categoria: 'Militar', icone: '🛳️', nome: 'Porta-aviões Nuclear', custo: 0.45, custoPA: 2,
+    descricao: 'Projeção de poder global.', forcas: { porta_avioes: 1, cacas: 40 } },
+  { id: 'submarino', categoria: 'Militar', icone: '🌊', nome: 'Submarino de Ataque', custo: 0.16, custoPA: 1,
+    descricao: 'Silencioso e letal sob as ondas.', forcas: { submarinos: 4 } },
+  // ia_militar veio de Ciência → Militar (auditoria: renderiza como ficha de drones —
+  // equipamento pertence à aba Militar). Id preservado; desbloqueio segue travando o chip.
+  { id: 'ia_militar', categoria: 'Militar', icone: '🤖', nome: 'Enxame de Drones com IA', custo: 0.45, custoPA: 2,
+    descricao: 'Guerra autônoma. O futuro chegou.', desbloqueio: { inteligencia: '>=75', capacidade_ind: '>=60' }, dica: 'Inteligência ≥75 e Cap. Industrial ≥60.',
+    forcas: { drones: 120 } },
   { id: 'mobilizar', categoria: 'Militar', icone: '📣', nome: 'Mobilização Geral', custo: 0.06, custoPA: 1, prob: 1,
     descricao: 'Prontidão máxima — assusta o mundo.', efeitos: { poder_militar: 8, temp_guerra: 8, aprovacao: -3 }, politico: { autoridade: 4 } },
 
   // ── ARSENAL (estratégico / desbloqueável) ───────────────────────────
-  { id: 'hipersonico', categoria: 'Arsenal', icone: '🚀', nome: 'Míssil Hipersônico', custo: 0.22, custoPA: 1, prob: 0.85,
+  // hipersonico é FICHA DE EQUIPAMENTO (ver nota no bloco Militar): sem efeitos/prob —
+  // o desbloqueio continua valendo (trava o chip até a condição bater).
+  { id: 'hipersonico', categoria: 'Arsenal', icone: '🚀', nome: 'Míssil Hipersônico', custo: 0.22, custoPA: 1,
     descricao: 'Rápido demais para ser interceptado.', desbloqueio: { capacidade_ind: '>=70' }, dica: 'Eleve a Capacidade Industrial a 70 (P&D Militar).',
-    efeitos: { poder_militar: 12, seguranca: 6, temp_guerra: 4 }, forcas: { misseis: 60 }, efeitos_falha: { poder_militar: 2 }, politico: { autoridade: 4 } },
+    forcas: { misseis: 60 } },
+  // uranio veio de Inteligência → Arsenal (auditoria: enriquecer urânio é programa
+  // nuclear, não espionagem; fica ao lado da ogiva que o consome). Id preservado.
+  { id: 'uranio', categoria: 'Arsenal', icone: '⛏️', nome: 'Enriquecer Urânio', custo: 0.06, custoPA: 1, prob: 0.9,
+    descricao: 'Combustível da dissuasão nuclear.', efeitos: { uranio: 10 }, efeitos_falha: { uranio: 3, risco_exposicao: 'medio' } },
   { id: 'ogiva', categoria: 'Arsenal', icone: '☢️', nome: 'Construir Ogiva Nuclear', custo: 0.35, custoPA: 2, prob: 0.8,
     descricao: 'A carta da dissuasão absoluta.', desbloqueio: { uranio: '>=60', capacidade_ind: '>=55' }, dica: 'Acumule Urânio ≥60 e Cap. Industrial ≥55.',
     efeitos: { ogivas: 1, seguranca: 12, soft_power: -6, temp_guerra: 5 }, efeitos_falha: { soft_power: -8, risco_exposicao: 'alto' }, politico: { autoridade: 6 } },
@@ -65,16 +83,14 @@ export const ACOES = [
     descricao: 'Olhos permanentes sobre o planeta.', desbloqueio: { capacidade_ind: '>=50' }, dica: 'Cap. Industrial ≥50.',
     efeitos: { inteligencia: 10, seguranca: 4 }, efeitos_falha: { inteligencia: 2 } },
   { id: 'vigilancia', categoria: 'Inteligência', icone: '👁️', nome: 'Software de Vigilância em Massa', custo: 0.06, custoPA: 1, prob: 0.95,
-    descricao: 'Monitorar tudo — a que custo?', efeitos: { inteligencia: 6, seguranca: 6, liberdades: -10 }, politico: { autoridade: 7 } },
+    descricao: 'Monitorar tudo — a que custo?', efeitos: { inteligencia: 6, seguranca: 6, liberdades: -10 },
+    efeitos_falha: { aprovacao: -6, risco_exposicao: 'medio' }, politico: { autoridade: 7 } },
   { id: 'cyber_arma', categoria: 'Inteligência', icone: '🦠', nome: 'Arma Cibernética (tipo Stuxnet)', custo: 0.14, custoPA: 1, prob: 0.7,
     descricao: 'Destruir sistemas inimigos sem um tiro.', desbloqueio: { inteligencia: '>=70' }, dica: 'Inteligência ≥70 (Programa Cyber).',
     efeitos: { seguranca: 10, rel_ira: -12, temp_guerra: -3 }, efeitos_falha: { soft_power: -8, risco_exposicao: 'alto' }, politico: { autoridade: 4 } },
   { id: 'desinfo', categoria: 'Inteligência', icone: '🌫️', nome: 'Campanha de Desinformação', custo: 0.04, custoPA: 1, prob: 0.7,
     descricao: 'Semear o caos alheio.', efeitos: { soft_power: 6, aprovacao: 3 }, efeitos_falha: { soft_power: -8, liberdades: -3, risco_exposicao: 'alto' }, politico: { autoridade: 5 } },
-  { id: 'uranio', categoria: 'Inteligência', icone: '⛏️', nome: 'Enriquecer Urânio', custo: 0.06, custoPA: 1, prob: 0.9,
-    descricao: 'Combustível da dissuasão nuclear.', efeitos: { uranio: 10 }, efeitos_falha: { uranio: 3, risco_exposicao: 'medio' } },
-  { id: 'purga', categoria: 'Inteligência', icone: '⚖️', nome: 'Purga Interna', custo: 0.03, custoPA: 2, prob: 0.5,
-    descricao: 'Esmaga a oposição — ou explode.', efeitos: { estabilidade: 12, liberdades: -15, aprovacao: -5 }, efeitos_falha: { estabilidade: -20, aprovacao: -15 }, politico: { autoridade: 10 } },
+  // (uranio → Arsenal e purga → Política: recategorizadas pela auditoria, ids preservados.)
 
   // ── ECONOMIA ────────────────────────────────────────────────────────
   { id: 'imposto_up', categoria: 'Economia', icone: '⬆️', nome: 'Aumentar Impostos', custo: 0, custoPA: 1, prob: 1,
@@ -111,9 +127,6 @@ export const ACOES = [
   { id: 'espacial', categoria: 'Ciência', icone: '🚀', nome: 'Programa Espacial', custo: 0.7, custoPA: 2, prob: 0.85,
     descricao: 'Domínio orbital e prestígio nacional.', desbloqueio: { capacidade_ind: '>=60' }, dica: 'Cap. Industrial ≥60.',
     efeitos: { capacidade_ind: 8, soft_power: 8, inteligencia: 5 }, efeitos_falha: { soft_power: 2 } },
-  { id: 'ia_militar', categoria: 'Ciência', icone: '🤖', nome: 'Enxame de Drones com IA', custo: 0.45, custoPA: 2, prob: 0.8,
-    descricao: 'Guerra autônoma. O futuro chegou.', desbloqueio: { inteligencia: '>=75', capacidade_ind: '>=60' }, dica: 'Inteligência ≥75 e Cap. Industrial ≥60.',
-    efeitos: { poder_militar: 14, inteligencia: 4, temp_guerra: 3 }, forcas: { drones: 120 }, efeitos_falha: { poder_militar: 3 }, politico: { autoridade: 4 } },
   { id: 'quantico', categoria: 'Ciência', icone: '⚛️', nome: 'Computação Quântica', custo: 0.6, custoPA: 2, prob: 0.75,
     descricao: 'Quebra qualquer criptografia inimiga.', desbloqueio: { inteligencia: '>=80' }, dica: 'Inteligência ≥80.',
     efeitos: { inteligencia: 14, seguranca: 8 }, efeitos_falha: { inteligencia: 3 } },
@@ -124,7 +137,8 @@ export const ACOES = [
   { id: 'influen', categoria: 'Mídia', icone: '📱', nome: 'Exército de Influenciadores', custo: 0.05, custoPA: 1, prob: 0.75,
     descricao: 'Domina o feed — se não for pego.', efeitos: { soft_power: 8, aprovacao: 3 }, efeitos_falha: { soft_power: -4, risco_exposicao: 'medio' }, politico: { autoridade: 1 } },
   { id: 'propaganda', categoria: 'Mídia', icone: '📢', nome: 'Propaganda Estatal', custo: 0.04, custoPA: 1, prob: 0.9,
-    descricao: 'A verdade oficial — custa liberdade.', efeitos: { aprovacao: 6, estabilidade: 3, liberdades: -6 }, politico: { autoridade: 7 } },
+    descricao: 'A verdade oficial — custa liberdade.', efeitos: { aprovacao: 6, estabilidade: 3, liberdades: -6 },
+    efeitos_falha: { aprovacao: -4, soft_power: -4 }, politico: { autoridade: 7 } },
 
   // ═══════════════════════════════════════════════════════════════════
   // LOTE R — AÇÕES DE ALTO IMPACTO (as jogadas "foda" de cada eixo)
@@ -219,6 +233,11 @@ export const ACOES = [
     efeitos: { liberdades: -14, aprovacao: -10, estabilidade: -6, temp_guerra: 5 }, efeitos_falha: { aprovacao: -16, estabilidade: -12, liberdades: -8 },
     recruta: { infantaria: 150000 }, politico: { autoridade: 10 }, major: true },
   // ── as arriscadas (podem dar MUITO ruim) ──
+  // purga veio de Inteligência → Política (auditoria: repressão da oposição interna é o
+  // jogo de dentro de casa — irmã de perseguir_opositor/estado_excecao). Id preservado
+  // (segue major via regex de resolverFila).
+  { id: 'purga', categoria: 'Política', icone: '⚖️', nome: 'Purga Interna', custo: 0.03, custoPA: 2, prob: 0.5,
+    descricao: 'Esmaga a oposição — ou explode.', efeitos: { estabilidade: 12, liberdades: -15, aprovacao: -5 }, efeitos_falha: { estabilidade: -20, aprovacao: -15 }, politico: { autoridade: 10 } },
   { id: 'comprar_congresso', categoria: 'Política', icone: '💼', nome: 'Comprar o Congresso', custo: 0.08, custoPA: 2, prob: 0.55,
     descricao: 'Mala de dinheiro em gabinete. Se vazar, é CPI e capa de jornal.', efeitos: { estabilidade: 14, aprovacao: 4 }, efeitos_falha: { aprovacao: -16, estabilidade: -10, soft_power: -8, liberdades: -4, risco_exposicao: 'alto' }, politico: { autoridade: 4 }, major: true },
   { id: 'caixa_dois', categoria: 'Política', icone: '💸', nome: 'Caixa Dois', custo: 0, custoPA: 1, prob: 0.55,

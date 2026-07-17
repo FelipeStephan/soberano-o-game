@@ -36,11 +36,18 @@ export const EQUIPAMENTOS = {
       foto: `${W}/d/de/Fragata_%E2%80%9CTamandar%C3%A9%E2%80%9D_chega_pela_primeira_vez_ao_Rio_de_Janeiro_%2855336643549%29_%28cropped%29.jpg/330px-Fragata_%E2%80%9CTamandar%C3%A9%E2%80%9D_chega_pela_primeira_vez_ao_Rio_de_Janeiro_%2855336643549%29_%28cropped%29.jpg` },
     submarinos:   { nome: 'Submarino Riachuelo', fab: 'Naval Group / Itaguaí', origem: 'BRA', proprio: 'licenca',
       foto: `${W}/1/12/Submarino_Riachuelo_%28S40%29_%2852816921064%29_%28cropped%29.jpg/330px-Submarino_Riachuelo_%28S40%29_%2852816921064%29_%28cropped%29.jpg` },
-    helicopteros: { nome: 'HM-4 Jaguar',        fab: 'Helibras / Airbus',     origem: 'FRA', proprio: 'licenca', foto: FOTO_UNIDADE.helicopteros },
-    drones:       { nome: 'Nauru 1000C',        fab: 'XMobots',               origem: 'BRA', proprio: true,  foto: FOTO_UNIDADE.drones, sugerido: true },
-    porta_avioes: { nome: 'PHM Atlântico',      fab: 'ex-Royal Navy',         origem: 'GBR', proprio: false, foto: FOTO_UNIDADE.porta_avioes, sugerido: true },
-    misseis:      { nome: 'MANSUP',             fab: 'Avibras / Marinha',     origem: 'BRA', proprio: true,  foto: FOTO_UNIDADE.misseis, sugerido: true },
-    bombardeiros: { nome: 'KC-390 (transporte)', fab: 'Embraer',              origem: 'BRA', proprio: true,  foto: FOTO_UNIDADE.bombardeiros, sugerido: true },
+    // Fotos verificadas no Commons (mesmas de dados/paises/bra.js — a fonte única;
+    // aqui é só o fallback do catálogo antigo, mantido em sincronia).
+    helicopteros: { nome: 'HM-4 Jaguar',        fab: 'Helibras / Airbus',     origem: 'FRA', proprio: 'licenca',
+      foto: `${W}/b/bb/Opera%C3%A7%C3%A3o_Poseidon_2022_H-36_%22Caracal%22%2C_For%C3%A7a_A%C3%A9rea_Brasileira_%2851999931963%29.jpg/330px-Opera%C3%A7%C3%A3o_Poseidon_2022_H-36_%22Caracal%22%2C_For%C3%A7a_A%C3%A9rea_Brasileira_%2851999931963%29.jpg` },
+    drones:       { nome: 'Nauru 1000C',        fab: 'XMobots',               origem: 'BRA', proprio: true,
+      foto: `${W}/0/0e/Nauru_1000C_A.jpg/330px-Nauru_1000C_A.jpg` },
+    porta_avioes: { nome: 'PHM Atlântico',      fab: 'ex-Royal Navy',         origem: 'GBR', proprio: false,
+      foto: `${W}/d/db/Marinha_do_Brasil_-_Navio-Aer%C3%B3dromo_Multiprop%C3%B3sito_Atl%C3%A2ntico_%28A140%29_%2852604542492%29.jpg/330px-Marinha_do_Brasil_-_Navio-Aer%C3%B3dromo_Multiprop%C3%B3sito_Atl%C3%A2ntico_%28A140%29_%2852604542492%29.jpg` },
+    misseis:      { nome: 'MANSUP',             fab: 'Avibras / Marinha',     origem: 'BRA', proprio: true,
+      foto: `${W}/1/16/Fragata_Liberal_%28F43%29_durante_lan%C3%A7amento_do_m%C3%ADssil_MANSUP_-_2023_%2852853180946%29.jpg/330px-Fragata_Liberal_%28F43%29_durante_lan%C3%A7amento_do_m%C3%ADssil_MANSUP_-_2023_%2852853180946%29.jpg` },
+    bombardeiros: { nome: 'KC-390 (transporte)', fab: 'Embraer',              origem: 'BRA', proprio: true,
+      foto: `${W}/2/29/Embraer_KC-390_Millennium_For%C3%A7a_A%C3%A9rea_Brasileira.PT-ZNG_5D4_1837_%2853920573206%29.jpg/330px-Embraer_KC-390_Millennium_For%C3%A7a_A%C3%A9rea_Brasileira.PT-ZNG_5D4_1837_%2853920573206%29.jpg` },
   },
 
   CHN: {
@@ -63,7 +70,8 @@ export const EQUIPAMENTOS = {
       foto: `${W}/0/0e/Sukhoi_Design_Bureau%2C_054%2C_Sukhoi_T-50_%28Su-57_prototype%29_%2849581303977%29.jpg/330px-Sukhoi_Design_Bureau%2C_054%2C_Sukhoi_T-50_%28Su-57_prototype%29_%2849581303977%29.jpg` },
     misseis:      { nome: 'Iskander-M',         fab: 'KBM',                   origem: 'RUS', proprio: true,
       foto: `${W}/2/2f/Army2016demo-075.jpg/330px-Army2016demo-075.jpg` },
-    submarinos:   { nome: 'Classe Yasen',       fab: 'Sevmash',               origem: 'RUS', proprio: true,  foto: FOTO_UNIDADE.submarinos, sugerido: true },
+    submarinos:   { nome: 'Classe Yasen',       fab: 'Sevmash',               origem: 'RUS', proprio: true,
+      foto: `${W}/4/40/%D0%9A-560_%C2%AB%D0%A1%D0%B5%D0%B2%D0%B5%D1%80%D0%BE%D0%B4%D0%B2%D0%B8%D0%BD%D1%81%D0%BA%C2%BB.jpg/330px-%D0%9A-560_%C2%AB%D0%A1%D0%B5%D0%B2%D0%B5%D1%80%D0%BE%D0%B4%D0%B2%D0%B8%D0%BD%D1%81%D0%BA%C2%BB.jpg` },
   },
 
   DEU: {

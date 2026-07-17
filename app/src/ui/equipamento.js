@@ -16,13 +16,15 @@ import { PRECO, reservaMinima } from '../dados/mercado.js';
 import { bandeira } from '../dados/imagens.js';
 import { PAISES } from '../dados/paises.js';
 import { dinheiro } from '../jogo/formato.js';
+import { acaoDeEncomenda } from '../jogo/compras.js';
+import { filaRegistrada, enfileirarNaFila } from '../jogo/filaComando.js';
 import { ico, ICO } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const ISO2 = { USA: 'us', CHN: 'cn', RUS: 'ru', IRN: 'ir', BRA: 'br', IND: 'in', DEU: 'de', FRA: 'fr', GBR: 'gb', JPN: 'jp', KOR: 'kr', PRK: 'kp', ISR: 'il', SAU: 'sa', MEX: 'mx', CAN: 'ca', UKR: 'ua', TWN: 'tw', AUS: 'au', TUR: 'tr', ITA: 'it', SWE: 'se' };
 const PA = 1;
 
-export function abrirEquipamento(unidadeId, jogo, { onFim } = {}) {
+export function abrirEquipamento(unidadeId, jogo, { onFim, tr } = {}) {
   const u = UNIDADE_POR_ID[unidadeId];
   if (!u) return;
   const meuIso = jogo.ficha.iso || 'USA';
@@ -107,9 +109,23 @@ export function abrirEquipamento(unidadeId, jogo, { onFim } = {}) {
     alvo.querySelector('#eq-go')?.addEventListener('click', confirmar);
   }
 
+  // A ENCOMENDA NÃO CAI DO CÉU: com o tempo real ativo, o material entra na
+  // FILA DE COMANDO como uma ação sintética com tempo de produção/entrega
+  // (jogo/compras.js:tempoEntrega) — o motor incorpora ao arsenal quando o
+  // relógio dela zera. Sem fila (modo antigo/testes), compat: entrega na hora.
   function confirmar() {
     const custo = round2(precoUnit * qtd);
     if (custo > jogo.estado.tesouro) return;
+    const filaFn = tr ? (a) => tr.enfileirar(a) : (filaRegistrada() ? enfileirarNaFila : null);
+    if (filaFn) {
+      const acao = acaoDeEncomenda({ unidadeId, qtd, nome: eq.nome || u.nome, custo, nacional: prod.fator < 1 });
+      const r = filaFn(acao);
+      if (!r?.ok) { renderAcao(); return; }   // fila cheia / sem caixa — a fila já explicou
+      jogo.estado.pontos_acao -= PA;          // a fila debita o caixa; o PA sai aqui
+      jogo.registrarMercado?.({ tipo: 'compra', unidade: { nome: eq.nome || u.nome }, qtd, valor: custo });
+      fechar();
+      return;
+    }
     jogo.estado.tesouro = round2(jogo.estado.tesouro - custo);
     jogo.estado.pontos_acao -= PA;
     aplicarForcas(jogo.estado.forcas, { [unidadeId]: qtd });

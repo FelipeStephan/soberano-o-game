@@ -8,6 +8,35 @@ import { aplicarForcas, UNIDADE_POR_ID } from '../dados/forcas.js';
 import { tetoSoldados } from '../dados/efetivoMilitar.js';
 import { aplicarOcupacao } from './ocupacao.js';
 import { VEICULOS, investirNaMidia } from '../dados/veiculos.js';
+import { PAISES } from '../dados/paises.js';
+
+// AÇÕES "MAJOR" POR ID: além do flag explícito `a.major`, certos ids acendem um fio de
+// tensão narrativa (motor._reagirAcoes). `guerra_cambial` fica de FORA na mão: é ação
+// ECONÔMICA — a regex antiga (/guerra/) a marcava como major e criava o fio "Guerra em
+// curso" por causa de uma desvalorização de moeda (auditoria 2026-07-17, fato 4).
+const MAJOR_POR_ID = /ogiva|conquista|guerra|golpe|nuclear|purga/;
+const ehMajor = (a) => a.major || (MAJOR_POR_ID.test(a.id) && a.id !== 'guerra_cambial');
+
+// ALVOS rel_ USA-CÊNTRICOS: o catálogo tem relações hardcoded (sabotar→rel_china,
+// sancoes→rel_russia/rel_ira…). Jogando DE China/Rússia/Irã, a ação puniria a relação
+// do jogador CONSIGO MESMO — chave inútil. Regra: toda chave rel_ que aponte para o
+// próprio país do jogador é REDIRECIONADA para a relação do rival primário (a pior
+// rel_* atual do estado); sem rival identificável, a chave é descartada.
+function corrigirRelProprio(estado, efeitos) {
+  const relProprio = PAISES[estado.iso]?.rel;
+  if (!relProprio || !(relProprio in efeitos)) return efeitos;
+  const corrigido = { ...efeitos };
+  const delta = corrigido[relProprio];
+  delete corrigido[relProprio];
+  // rival primário = a pior relação atual do estado (excluindo a própria)
+  let rival = null, pior = Infinity;
+  for (const [k, v] of Object.entries(estado)) {
+    if (!k.startsWith('rel_') || k === relProprio || typeof v !== 'number') continue;
+    if (v < pior) { pior = v; rival = k; }
+  }
+  if (rival) corrigido[rival] = (corrigido[rival] || 0) + delta;
+  return corrigido;
+}
 
 // `veiculos` é a imprensa VIVA da partida (a que imprensaDe(iso) devolveu e que a IA
 // conhece pelo nome). Sem ela, comprar mídia subia a simpatia do catálogo global de
@@ -16,8 +45,8 @@ export function resolverFila(estado, fila, veiculos = null) {
   const resultados = [];
   for (const item of fila) {
     const a = item.acao;
-    const sucesso = Math.random() < a.prob;
-    const efeitos = sucesso ? a.efeitos : (a.efeitos_falha || {});
+    const sucesso = Math.random() < (a.prob ?? 1);   // sem prob declarada = ação garantida
+    const efeitos = corrigirRelProprio(estado, sucesso ? (a.efeitos || {}) : (a.efeitos_falha || {}));
     const mudancas = aplicarEfeitos(estado, efeitos);
     aplicarPolitico(estado, a.politico);
     // unidades militares concretas entram no inventário só no sucesso
@@ -62,13 +91,13 @@ export function resolverFila(estado, fila, veiculos = null) {
         ganhoForcas = ganhoForcas.concat(mud.map((m) => ({ id: m.id, nome: UNIDADE_POR_ID[m.id]?.nome || m.id, icone: UNIDADE_POR_ID[m.id]?.icone || '', delta: m.delta })));
       }
     }
-    const major = a.major || /ogiva|conquista|guerra|golpe|nuclear|purga/.test(a.id);
+    const major = ehMajor(a);
     resultados.push({
       id: a.id, nome: a.nome, icone: a.icone, categoria: a.categoria,
       // custoPago (não a.custo): é o que SAIU do caixa, já com descontos de aliança
       // e indústria. A dramaturgia usa isso pra calibrar o peso da frase.
       custo: item.custoPago ?? a.custo ?? 0,
-      sucesso, prob: a.prob, mudancas, ganhoForcas, alvo: a.alvo || null, relKey: a.relKey || null, major,
+      sucesso, prob: a.prob ?? 1, mudancas, ganhoForcas, alvo: a.alvo || null, relKey: a.relKey || null, major,
     });
   }
   return resultados;

@@ -126,9 +126,8 @@ de lugar nenhum. É o ativo mais subestimado do país — e o único que não de
       desc: 'Terceira maior fabricante de aviões do mundo. A União mantém a golden share: pode vetar a venda pra estrangeiro. Já usou.' },
   ],
 
-  // Cinco fotos verificadas (reaproveitadas de equipamentos.js). O resto ficou null:
-  // não achei no Commons imagem que fosse comprovadamente do item certo, e foto errada
-  // no painel é pior que foto nenhuma.
+  // Todas as fotos verificadas no Wikimedia Commons (URL direta com HTTP 200 e imagem
+  // conferida a olho). Regra mantida: foto errada no painel é pior que foto nenhuma.
   equipamentos: {
     _nome: 'Brasil',
     blindados:    { nome: 'VBTP-MR Guarani', fab: 'Iveco / Exército Brasileiro', origem: 'BRA', proprio: true,
@@ -141,12 +140,24 @@ de lugar nenhum. É o ativo mais subestimado do país — e o único que não de
       foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/de/Fragata_%E2%80%9CTamandar%C3%A9%E2%80%9D_chega_pela_primeira_vez_ao_Rio_de_Janeiro_%2855336643549%29_%28cropped%29.jpg/330px-Fragata_%E2%80%9CTamandar%C3%A9%E2%80%9D_chega_pela_primeira_vez_ao_Rio_de_Janeiro_%2855336643549%29_%28cropped%29.jpg' },
     submarinos:   { nome: 'Submarino Riachuelo', fab: 'Naval Group / Itaguaí', origem: 'BRA', proprio: 'licenca',
       foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/12/Submarino_Riachuelo_%28S40%29_%2852816921064%29_%28cropped%29.jpg/330px-Submarino_Riachuelo_%28S40%29_%2852816921064%29_%28cropped%29.jpg' },
+    // Fotos verificadas no Commons (URL direta conferida com HTTP 200 + imagem olhada):
+    // — infantaria: a antiga mostrava exercício antiterrorismo (lia-se "polícia"). Agora é
+    //   soldado do EB em camuflagem lagarto com bandeira do Brasil no ombro (foto US Army,
+    //   treino conjunto com a Panther Brigade, 2021).
     infantaria:   { nome: 'Fuzileiro (IA2 5,56)', fab: 'IMBEL', origem: 'BRA', proprio: true,
-      foto: 'https://upload.wikimedia.org/wikipedia/commons/1/1e/Exerc%C3%ADcio_conjunto_de_enfrentamento_ao_terrorismo_%2827103014582%29.jpg' },
-    helicopteros: { nome: 'HM-4 Jaguar', fab: 'Helibras / Airbus', origem: 'FRA', proprio: 'licenca', foto: null, sugerido: true },
-    drones:       { nome: 'Nauru 1000C', fab: 'XMobots', origem: 'BRA', proprio: true, foto: null, sugerido: true },
-    porta_avioes: { nome: 'PHM Atlântico', fab: 'ex-Royal Navy', origem: 'GBR', proprio: false, foto: null, sugerido: true },
-    misseis:      { nome: 'MANSUP', fab: 'Avibras / Marinha', origem: 'BRA', proprio: true, foto: null, sugerido: true },
-    bombardeiros: { nome: 'KC-390 (transporte)', fab: 'Embraer', origem: 'BRA', proprio: true, foto: null, sugerido: true },
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Panther_Brigade_Trains_with_Brazilian_Allies_210206-A-QM437-132.jpg/330px-Panther_Brigade_Trains_with_Brazilian_Allies_210206-A-QM437-132.jpg' },
+    // — helicópteros: H225M (H-36 Caracal da FAB, Operação Poseidon 2022) — mesma célula do HM-4 Jaguar do Exército.
+    helicopteros: { nome: 'HM-4 Jaguar', fab: 'Helibras / Airbus', origem: 'FRA', proprio: 'licenca',
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/b/bb/Opera%C3%A7%C3%A3o_Poseidon_2022_H-36_%22Caracal%22%2C_For%C3%A7a_A%C3%A9rea_Brasileira_%2851999931963%29.jpg/330px-Opera%C3%A7%C3%A3o_Poseidon_2022_H-36_%22Caracal%22%2C_For%C3%A7a_A%C3%A9rea_Brasileira_%2851999931963%29.jpg' },
+    drones:       { nome: 'Nauru 1000C', fab: 'XMobots', origem: 'BRA', proprio: true,
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Nauru_1000C_A.jpg/330px-Nauru_1000C_A.jpg' },
+    porta_avioes: { nome: 'PHM Atlântico', fab: 'ex-Royal Navy', origem: 'GBR', proprio: false,
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Marinha_do_Brasil_-_Navio-Aer%C3%B3dromo_Multiprop%C3%B3sito_Atl%C3%A2ntico_%28A140%29_%2852604542492%29.jpg/330px-Marinha_do_Brasil_-_Navio-Aer%C3%B3dromo_Multiprop%C3%B3sito_Atl%C3%A2ntico_%28A140%29_%2852604542492%29.jpg' },
+    // — mísseis: MANSUP saindo do lançador da Fragata Liberal (F43), foto da Marinha, 2023.
+    misseis:      { nome: 'MANSUP', fab: 'Avibras / Marinha', origem: 'BRA', proprio: true,
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Fragata_Liberal_%28F43%29_durante_lan%C3%A7amento_do_m%C3%ADssil_MANSUP_-_2023_%2852853180946%29.jpg/330px-Fragata_Liberal_%28F43%29_durante_lan%C3%A7amento_do_m%C3%ADssil_MANSUP_-_2023_%2852853180946%29.jpg' },
+    // — bombardeiros: agora é o KC-390 DE VERDADE (PT-ZNG da FAB em voo), não outra aeronave.
+    bombardeiros: { nome: 'KC-390 (transporte)', fab: 'Embraer', origem: 'BRA', proprio: true,
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/2/29/Embraer_KC-390_Millennium_For%C3%A7a_A%C3%A9rea_Brasileira.PT-ZNG_5D4_1837_%2853920573206%29.jpg/330px-Embraer_KC-390_Millennium_For%C3%A7a_A%C3%A9rea_Brasileira.PT-ZNG_5D4_1837_%2853920573206%29.jpg' },
   },
 };

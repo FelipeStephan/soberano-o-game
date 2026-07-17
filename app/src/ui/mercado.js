@@ -263,7 +263,9 @@ export function abrirMercado(jogo, { onFim } = {}) {
     if (r.falha) return;
     jogo.estado.pontos_acao -= PA;
     jogo.registrarPedido?.(r);
-    if (!r.imediato) aba = 'pedidos';
+    // `encomendado` = produção nacional na FILA DE COMANDO (tempo real): não é um
+    // pedido pendente de aprovação — fica na fila do relógio, não na aba de pedidos.
+    if (!r.imediato && !r.encomendado) aba = 'pedidos';
     render();
   }
 

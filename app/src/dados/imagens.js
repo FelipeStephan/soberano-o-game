@@ -31,7 +31,10 @@ export function bandeiraDeFeature(f, largura = 80) {
 
 // ── FOTOS REAIS DE EQUIPAMENTO (Wikimedia Commons) ────────────────────
 export const FOTO_UNIDADE = {
-  infantaria:   'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Kings_of_battle_keep_the_fire%3B_1-9_FA_fires_its_last_rounds_140910-A-CW513-046.jpg/330px-Kings_of_battle_keep_the_fire%3B_1-9_FA_fires_its_last_rounds_140910-A-CW513-046.jpg',
+  // ATENÇÃO: isto era a MESMA URL da artilharia (obuseiro atirando) — era por isso que
+  // "Soldados" mostrava tanque no hover. Agora é um soldado de verdade (M4, Iraque),
+  // a mesma foto verificada que dados/soldados.js já usa pro infante dos EUA.
+  infantaria:   'https://upload.wikimedia.org/wikipedia/commons/f/f1/Colt_M4_MWS_Carbine_Iraq.jpg',
   blindados:    'https://upload.wikimedia.org/wikipedia/commons/thumb/0/0b/M1A2_SEP_v3.jpg/330px-M1A2_SEP_v3.jpg',
   artilharia:   'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Kings_of_battle_keep_the_fire%3B_1-9_FA_fires_its_last_rounds_140910-A-CW513-046.jpg/330px-Kings_of_battle_keep_the_fire%3B_1-9_FA_fires_its_last_rounds_140910-A-CW513-046.jpg',
   helicopteros: 'https://upload.wikimedia.org/wikipedia/commons/thumb/6/66/AH-64D_Apache_Longbow.jpg/330px-AH-64D_Apache_Longbow.jpg',

@@ -21,7 +21,9 @@ const URG = {
   baixa: { rot: 'DE OLHO', cls: 'urg-baixa' },
 };
 
-export function abrirConselheiro(jogo, { onAplicar, onFim } = {}) {
+// `tr` é o controlador do TEMPO REAL (o mesmo que jogo.js injeta nos outros modais):
+// a recomendação não aplica na hora — entra na FILA DE COMANDO com tempo normal.
+export function abrirConselheiro(jogo, { tr, onAplicar, onFim } = {}) {
   const modal = document.createElement('div');
   modal.className = 'modal-fundo';
   document.body.appendChild(modal);
@@ -89,15 +91,18 @@ export function abrirConselheiro(jogo, { onAplicar, onFim } = {}) {
       btn.addEventListener('click', () => {
         const acao = ACAO_POR_ID[btn.dataset.acao];
         if (!acao) return;
-        const res = jogo.enfileirarCustom(acao);
+        // TEMPO REAL: a ação entra na fila de comando e roda no relógio (custa segundos,
+        // como qualquer ordem). Sem `tr` (fallback improvável), usa a fila clássica.
+        const res = tr ? tr.enfileirar(acao) : jogo.enfileirarCustom(acao);
         const cartaoEl = btn.closest('.cs-cartao');
-        if (res.ok) {
+        if (res?.ok) {
           cartaoEl.classList.add('cs-feito');
-          btn.outerHTML = `<div class="cs-ok">${ico('check', 14)} Ação enfileirada para este turno</div>`;
+          btn.outerHTML = `<div class="cs-ok">${ico('check', 14)} Na fila de comando — roda no relógio</div>`;
           onAplicar?.(acao);
         } else {
+          // Sem caixa / fila cheia: o motivo aparece aqui mesmo, no painel.
           btn.disabled = true;
-          const motivo = res.motivo || 'não foi possível enfileirar';
+          const motivo = res?.motivo || 'não foi possível enfileirar';
           btn.insertAdjacentHTML('afterend', `<div class="cs-falha">${ico('ban', 13)} ${esc(motivo)}</div>`);
         }
       });

@@ -25,6 +25,7 @@ import { prepararContexto, gerarTurno } from '../maquina/gerador.js';
 import { criarFio, atualizarFios, anotarNoFio } from '../maquina/fios.js';
 import { cumpreRequisito } from '../maquina/validador.js';
 import { espacoSoldados, tetoSoldados, reservaInicial } from '../dados/efetivoMilitar.js';
+import { aplicarForcas, UNIDADE_POR_ID } from '../dados/forcas.js';
 import { ACAO_POR_ID } from '../dados/acoes.js';
 import { descontoMilitar } from '../dados/blocos.js';
 import { criarPresidente } from '../dados/lideres.js';
@@ -424,6 +425,26 @@ export class Jogo {
   // Resolve UMA ação na hora (quando o tempo dela acaba na fila do tempo real). Reusa o
   // resolvedor de fila com um item só, empilha o post, reage e gera repercussão social.
   executarAcaoTempo(acao, custoPago) {
+    // ENCOMENDA DE ARSENAL: ação sintética criada pela ficha de equipamento ou
+    // pelo mercado (produção nacional). O caixa já saiu ao enfileirar; aqui a
+    // linha de produção TERMINA e o material entra na ordem de batalha. Soldados
+    // respeitam o teto humano do país: entra só o que cabe (espacoSoldados).
+    if (acao._compraArsenal) {
+      const { unidadeId, qtd, nomeItem } = acao._compraArsenal;
+      let entrega = qtd;
+      if (unidadeId === 'infantaria') entrega = Math.max(0, Math.min(qtd, espacoSoldados(this.estado)));
+      this.estado.forcas = this.estado.forcas || {};
+      const mudancas = entrega > 0 ? aplicarForcas(this.estado.forcas, { [unidadeId]: entrega }) : [];
+      const nome = nomeItem || UNIDADE_POR_ID[unidadeId]?.nome || unidadeId;
+      const texto = entrega >= qtd
+        ? `📦 Entrega: ${nome} ×${qtd.toLocaleString('pt-BR')} incorporado ao arsenal.`
+        : entrega > 0
+          ? `📦 Entrega parcial: ${nome} ×${entrega.toLocaleString('pt-BR')} incorporado — o teto de efetivo barrou o resto (${(qtd - entrega).toLocaleString('pt-BR')} dispensados).`
+          : `📦 Entrega frustrada: ${nome} ×${qtd.toLocaleString('pt-BR')} chegou com o efetivo no teto — ninguém foi incorporado.`;
+      this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Arsenal', texto, cor: entrega > 0 ? '#22e0a0' : '#ffb020' }]);
+      this.recomputar();
+      return { sucesso: true, acao, mudancas, entrega: { unidadeId, qtd: entrega } };
+    }
     // PAZ / SAIR DA GUERRA: ação sintética diplomática. Resolve o pedido (aceito/recusado)
     // ou a saída unilateral; pode disparar contra-ataque do rival.
     if (acao._pazIso) {

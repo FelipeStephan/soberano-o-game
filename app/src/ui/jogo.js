@@ -57,6 +57,7 @@ import { montarGlobo, tensaoGlobal } from './globo.js';
 import { ligarOnline } from './online.js';
 import { escaramucaAleatoria, pulsoAoVivo } from '../jogo/mundoVivo.js';
 import { criarTempoReal } from './tempoReal.js';
+import { anunciarResultado } from './resultadoAcao.js';
 import { reacoesSociais } from '../dados/opiniao.js';
 import { temChave } from '../config.js';
 import { agregarDeltas, mancheteDoTurno, despachosDoTurno, epicoDoTurno, fraseImpacto, veredito } from '../dados/dramaturgia.js';
@@ -124,7 +125,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <div><span class="rot">Nação</span><span class="val">${esc(f.pais)}</span></div>
         </div>
         <div class="topo-sep"></div>
-        <div class="stat" data-tip="O mês do seu mandato. O mundo corre em tempo real — o calendário anda mês a mês; a cada 12 meses o ano vira. Seu reinado termina quando o tempo (ou o povo) acabar." data-tip-t="Tempo no poder" data-tip-k="TEMPO REAL"><span class="rot">Mandato</span><span class="val"><span id="t-turno">${mesAnoDoJogo(1).label}</span> <i>· mês 1/${jogo.eraTurnoMax}</i></span></div>
+        <div class="stat" data-tip="O mês do seu mandato. O mundo corre em tempo real — o calendário anda mês a mês; a cada 12 meses o ano vira. Seu reinado termina quando o tempo (ou o povo) acabar." data-tip-t="Tempo no poder" data-tip-k="TEMPO REAL"><span class="rot">Período</span><span class="val"><span id="t-turno">${mesAnoDoJogo(1).label}</span></span></div>
         <div class="stat destaque"><span class="rot">Tesouro Nacional</span><span class="val" id="t-tesouro">–</span></div>
         <div class="stat"><span class="rot">Pontos de Ação</span><span class="val" id="t-pa">–</span></div>
         <div class="topo-sep"></div>
@@ -231,8 +232,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
   });
   container.querySelector('#btn-conselho').addEventListener('click', () => {
     if (jogo.fase !== 'planejamento') return;
-    // O Conselheiro pode enfileirar ações: refresh na hora que aplica e ao fechar.
-    abrirConselheiro(jogo, { onAplicar: refresh, onFim: refresh });
+    // O Conselheiro enfileira no TEMPO REAL (`tr`): a ação recomendada entra na fila
+    // de comando com tempo normal, como qualquer ordem. Refresh ao aplicar e fechar.
+    abrirConselheiro(jogo, { tr, onAplicar: refresh, onFim: refresh });
   });
   // ÍNDICE MUNDIAL: o ranking global — pode abrir a qualquer hora (é só leitura).
   container.querySelector('#btn-indice')?.addEventListener('click', () => abrirIndiceMundial(jogo));
@@ -423,7 +425,6 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // ── HUD ──────────────────────────────────────────────────────────────
   function renderTopo() {
     el.turno.textContent = mesAnoDoJogo(jogo.turno).label;
-    const turnoI = el.turno.parentElement?.querySelector('i'); if (turnoI) turnoI.textContent = `· mês ${jogo.turno}/${jogo.eraTurnoMax}`;
     el.tesouro.textContent = dinheiro(jogo.estado.tesouro);
     el.pa.textContent = jogo.estado.pontos_acao;
     // O cabeçalho estava com espaço ocioso — agora carrega o pulso do mundo:
@@ -916,7 +917,14 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // A UI reage às duas coisas que o relógio dispara: uma AÇÃO concluída e a BATIDA do mundo.
   function refreshTempo(mudancas) { renderHud(mudancas || []); renderFeed(); renderTopo(); globoCtrl?.atualizar?.(); }
 
-  function aposAcaoTempo(res) { refreshTempo(res?.mudancas); }
+  // RESULTADO VIVO: quando o relógio conclui uma ação, o card de veredito sobe no
+  // canto inferior esquerdo do globo. `res` é o objeto de resolverFila; ações
+  // sintéticas (paz/espionagem/mediação) voltam sem id/nome — completamos com a
+  // própria `acao` pra o card ter ícone e nome. Mesmo objeto que o online empurrará.
+  function aposAcaoTempo(res, acao) {
+    refreshTempo(res?.mudancas);
+    if (res) anunciarResultado({ id: acao?.id, nome: acao?.nome, icone: acao?.icone, categoria: acao?.categoria, ...res });
+  }
 
   function aposBeatTempo(res) {
     refreshTempo(res?.economia?.mudancas);

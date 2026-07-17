@@ -9,7 +9,9 @@
 //
 // O controlador é dono APENAS da fila de ações do jogador e do relógio. Tudo que muda o
 // mundo mora no motor (beatMundo/executarAcaoTempo) — aqui só orquestramos o tempo.
-import { tempoDe } from '../dados/acoes.js';
+import { tempoDe, ACAO_POR_ID } from '../dados/acoes.js';
+import { estaDesbloqueada } from '../jogo/desbloqueios.js';
+import { registrarFila } from '../jogo/filaComando.js';
 import { ico } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -22,11 +24,24 @@ export function criarTempoReal(jogo, hooks = {}) {
   let ateBeat = BEAT_S;
   let timer = null;
   jogo.estado.relogio = jogo.estado.relogio || { segundos: 0 };
+  registrarFila((a) => enfileirar(a)); // encomendas de arsenal (ficha/mercado) entram nesta fila
 
   function podeEnfileirar(acao) {
     const custo = jogo.custoDe(acao);
     if (jogo.estado.tesouro < custo) return { ok: false, motivo: 'Sem caixa para esta ordem.' };
     if (fila.length >= MAX_FILA) return { ok: false, motivo: 'Fila cheia — espere concluir.' };
+    // REVALIDAÇÃO DOS GATES (auditoria 2026-07-17, fato 5): antes, só caixa e tamanho da
+    // fila eram checados — o `disabled` do chip era a única proteção de requer/desbloqueio,
+    // e qualquer chamada programática (ou UI defasada) furava o gate. Para ações do
+    // CATÁLOGO, revalidamos requer/PA/tesouro via jogo.podeEnfileirar e o desbloqueio via
+    // estaDesbloqueada. Ações sintéticas (_marker, investimentos com id derivado etc.)
+    // não estão em ACAO_POR_ID e seguem pelo caminho de sempre.
+    const daCatalogo = acao?.id && ACAO_POR_ID[acao.id];
+    if (daCatalogo) {
+      if (!estaDesbloqueada(daCatalogo, jogo.estado)) return { ok: false, motivo: 'Ação ainda bloqueada.' };
+      const chk = jogo.podeEnfileirar(acao.id);
+      if (!chk.ok) return { ok: false, motivo: chk.motivo || 'Requisito não atendido.' };
+    }
     return { ok: true, custo };
   }
 

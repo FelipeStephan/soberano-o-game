@@ -26,7 +26,12 @@ function garantirCamada() {
   if (camada && document.body.contains(camada)) return camada;
   camada = document.createElement('div');
   camada.className = 'breaking-camada';
-  document.body.appendChild(camada);
+  // DENTRO da tela do mundo, não na viewport. Como filho de .globo (position:relative,
+  // overflow:hidden), a faixa vive no canto inferior do GLOBO — e fica naturalmente
+  // ATRÁS de modais e da barra de ações, que moram fora desse container. Era isto que
+  // o position:fixed no body nunca ia conseguir fazer.
+  const globo = document.querySelector('.globo') || document.body;
+  globo.appendChild(camada);
   return camada;
 }
 

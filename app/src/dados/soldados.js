@@ -15,7 +15,9 @@ export const SOLDADO_POR_PAIS = {
   CHN: { nome: 'Fuzileiro do EPL (QBZ-95)',               foto: 'https://upload.wikimedia.org/wikipedia/commons/4/4f/Honor_guard_of_the_People%27s_Liberation_Army.jpg' },
   RUS: { nome: 'Fuzileiro do Exército (AK-12)',           foto: 'https://upload.wikimedia.org/wikipedia/commons/4/43/An_AK-15_carried_by_Russian_soldier.jpg' },
   IND: { nome: 'Fuzileiro do Exército Indiano (INSAS)',   foto: 'https://upload.wikimedia.org/wikipedia/commons/2/22/Indian_Army_soldier_at_Camp_Babina.jpg' },
-  BRA: { nome: 'Fuzileiro (IA2 5,56)',                    foto: 'https://upload.wikimedia.org/wikipedia/commons/1/1e/Exerc%C3%ADcio_conjunto_de_enfrentamento_ao_terrorismo_%2827103014582%29.jpg' },
+  // BRA: a foto antiga (exercício antiterrorismo) lia-se como "polícia". Trocada por
+  // soldado do EB em camuflagem lagarto com a bandeira do Brasil no ombro (US Army, 2021).
+  BRA: { nome: 'Fuzileiro (IA2 5,56)',                    foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Panther_Brigade_Trains_with_Brazilian_Allies_210206-A-QM437-132.jpg/330px-Panther_Brigade_Trains_with_Brazilian_Allies_210206-A-QM437-132.jpg' },
   DEU: { nome: 'Fuzileiro da Bundeswehr (G36)',           foto: 'https://upload.wikimedia.org/wikipedia/commons/3/33/Bundeswehr_G36.jpg' },
   FRA: { nome: 'Fuzileiro do Exército (HK416F)',          foto: 'https://upload.wikimedia.org/wikipedia/commons/2/2e/HK416_F_French_military.jpg' },
   GBR: { nome: 'Fuzileiro do Exército (L85A2)',           foto: 'https://upload.wikimedia.org/wikipedia/commons/3/35/Soldier_firing_L85A2_in_Afghanistan_%28MoD%29.jpg' },

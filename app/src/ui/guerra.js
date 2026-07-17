@@ -699,7 +699,11 @@ export function desfechoCarrossel(container, res, jogo, feature, aoFim) {
     if (i >= paginas.length) return aoFim();
     const p = paginas[i]; i += 1;
     const ultima = i >= paginas.length;
-    container.innerHTML = `<div class="gdw ${p.classe || ''}">
+    // O RELATÓRIO VIVE NUM PAINEL: `.cena jrn` é o mesmo painel sólido das jornadas
+    // de turno (fundo, borda, pointer-events) — e é ele que acende o backdrop escuro
+    // do `.carta-wrap:has(.cena)`. Sem essas classes o carrossel flutua transparente
+    // e inclicável no meio da tela.
+    container.innerHTML = `<div class="cena jrn gdw ${p.classe || ''}">
       <div class="gdw-topo">
         <div class="gdw-cab">${p.cab}</div>
         <div class="gdw-passos">${paginas.map((_, k) => `<span class="gp-dot ${k < i ? 'on' : ''}"></span>`).join('')}</div>

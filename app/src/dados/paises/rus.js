@@ -138,7 +138,9 @@ diploma foram embora desde 2022. Não voltam.`,
       foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/Admiral_Gorshkov_frigate_03.jpg/330px-Admiral_Gorshkov_frigate_03.jpg' },
     // Só encontrei foto de maquete de exposição no Commons — foto real do casco, não.
     // Melhor nada do que ilustrar um submarino nuclear com miniatura de feira.
-    submarinos:   { nome: 'Classe Yasen', fab: 'Sevmash', origem: 'RUS', proprio: true, foto: null, sugerido: true },
+    // K-560 Severodvinsk, o primeiro da classe, atracado — foto verificada no Commons.
+    submarinos:   { nome: 'Classe Yasen', fab: 'Sevmash', origem: 'RUS', proprio: true,
+      foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/40/%D0%9A-560_%C2%AB%D0%A1%D0%B5%D0%B2%D0%B5%D1%80%D0%BE%D0%B4%D0%B2%D0%B8%D0%BD%D1%81%D0%BA%C2%BB.jpg/330px-%D0%9A-560_%C2%AB%D0%A1%D0%B5%D0%B2%D0%B5%D1%80%D0%BE%D0%B4%D0%B2%D0%B8%D0%BD%D1%81%D0%BA%C2%BB.jpg' },
     porta_avioes: { nome: 'Almirante Kuznetsov', fab: 'Nikolayev South', origem: 'RUS', proprio: true,
       foto: 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Admiral_Kuznetsov_aircraft_carrier.jpg/330px-Admiral_Kuznetsov_aircraft_carrier.jpg' },
     misseis:      { nome: 'Iskander-M', fab: 'KBM', origem: 'RUS', proprio: true,

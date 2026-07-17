@@ -122,9 +122,9 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 /* A faixa de plantão vive na BASE da coluna do globo (não flutuando no topo sobre o
    planeta). A coluna do globo é a 1ª do grid `1fr 400px 330px` — seu centro fica em
    ~50vw − 375px. Ancorada embaixo, acima do rodapé de ações. */
-.breaking-camada { position: fixed; top: auto; bottom: 168px; left: calc(50vw - 375px); transform: translateX(-50%);
+.breaking-camada { position: absolute; top: auto; bottom: 14px; left: 50%; transform: translateX(-50%);
   z-index: var(--z-globo-card); display: flex; flex-direction: column-reverse; gap: 8px; align-items: center;
-  width: clamp(320px, calc(100vw - 800px), 720px); pointer-events: none; }
+  width: clamp(300px, 78%, 640px); pointer-events: none; }
 .breaking { pointer-events: auto; cursor: pointer; width: 100%; display: flex; align-items: center; gap: 12px;
   padding: 10px 14px 10px 10px; color: #f2f6ff;
   background: linear-gradient(90deg, rgba(20,7,12,.97), rgba(9,13,24,.96));
@@ -3876,6 +3876,11 @@ button[data-tip], .tip-q { cursor: pointer; }
    DESFECHO DA OFENSIVA — carrossel (veredito · placar · espólio · resposta)
    ═══════════════════════════════════════════════════════════════ */
 .gdw { display: flex; flex-direction: column; gap: 12px; }
+/* O carrossel vive no painel `.cena jrn` (fundo sólido + backdrop via .carta-wrap:has(.cena)).
+   Aqui só a moldura muda de cor com o veredito, como nas jornadas de turno. */
+.cena.gdw.gdw-ok { border-color: var(--verde); box-shadow: var(--sombra), 0 0 50px rgba(34,224,160,.12); }
+.cena.gdw.gdw-fail { border-color: var(--perigo); box-shadow: var(--sombra), 0 0 50px rgba(255,59,92,.14); }
+.cena.gdw.gdw-parcial, .cena.gdw.gdw-conq { border-color: var(--ambar); box-shadow: var(--sombra), 0 0 50px rgba(255,176,32,.14); }
 .gdw-topo { display: flex; align-items: center; gap: 10px; }
 .gdw-cab { flex: 1; font-family: var(--mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase;
   color: var(--fraco); display: flex; align-items: center; gap: 6px; }
@@ -4407,3 +4412,58 @@ button[data-tip], .tip-q { cursor: pointer; }
 .mest-limpar:hover { color: var(--perigo); }
 .mest-ok { margin: 0 0 0 auto; width: auto; padding: 11px 20px; background: var(--perigo) !important; color: #fff !important; }
 @media (max-width: 720px) { .mest-corpo { grid-template-columns: 1fr; } .mest-svg { max-height: 40vh; } }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESULTADO VIVO (.resac-) — cards de veredito das ações do tempo real
+   Canto inferior ESQUERDO do globo (breaking = centro, notif-central = direita).
+   Chanfro no canto, cor semântica no filete e no veredito, mono na tipografia.
+   ═══════════════════════════════════════════════════════════════════════ */
+.resac-pilha { position: absolute; left: 16px; bottom: 16px; z-index: var(--z-globo-card);
+  display: flex; flex-direction: column; gap: 8px; width: min(310px, 42vw); pointer-events: none; }
+.resac-card { pointer-events: auto; cursor: pointer; position: relative; overflow: hidden;
+  background: rgba(6,10,18,.93); border: 1px solid var(--borda); border-left: 3px solid var(--fraco);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+  padding: 9px 12px 10px; font-family: var(--mono); box-shadow: 0 14px 34px -14px rgba(0,0,0,.85);
+  animation: resacEntra .32s cubic-bezier(.2,.9,.3,1.1); }
+@keyframes resacEntra { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: none; } }
+.resac-sai { animation: resacSai .38s ease forwards; }
+@keyframes resacSai { to { opacity: 0; transform: translateX(-14px); } }
+
+.resac-sucesso { border-left-color: var(--verde, #22e0a0); }
+.resac-falha   { border-left-color: var(--perigo); }
+.resac-parcial { border-left-color: var(--ambar); }
+.resac-major   { box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 18px 44px -12px rgba(0,0,0,.95); }
+
+.resac-topo { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.resac-ic { flex: none; font-size: 15px; line-height: 1; }
+.resac-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px; letter-spacing: .04em; color: var(--texto); text-transform: uppercase; }
+.resac-veredito { flex: none; font-size: 12px; font-weight: 700; letter-spacing: .1em; }
+.resac-sucesso .resac-veredito { color: var(--verde, #22e0a0); text-shadow: 0 0 12px rgba(34,224,160,.45); }
+.resac-falha   .resac-veredito { color: var(--perigo); text-shadow: 0 0 12px rgba(255,59,92,.5); }
+.resac-parcial .resac-veredito { color: var(--ambar); text-shadow: 0 0 12px rgba(255,176,32,.45); }
+
+.resac-frase { margin: 6px 0 0; font-size: 10.5px; line-height: 1.45; color: var(--fraco); font-style: italic; }
+.resac-imps { margin-top: 7px; display: flex; flex-direction: column; gap: 2px; }
+.resac-imp { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--texto); }
+.resac-imp i { font-style: normal; flex: none; width: 12px; text-align: center; }
+.resac-imp span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fraco); }
+.resac-imp b { flex: none; font-weight: 700; }
+.resac-imp.bom i, .resac-imp.bom b { color: var(--verde, #22e0a0); }
+.resac-imp.ruim i, .resac-imp.ruim b { color: var(--perigo); }
+.resac-imp.neutro i, .resac-imp.neutro b { color: var(--cyan); }
+/* fechado: só os 4 primeiros impactos; clique (.resac-aberto) mostra todos */
+.resac-card:not(.resac-aberto) .resac-imp:nth-child(n+5) { display: none; }
+.resac-mais { margin-top: 5px; font-size: 9px; letter-spacing: .06em; color: var(--cyan); text-transform: uppercase; }
+
+/* barra de vida dos ~7s; congela no hover (o JS pausa o timer junto) */
+.resac-vida { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%;
+  background: currentColor; opacity: .35; transform-origin: left;
+  animation: resacVida 7s linear forwards; }
+.resac-sucesso .resac-vida { color: var(--verde, #22e0a0); }
+.resac-falha .resac-vida { color: var(--perigo); }
+.resac-parcial .resac-vida { color: var(--ambar); }
+.resac-pausado .resac-vida { animation-play-state: paused; }
+@keyframes resacVida { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+@media (max-width: 900px) { .resac-pilha { width: min(260px, 60vw); left: 10px; bottom: 10px; } }
