@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":"MSR-A","nome":"Saint Anthony","pais":"MSR","tipo":"Parish","lat":16.7,"lng":-62.19},"geometry":{"type":"Polygon","coordinates":[[[-62.15,16.72],[-62.17,16.68],[-62.23,16.73],[-62.15,16.72]]]}}]}

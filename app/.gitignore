@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.local
+*.log
+.DS_Store
+
+# dados persistentes do servidor (perfis, saves)
+server/data/
+.env

@@ -1,0 +1,58 @@
+# ═══════════════════════════════════════════════════════════════════════
+# RENDER — infraestrutura como arquivo (Blueprint)
+# ═══════════════════════════════════════════════════════════════════════
+# Por que Render e não Vercel: o SOBERANO tem um backend Express com WebSocket de
+# processo LONGO (server/lobby.js — presença e relay entre jogadores). Vercel é
+# serverless: cada request é uma função efêmera, e conexão persistente não sobrevive.
+# O multiplayer simplesmente não existiria lá. Render/Railway/Fly rodam o container
+# inteiro, e o Dockerfile já estava pronto desde a 24ª leva.
+#
+# COMO USAR: no Render, "New +" → "Blueprint" → aponte pro repositório. Ele lê este
+# arquivo e cria o serviço sozinho. As variáveis marcadas `sync: false` ele PERGUNTA
+# na hora (é assim que a chave da IA nunca entra no Git).
+
+services:
+  - type: web
+    name: soberano
+    runtime: docker
+    plan: free              # 512MB RAM. Dorme após 15min sem acesso e acorda em ~50s.
+    region: oregon          # o free tier vive aqui; mudar exige plano pago
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: true        # push na branch → deploy
+
+    envVars:
+      # ── OS SEGREDOS: o Render pergunta no primeiro deploy e guarda cifrado ──
+      # NUNCA comite estes valores. `sync: false` é literalmente o que impede isso.
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL       # a string de conexão do Neon (com ?sslmode=require)
+        sync: false
+
+      # ── Configuração aberta ──
+      - key: OPENROUTER_MODEL
+        value: anthropic/claude-3.5-sonnet
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8787
+
+      # ── OS FREIOS DE CUSTO ──
+      # O proxy esconde a chave; ele NÃO limita o gasto. Estes dois é que fazem isso.
+      # Ajuste conforme o seu bolso: cada geração é uma chamada paga ao OpenRouter.
+      - key: AI_LIMITE_POR_MINUTO
+        value: 12
+      - key: AI_TETO_DIARIO
+        value: 600
+
+# ── SOBRE O BANCO ─────────────────────────────────────────────────────
+# Não declaro um Postgres aqui de propósito: o do Render free EXPIRA em 30 dias e leva
+# os saves junto. O Neon free não expira e tem um free tier honesto — por isso a
+# DATABASE_URL vem de fora, colada à mão uma vez. Um trabalho de faculdade que perde os
+# dados no meio do semestre é um problema que não precisa existir.
+#
+# Sem DATABASE_URL o jogo AINDA sobe: server/store.js cai no arquivo JSON. Mas atenção —
+# o disco do container é efêmero: cada deploy apaga tudo. Serve pra testar, não pra valer.

@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":"GUM-X01~","nome":"Guam","pais":"GUM","tipo":"Estado","lat":13.47,"lng":144.79},"geometry":{"type":"Polygon","coordinates":[[[144.89,13.64],[144.95,13.59],[144.78,13.42],[144.74,13.25],[144.68,13.25],[144.62,13.43],[144.89,13.64]]]}}]}

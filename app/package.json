@@ -1,0 +1,28 @@
+{
+  "name": "soberano",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "SOBERANO — O Grande Jogo. Protótipo do motor emergente (A Máquina).",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:tudo": "node scripts/dev.js",
+    "dev:so-vite": "vite",
+    "dev:server": "node server/index.js",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "serve": "npm run build && node server/index.js",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "globe.gl": "^2.34.0",
+    "lucide": "^1.24.0",
+    "pg": "^8.22.0",
+    "three": "^0.185.1",
+    "ws": "^8.21.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
+  }
+}

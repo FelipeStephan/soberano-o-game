@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":"MDV-12","nome":"Malé","pais":"MDV","tipo":"Capital","lat":4.17,"lng":73.52},"geometry":{"type":"Polygon","coordinates":[[[73.55,4.24],[73.51,4.16],[73.43,4.18],[73.51,4.19],[73.55,4.24]]]}}]}

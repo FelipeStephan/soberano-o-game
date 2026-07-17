@@ -1,0 +1,17 @@
+# ── SEGREDOS: nunca sobem ──────────────────────────────────────────────
+# A chave do OpenRouter e a senha do admin vivem SÓ no .env local.
+*.env
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# ── artefatos de build / dependências ─────────────────────────────────
+node_modules/
+dist/
+*.log
+.DS_Store
+Thumbs.db
+
+# ── locais de sessão/ferramentas ───────────────────────────────────────
+.claude/

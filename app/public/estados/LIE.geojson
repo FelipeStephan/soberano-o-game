@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":"LIE-09","nome":"Triesen","pais":"LIE","tipo":"Estado","lat":47.1,"lng":9.53},"geometry":{"type":"Polygon","coordinates":[[[9.59,47.06],[9.53,47.06],[9.51,47.13],[9.59,47.06]]]}}]}

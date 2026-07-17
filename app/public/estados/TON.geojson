@@ -1,0 +1,1 @@
+{"type":"FeatureCollection","features":[{"type":"Feature","properties":{"id":"TON-01","nome":"Eua","pais":"TON","tipo":"Estado","lat":-21.37,"lng":-174.94},"geometry":{"type":"Polygon","coordinates":[[[-174.91,-21.29],[-174.92,-21.45],[-174.98,-21.39],[-174.91,-21.29]]]}}]}
