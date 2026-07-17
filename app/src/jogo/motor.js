@@ -186,6 +186,7 @@ export class Jogo {
     // 1. resolve as ações enfileiradas (dado de RPG)
     const resultados = resolverFila(this.estado, this.fila, this.veiculos);
     this._empilharFeed(resultados.map((r) => this._acaoParaPost(r)));
+    this._empilharFeed(resultados.map((r) => this._imprensaParaAcao(r)).filter(Boolean));
     this._reagirAcoes(resultados); // ações grandes viram o tema do próximo acontecimento
     // OPINIÃO PÚBLICA: perfis com viés (esquerda/direita/populista/centrão) reagem às
     // suas ações. A mesma jogada vaia de um lado e aplaude do outro — é o cabo de guerra
@@ -481,6 +482,9 @@ export class Jogo {
       if (r?.texto) this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Saúde', texto: r.texto, cor: r.tom === 'bom' ? '#22e0a0' : r.tom === 'aviso' ? '#ffb020' : '#7488ad' }]);
     }
     this._empilharFeed([this._acaoParaPost(resultado)]);
+    // a imprensa cobre a ação no X (card de link, tom do jornal) — o que faltava no tempo real
+    const materia = this._imprensaParaAcao(resultado);
+    if (materia) this._empilharFeed([materia]);
     this._reagirAcoes([resultado]);
     const tema = temaDoTurno([resultado], resultado.mudancas || []);
     const posts = reacoesSociais(this.estado.iso || 'USA', tema, this.ficha?.pais, this.turno);
@@ -786,6 +790,37 @@ export class Jogo {
       texto: `${r.icone} ${r.nome}: ${status}.`,
       cor: r.sucesso ? '#47e0a0' : '#ff5a6e',
     };
+  }
+
+  // ── A IMPRENSA COBRE A AÇÃO ───────────────────────────────────────────
+  // O que isto devolve ao X: os posts de VEÍCULO com card de link (logo + manchete),
+  // que existiam no fluxo de turno e sumiram no tempo real — sobrou só gente comum.
+  // Regra: ação com peso (major, cara, ou de categoria quente) rende UMA matéria, de
+  // UM jornal escolhido em rodízio determinístico (nada de Math.random — online-safe),
+  // escrita no TOM que aquele veículo tem com o governo AGORA (tomDaCobertura).
+  // O breaking segue reservado às bombas que sacodem o globo; isto aqui é o noticiário.
+  _imprensaParaAcao(r) {
+    if (!this.veiculos?.length || !r?.nome) return null;
+    const quente = r.major || (r.custo || 0) >= 0.1
+      || ['Militar', 'Arsenal', 'Política', 'Diplomacia', 'Inteligência'].includes(r.categoria);
+    if (!quente && r.sucesso) return null;             // rotina que deu certo não é notícia
+    const h = [...String(r.id || r.nome)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, this.turno);
+    const v = this.veiculos[h % this.veiculos.length];
+    const tom = tomDaCobertura(v, this.estado);
+    const quem = this.ficha?.presidente || 'o governo';
+    const manchete = r.sucesso
+      ? (tom.valor >= 25 ? `${r.nome}: a aposta de ${quem} se paga`
+        : tom.valor <= -25 ? `${r.nome}: o preço da jogada de ${quem} ainda vai chegar`
+          : `Governo conclui ${r.nome.toLowerCase()}`)
+      : (tom.valor >= 25 ? `Revés em ${r.nome.toLowerCase()} — aliados pedem calma`
+        : tom.valor <= -25 ? `FRACASSO: ${r.nome.toLowerCase()} desmorona nas mãos de ${quem}`
+          : `${r.nome} fracassa; gabinete não comenta`);
+    const texto = r.sucesso
+      ? (tom.valor <= -25 ? `Analistas ouvidos pela redação questionam o custo real da manobra. O Planalto celebra; as contas, nem tanto.`
+        : `Fontes do gabinete confirmam a conclusão. Bastidores indicam que o próximo passo já está na mesa.`)
+      : (tom.valor >= 25 ? `Fontes próximas ao governo falam em "ajuste de rota". A oposição fala em outra coisa.`
+        : `A operação naufragou e a fatura política começa a circular. Ninguém assina a autoria do erro.`);
+    return { tipo: 'veiculo', veiculo: v.nome, handle: v.handle, texto, manchete, tom: 'cobertura' };
   }
 
   _resumoAcoes(resultados) {

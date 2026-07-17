@@ -1755,18 +1755,42 @@ export function iniciarJogo(container, jogo, opts = {}) {
   }
 
   // ── Popup de desbloqueio (surpresa) ──────────────────────────────────
+  // Padrão terminal: painel chanfrado, etiqueta --mono, condição cumprida por linha.
+  const ROTULO_DESB = {
+    capacidade_ind: 'Cap. Industrial', inteligencia: 'Inteligência', seguranca: 'Segurança',
+    soft_power: 'Soft Power', uranio: 'Urânio', ogivas: 'Ogivas', temp_economia: 'Temp. Econômica',
+    temp_guerra: 'Clima de Guerra', estabilidade: 'Estabilidade', aprovacao: 'Aprovação',
+    poder_militar: 'Poder Militar', liberdades: 'Liberdades', pib: 'PIB', tesouro: 'Tesouro',
+  };
+  // "{ capacidade_ind: '>=70', inteligencia: '>=50' }" → "Cap. Industrial ≥70 · Inteligência ≥50 — atingido"
+  function condicaoCumprida(a) {
+    if (!a.desbloqueio) return 'Condição cumprida';
+    const partes = Object.entries(a.desbloqueio).filter(([k]) => k !== '_acao')
+      .map(([k, v]) => `${ROTULO_DESB[k] || k} ${String(v).replace('>=', '≥').replace('<=', '≤').replace(/\s+/g, '')}`);
+    return `${partes.join(' · ')} — atingido`;
+  }
   function popupDesbloqueio(lista, onClose) {
+    // Sem emoji de cadeado: Lucide, com fallback seguro se o nome não existir na lib.
+    const icoTopo = ico('unlock', 15) || ico('lock-open', 15) || ico('circle-check', 15);
+    const icoOk = ico('circle-check', 11) || ico('check', 11);
     const modal = document.createElement('div');
     modal.className = 'modal-fundo pop-desbloqueio';
-    modal.innerHTML = `<div class="desbloqueio-card">
-      <div class="db-brilho"></div>
-      <div class="db-icone">🔓</div>
-      <div class="db-titulo">NOVA CAPACIDADE DESBLOQUEADA</div>
-      <div class="db-lista">${lista.map((a) => `<div class="db-item"><span class="db-i">${a.icone}</span><div><b>${esc(a.nome)}</b><span class="db-cat">${esc(a.categoria)}</span></div></div>`).join('')}</div>
-      <button class="db-ok primario">EXCELENTE</button>
+    modal.innerHTML = `<div class="desb-card">
+      <div class="desb-trilho"></div>
+      <div class="desb-etiqueta">${icoTopo}<span>ACESSO LIBERADO · P&D NACIONAL</span></div>
+      <div class="desb-titulo">NOVA CAPACIDADE DESBLOQUEADA</div>
+      <div class="desb-lista">${lista.map((a, i) => `
+        <div class="desb-item" style="animation-delay:${120 + i * 110}ms">
+          <span class="desb-i">${a.icone}</span>
+          <div class="desb-info">
+            <div class="desb-nome"><b>${esc(a.nome)}</b><span class="desb-cat">${esc(a.categoria).toUpperCase()}</span></div>
+            <div class="desb-cond">${icoOk}<span>${esc(condicaoCumprida(a))}</span></div>
+          </div>
+        </div>`).join('')}</div>
+      <button class="desb-ok">INCORPORAR ÀS OPÇÕES ${ico('chevron-right', 13)}</button>
     </div>`;
     document.body.appendChild(modal);
-    modal.querySelector('.db-ok').addEventListener('click', () => { modal.remove(); onClose?.(); });
+    modal.querySelector('.desb-ok').addEventListener('click', () => { modal.remove(); onClose?.(); });
   }
 
   function mostrarFim(fim) {

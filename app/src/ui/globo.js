@@ -321,7 +321,6 @@ export async function montarGlobo(container, jogo, {
           <span class="mm-ic">${d.svg}</span>
           ${d.rot ? `<span class="mm-rot">${d.rot}</span>` : ''}
           ${d.avistada ? `<i class="mm-olho">${ico('eye', 9)}</i>` : ''}
-          ${d.tip && d.acao !== 'pais' && !d.semInfo ? '<i class="mm-info">?</i>' : ''}
         </div>`;
       // HOVER RICO: marcadores com `tip` (guerra, pandemia, zona radioativa) mostram
       // um cartão flutuante com o status do conflito. Sem `tip`, cai no title nativo.
@@ -1141,6 +1140,10 @@ export async function montarGlobo(container, jogo, {
       document.addEventListener('mousemove', moverTip);
     }
     tipEl.innerHTML = html;
+    // TOM SEMÂNTICO: cada template carrega um marcador tom-* (na etiqueta gtc-tag);
+    // aqui ele sobe pro cartão e pinta o trilho lateral, a etiqueta e o CTA (--cc).
+    const tom = (html.match(/\btom-(hostil|surto|rumor|zona|neutro)\b/) || [])[0];
+    tipEl.className = `gt-conflito${tom ? ` ${tom}` : ''}`;
     // O rover naval (fah-nav) é mais largo (268px) que o tooltip padrão (244px) — sem
     // isto ele transbordava a caixa (o bug do hover da frota). 'largo' alarga a caixa.
     tipEl.classList.toggle('largo', html.includes('fah-nav'));
@@ -1316,7 +1319,7 @@ export async function montarGlobo(container, jogo, {
       focos.push({ ...c, cor: 'rgba(120,230,90,', raio: 8, vel: 1.4, periodo: 900, forca: 0.9 });
       novos.push({ ...c, tipo: 'radioativa', svg: ico('radiation', 13), rot: 'ZONA MORTA',
         titulo: `${PAISES[code]?.nome || code} — devastado por arma nuclear`,
-        tip: `<b>${esc(PAISES[code]?.nome || code)}</b><span class="gtc-sub">ZONA RADIOATIVA</span><p>Devastado por detonação nuclear. Inabitável por gerações. Ninguém ocupa, ninguém reconstrói, ninguém esquece.</p>` });
+        tip: `<div class="gtc-tag tom-zona">Zona radioativa</div><div class="gtc-nome">${esc(PAISES[code]?.nome || code)}</div><p>Devastado por detonação nuclear. Inabitável por gerações. Ninguém ocupa, ninguém reconstrói, ninguém esquece.</p>` });
     }
 
     // GUERRA ATIVA: radar vermelho, largo e agressivo. Duas ondas (uma lenta, uma
@@ -1327,7 +1330,7 @@ export async function montarGlobo(container, jogo, {
       focos.push({ ...c, cor: 'rgba(255,120,60,', raio: 9, vel: 1.7, periodo: 900, forca: 0.7 });
       novos.push({ ...c, tipo: 'guerra', svg: ico('swords', 13), flag: bandeira(ISO2_DE[code], 40), rot: 'GUERRA',
         titulo: `Conflito — ${PAISES[code]?.nome || code}`,
-        tip: `<b>${esc(PAISES[code]?.nome || code)}</b><span class="gtc-sub gtc-guerra">EM GUERRA COM VOCÊ</span><p>Conflito aberto e ativo. Suas ofensivas partem contra este território, e a insurgência dele mira o seu.</p>` });
+        tip: `<div class="gtc-tag tom-hostil">Em guerra com você</div><div class="gtc-nome">${esc(PAISES[code]?.nome || code)}</div><p>Conflito aberto e ativo. Suas ofensivas partem contra este território, e a insurgência dele mira o seu.</p>` });
     }
     // OCUPAÇÃO: radar laranja, mais lento. A intensidade acompanha a insurgência —
     // território calmo pulsa devagar; território fervendo pisca feito alarme.
@@ -1341,17 +1344,17 @@ export async function montarGlobo(container, jogo, {
       });
       novos.push({ ...c, tipo: critico ? 'revolta' : 'ocupado', svg: ico(critico ? 'triangle-alert' : 'flag', 12),
         flag: bandeira(ISO2_DE[oc.iso], 40), rot: `${oc.insurgencia}%`, titulo: `${oc.nome} · insurgência ${oc.insurgencia}%`,
-        tip: `<b>${esc(oc.nome)}</b><span class="gtc-sub ${critico ? 'gtc-guerra' : ''}">TERRITÓRIO OCUPADO</span><p>Sob sua bandeira, mas ${critico ? '<b>em pé de revolta</b>' : 'ainda inquieto'}. Insurgência em <b>${oc.insurgencia}%</b> — acima de 60% o território pode se levantar e você perde o controle.</p><div class="gtc-barra"><i style="width:${oc.insurgencia}%"></i></div>` });
+        tip: `<div class="gtc-tag ${critico ? 'tom-hostil' : 'tom-surto'}">Território ocupado · insurgência ${oc.insurgencia}%</div><div class="gtc-nome">${esc(oc.nome)}</div><p>Sob sua bandeira, mas ${critico ? '<b>em pé de revolta</b>' : 'ainda inquieto'}. Insurgência em <b>${oc.insurgencia}%</b> — acima de 60% o território pode se levantar e você perde o controle.</p><div class="gtc-barra"><i style="width:${oc.insurgencia}%"></i></div>` });
     }
     if (eu) {
       const f = jogo.estado.forcas || {};
       const navios = (f.navios || 0) + (f.porta_avioes || 0);
       if (navios) novos.push({ lat: eu.lat - 11, lng: eu.lng - 26, tipo: 'frota', svg: ico('ship', 12), rot: `${navios}`, titulo: 'Frota em patrulha',
-        tip: `<b>Sua Marinha</b><span class="gtc-sub">FROTA EM PATRULHA</span><p><b>${navios.toLocaleString('pt-BR')}</b> embarcações no mar — ${(f.navios || 0).toLocaleString('pt-BR')} navios de guerra e ${(f.porta_avioes || 0)} porta-aviões. É o que projeta o seu poder longe de casa.</p>` });
+        tip: `<div class="gtc-tag tom-neutro">Frota em patrulha</div><div class="gtc-nome">Sua Marinha</div><p><b>${navios.toLocaleString('pt-BR')}</b> embarcações no mar — ${(f.navios || 0).toLocaleString('pt-BR')} navios de guerra e ${(f.porta_avioes || 0)} porta-aviões. É o que projeta o seu poder longe de casa.</p>` });
       if (f.cacas) novos.push({ lat: eu.lat + 11, lng: eu.lng + 16, tipo: 'aereo', svg: ico('plane', 12), rot: `${f.cacas}`, titulo: 'Força aérea',
-        tip: `<b>Sua Força Aérea</b><span class="gtc-sub">CAÇAS DE PRONTIDÃO</span><p><b>${f.cacas.toLocaleString('pt-BR')}</b> caças prontos para decolar. Quem domina o céu decide a guerra moderna.</p>` });
+        tip: `<div class="gtc-tag tom-neutro">Caças de prontidão</div><div class="gtc-nome">Sua Força Aérea</div><p><b>${f.cacas.toLocaleString('pt-BR')}</b> caças prontos para decolar. Quem domina o céu decide a guerra moderna.</p>` });
       if (jogo.estado.ogivas) novos.push({ lat: eu.lat + 4, lng: eu.lng - 12, tipo: 'nuke', svg: ico('radiation', 12), rot: `${jogo.estado.ogivas}`, titulo: 'Arsenal nuclear',
-        tip: `<b>Seu Arsenal Nuclear</b><span class="gtc-sub gtc-guerra">${jogo.estado.ogivas} OGIVA(S) PRONTA(S)</span><p>Bombas nucleares prontas para lançamento. A arma que redesenha o mapa — e o tabu que ninguém quer ser o primeiro a quebrar. Clique num país inimigo para mirar.</p>` });
+        tip: `<div class="gtc-tag tom-hostil">${jogo.estado.ogivas} ogiva(s) pronta(s)</div><div class="gtc-nome">Seu Arsenal Nuclear</div><p>Bombas nucleares prontas para lançamento. A arma que redesenha o mapa — e o tabu que ninguém quer ser o primeiro a quebrar. Clique num país inimigo para mirar.</p>` });
     }
     // AS BASES: projeção de poder tem de ser visível. Cada instalação é um
     // ponto no mapa de onde o próximo ataque pode sair.
@@ -1531,7 +1534,7 @@ export async function montarGlobo(container, jogo, {
       if (rel > -55) continue;
       const c = ondeEsta(code); if (!c) continue;
       novos.push({ ...c, tipo: 'tensao', svg: ico('zap', 12), flag: bandeira(ISO2_DE[code], 40), rot: `${rel}`, titulo: `${info.nome} — relação ${rel}`,
-        tip: `<b>${esc(info.nome)}</b><span class="gtc-sub ${rel <= -75 ? 'gtc-guerra' : ''}">RELAÇÃO ${rel} / 100</span><p>${rel <= -75 ? 'À beira do confronto. Uma provocação e vira guerra.' : 'Relação hostil. Diplomacia aqui está por um fio.'} Quanto mais negativa, maior a chance de ataque, sabotagem e traição.</p>` });
+        tip: `<div class="gtc-tag tom-hostil">Relação ${rel} / 100</div><div class="gtc-nome">${esc(info.nome)}</div><p>${rel <= -75 ? 'À beira do confronto. Uma provocação e vira guerra.' : 'Relação hostil. Diplomacia aqui está por um fio.'} Quanto mais negativa, maior a chance de ataque, sabotagem e traição.</p>` });
       // Tensão diplomática grave: radar âmbar, lento e discreto — é aviso, não guerra.
       if (rel <= -75) focos.push({ ...c, cor: 'rgba(255,176,32,', raio: 4, vel: 1.1, periodo: 1800, forca: 0.5 });
     }
@@ -1562,8 +1565,8 @@ export async function montarGlobo(container, jogo, {
           svg: ico(emConflito ? 'swords' : souDono ? 'flag' : 'flag-off', 12),
           rot, flag: bandeira(ISO2_DE[code], 40),
           titulo: `${nome} — clique para abrir os territórios`,
-          tip: `<div class="gtc-cab"><img src="${bandeira(ISO2_DE[code], 40) || ''}" onerror="this.style.display='none'"><b>${esc(nome)}</b></div>
-            <span class="gtc-sub ${emConflito ? 'gtc-guerra' : ''}">${emConflito ? 'TERRITÓRIO EM DISPUTA' : 'TERRITÓRIO OCUPADO'}</span>
+          tip: `<div class="gtc-tag ${emConflito ? 'tom-hostil' : 'tom-neutro'}">${emConflito ? 'Território em disputa' : 'Território ocupado'}</div>
+            <div class="gtc-nome"><img src="${bandeira(ISO2_DE[code], 40) || ''}" onerror="this.style.display='none'">${esc(nome)}</div>
             ${linhas.join('')}
             <span class="gtc-cta">${ico('mouse-pointer-click', 9)} clique para abrir os estados</span>`,
         });
@@ -1602,8 +1605,8 @@ export async function montarGlobo(container, jogo, {
         svg: ico('swords', 12), rot: `${(na).slice(0, 3).toUpperCase()}×${(nb).slice(0, 3).toUpperCase()}`,
         titulo: `Guerra: ${na} × ${nb} — ${c.tema}`,
         intervir: { tipo: 'conflito', a: c.a, b: c.b, nomeA: na, nomeB: nb, tema: c.tema, intensidade: c.intensidade, ref: c },
-        tip: `<div class="gtc-cab"><img src="${bandeira(ISO2_DE[c.a], 40) || ''}" onerror="this.style.display='none'"><b>${esc(na)}</b><span class="gtc-vs">×</span><b>${esc(nb)}</b><img src="${bandeira(ISO2_DE[c.b], 40) || ''}" onerror="this.style.display='none'"></div>
-          <span class="gtc-sub gtc-guerra">GUERRA ${nivel.toUpperCase()}</span>
+        tip: `<div class="gtc-tag tom-hostil">Guerra ${nivel}</div>
+          <div class="gtc-nome"><img src="${bandeira(ISO2_DE[c.a], 40) || ''}" onerror="this.style.display='none'">${esc(na)}<span class="gtc-vs">×</span>${esc(nb)}<img src="${bandeira(ISO2_DE[c.b], 40) || ''}" onerror="this.style.display='none'"></div>
           <p>Disputa por <b>${esc(c.tema)}</b>. Intensidade ${Math.round(c.intensidade)}/100 · há ${c.turnos || 0} turno(s).</p>
           <div class="gtc-barra"><i style="width:${Math.round(c.intensidade)}%"></i></div>
           <span class="gtc-cta">${ico('mouse-pointer-click', 9)} clique para intervir</span>`,
@@ -1627,8 +1630,8 @@ export async function montarGlobo(container, jogo, {
           titulo: presurto ? 'Sinal não confirmado — clique para investigar' : `${pd.nome} (${pd.tipo}) — ${(pd.paises || []).length} países · fase ${pd.fase}`,
           intervir: { tipo: 'pandemia', ref: pd },
           tip: presurto
-            ? `<b>SINAL NÃO CONFIRMADO</b><span class="gtc-sub" style="border-color:#b98cff;color:#b98cff">RUMOR</span><p>Boatos circulando no X sobre algo estranho nesta região. Ainda não é oficial — agir agora é MUITO mais barato.</p><span class="gtc-cta">${ico('mouse-pointer-click', 9)} clique para investigar</span>`
-            : `<b>${esc(pd.nome)}</b><span class="gtc-sub" style="border-color:${difCor};color:${difCor}">${esc((pd.fase || '').toUpperCase())} · GRAVIDADE ${g}</span><div class="gtc-barra"><i style="width:${g}%;background:linear-gradient(90deg,var(--ambar),var(--perigo))"></i></div><p>${(pd.paises || []).length} país(es) · ${(pd.mortos || 0).toLocaleString('pt-BR')} mortos · cura ${Math.round(pd.curaAcumulada || 0)}%</p><span class="gtc-cta">${ico('mouse-pointer-click', 9)} clique para agir</span>`,
+            ? `<div class="gtc-tag tom-rumor">Rumor</div><div class="gtc-nome">Sinal não confirmado</div><p>Boatos circulando no X sobre algo estranho nesta região. Ainda não é oficial — agir agora é MUITO mais barato.</p><span class="gtc-cta">${ico('mouse-pointer-click', 9)} clique para investigar</span>`
+            : `<div class="gtc-tag tom-surto" style="color:${difCor}">${esc(pd.fase || '')} · gravidade ${g}</div><div class="gtc-nome">${esc(pd.nome)}</div><p>${(pd.paises || []).length} país(es) · ${(pd.mortos || 0).toLocaleString('pt-BR')} mortos · cura ${Math.round(pd.curaAcumulada || 0)}%</p><div class="gtc-barra"><i style="width:${g}%"></i></div><span class="gtc-cta">${ico('mouse-pointer-click', 9)} clique para agir</span>`,
         });
       }
     }

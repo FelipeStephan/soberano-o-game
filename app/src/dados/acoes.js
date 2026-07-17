@@ -50,7 +50,7 @@ export const ACOES = [
   // ia_militar veio de Ciência → Militar (auditoria: renderiza como ficha de drones —
   // equipamento pertence à aba Militar). Id preservado; desbloqueio segue travando o chip.
   { id: 'ia_militar', categoria: 'Militar', icone: '🤖', nome: 'Enxame de Drones com IA', custo: 0.45, custoPA: 2,
-    descricao: 'Guerra autônoma. O futuro chegou.', desbloqueio: { inteligencia: '>=75', capacidade_ind: '>=60' }, dica: 'Inteligência ≥75 e Cap. Industrial ≥60.',
+    descricao: 'Guerra autônoma. O futuro chegou.', desbloqueio: { inteligencia: '>=75', capacidade_ind: '>=65' }, dica: 'Leve a Inteligência a 75 com Cap. Industrial 65 — o algoritmo pronto e a linha de montagem também.',
     forcas: { drones: 120 } },
   { id: 'mobilizar', categoria: 'Militar', icone: '📣', nome: 'Mobilização Geral', custo: 0.06, custoPA: 1, prob: 1,
     descricao: 'Prontidão máxima — assusta o mundo.', efeitos: { poder_militar: 8, temp_guerra: 8, aprovacao: -3 }, politico: { autoridade: 4 } },
@@ -59,7 +59,7 @@ export const ACOES = [
   // hipersonico é FICHA DE EQUIPAMENTO (ver nota no bloco Militar): sem efeitos/prob —
   // o desbloqueio continua valendo (trava o chip até a condição bater).
   { id: 'hipersonico', categoria: 'Arsenal', icone: '🚀', nome: 'Míssil Hipersônico', custo: 0.22, custoPA: 1,
-    descricao: 'Rápido demais para ser interceptado.', desbloqueio: { capacidade_ind: '>=70' }, dica: 'Eleve a Capacidade Industrial a 70 (P&D Militar).',
+    descricao: 'Rápido demais para ser interceptado.', desbloqueio: { capacidade_ind: '>=70', inteligencia: '>=50' }, dica: 'Eleve a Cap. Industrial a 70 com Inteligência 50 — a fábrica constrói, a telemetria roubada guia.',
     forcas: { misseis: 60 } },
   // uranio veio de Inteligência → Arsenal (auditoria: enriquecer urânio é programa
   // nuclear, não espionagem; fica ao lado da ogiva que o consome). Id preservado.
@@ -125,10 +125,10 @@ export const ACOES = [
   { id: 'cyber_prog', categoria: 'Ciência', icone: '🖥️', nome: 'Programa Cyber', custo: 0.2, custoPA: 1, prob: 0.85,
     descricao: 'Defesa e ataque digital.', efeitos: { inteligencia: 8, seguranca: 5 }, efeitos_falha: { inteligencia: 1 } },
   { id: 'espacial', categoria: 'Ciência', icone: '🚀', nome: 'Programa Espacial', custo: 0.7, custoPA: 2, prob: 0.85,
-    descricao: 'Domínio orbital e prestígio nacional.', desbloqueio: { capacidade_ind: '>=60' }, dica: 'Cap. Industrial ≥60.',
+    descricao: 'Domínio orbital e prestígio nacional.', desbloqueio: { capacidade_ind: '>=62' }, dica: 'Erga a Cap. Industrial a 62 — indústria pesada antes do foguete.',
     efeitos: { capacidade_ind: 8, soft_power: 8, inteligencia: 5 }, efeitos_falha: { soft_power: 2 } },
   { id: 'quantico', categoria: 'Ciência', icone: '⚛️', nome: 'Computação Quântica', custo: 0.6, custoPA: 2, prob: 0.75,
-    descricao: 'Quebra qualquer criptografia inimiga.', desbloqueio: { inteligencia: '>=80' }, dica: 'Inteligência ≥80.',
+    descricao: 'Quebra qualquer criptografia inimiga.', desbloqueio: { inteligencia: '>=80', capacidade_ind: '>=55' }, dica: 'Leve a Inteligência a 80 com Cap. Industrial 55 — mentes de elite com laboratório à altura.',
     efeitos: { inteligencia: 14, seguranca: 8 }, efeitos_falha: { inteligencia: 3 } },
 
   // ── MÍDIA ───────────────────────────────────────────────────────────
@@ -193,10 +193,10 @@ export const ACOES = [
 
   // ── CIÊNCIA ──
   { id: 'fusao', categoria: 'Ciência', icone: '⚛️', nome: 'Reator de Fusão Nuclear', custo: 0.9, custoPA: 2, prob: 0.7,
-    descricao: 'Energia quase infinita e limpa. O país que acender esse sol primeiro reescreve o mapa do poder.', desbloqueio: { capacidade_ind: '>=75', inteligencia: '>=60' }, dica: 'Cap. Industrial ≥75 e Inteligência ≥60.',
+    descricao: 'Energia quase infinita e limpa. O país que acender esse sol primeiro reescreve o mapa do poder.', desbloqueio: { capacidade_ind: '>=80', inteligencia: '>=60' }, dica: 'Leve a Cap. Industrial a 80 com Inteligência 60 — o último degrau da escada industrial.',
     efeitos: { pib: 2, capacidade_ind: 10, soft_power: 10, temp_economia: 6 }, efeitos_falha: { capacidade_ind: 3 }, politico: { economico: 4 }, major: true },
   { id: 'laser_dew', categoria: 'Ciência', icone: '🔦', nome: 'Arma de Energia Dirigida (laser)', custo: 0.4, custoPA: 2, prob: 0.8,
-    descricao: 'Derruba drone e míssil ao custo de alguns dólares por tiro. A defesa que finalmente sai mais barata que o ataque.', desbloqueio: { capacidade_ind: '>=70' }, dica: 'Cap. Industrial ≥70.',
+    descricao: 'Derruba drone e míssil ao custo de alguns dólares por tiro. A defesa que finalmente sai mais barata que o ataque.', desbloqueio: { capacidade_ind: '>=75', seguranca: '>=55' }, dica: 'Erga a Cap. Industrial a 75 com Segurança 55 — o laser nasce protegendo o que você já defende.',
     efeitos: { seguranca: 14, poder_militar: 6 }, efeitos_falha: { seguranca: 3 }, politico: { autoridade: 3 } },
   { id: 'biotec', categoria: 'Ciência', icone: '🧬', nome: 'Programa de Biotecnologia', custo: 0.3, custoPA: 1, prob: 0.85,
     descricao: 'Cura o que adoecia o povo e a produtividade junto. Ciência que vira voto e vira PIB.', efeitos: { aprovacao: 6, pib: 0.7, inteligencia: 4, estabilidade: 3 }, efeitos_falha: { pib: 0.2 }, politico: { economico: -1 } },

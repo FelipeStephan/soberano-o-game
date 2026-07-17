@@ -1429,20 +1429,31 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .pa-info .prob { color: var(--verde); } .pa-info .prob.risco { color: var(--ambar); }
 .pa-info span:first-child { color: var(--ambar); }
 
-/* popup de desbloqueio */
-.pop-desbloqueio .desbloqueio-card { position: relative; background: linear-gradient(180deg, #10233c, #0a1526); border: 1px solid var(--ambar); border-radius: 8px; padding: 30px 34px; text-align: center; width: min(92%, 440px); overflow: hidden; box-shadow: 0 0 60px rgba(255,176,32,.3); animation: pop .5s cubic-bezier(.2,1.4,.4,1); }
+/* ── popup de desbloqueio (padrão terminal: chanfro, --mono, trilho verde/cyan) ── */
+.pop-desbloqueio .desb-card { position: relative; background: linear-gradient(180deg, #0c1f30, #081420); border: 1px solid rgba(34,224,160,.45); padding: 22px 26px 24px 30px; text-align: left; width: min(92%, 460px); overflow: hidden;
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  box-shadow: 0 0 50px rgba(34,224,160,.18), inset 0 0 40px rgba(53,224,255,.04); animation: pop .5s cubic-bezier(.2,1.4,.4,1); }
 @keyframes pop { from { opacity: 0; transform: scale(.8); } }
-.db-brilho { position: absolute; top: -60%; left: -20%; width: 140%; height: 200%; background: conic-gradient(from 0deg, transparent, rgba(255,176,32,.12), transparent 30%); animation: rodar 6s linear infinite; }
-.desbloqueio-card > * { position: relative; }
-.db-icone { font-size: 46px; animation: pulseIcone 1.5s infinite; }
-@keyframes pulseIcone { 50% { transform: scale(1.12); } }
-.db-titulo { font-family: var(--disp); font-weight: 700; letter-spacing: .16em; color: var(--ambar); margin: 8px 0 16px; font-size: 15px; }
-.db-lista { display: grid; gap: 8px; margin-bottom: 20px; }
-.db-item { display: flex; align-items: center; gap: 12px; text-align: left; background: rgba(255,176,32,.08); border: 1px solid #4a3a1a; border-radius: 6px; padding: 10px 14px; }
-.db-item .db-i { font-size: 26px; }
-.db-item b { font-family: var(--disp); font-size: 16px; display: block; }
-.db-cat { font-family: var(--mono); font-size: 10px; color: var(--fraco); }
-.db-ok { background: linear-gradient(120deg, var(--ambar), #ff8c1a); border: none; color: #1a0e00; padding: 12px 30px; }
+/* trilho lateral: verde → cyan, a assinatura de "capacidade nova entrando no sistema" */
+.desb-trilho { position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: linear-gradient(180deg, var(--verde), var(--cyan)); box-shadow: 0 0 12px rgba(34,224,160,.6); }
+.desb-etiqueta { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 10px; letter-spacing: .22em; color: var(--verde); }
+.desb-etiqueta .ico { flex: none; }
+.desb-titulo { font-family: var(--disp); font-weight: 700; letter-spacing: .14em; color: var(--texto); font-size: 19px; margin: 6px 0 14px; }
+.desb-lista { display: grid; gap: 8px; margin-bottom: 18px; }
+.desb-item { display: flex; align-items: center; gap: 12px; background: rgba(53,224,255,.05); border: 1px solid rgba(53,224,255,.18); border-left: 2px solid var(--verde); padding: 9px 12px;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+  opacity: 0; animation: desbEntra .38s ease-out forwards; }
+@keyframes desbEntra { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: none; } }
+.desb-i { font-size: 22px; flex: none; }
+.desb-info { min-width: 0; }
+.desb-nome { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.desb-nome b { font-family: var(--disp); font-size: 15px; letter-spacing: .03em; }
+.desb-cat { font-family: var(--mono); font-size: 9px; letter-spacing: .16em; color: var(--cyan); border: 1px solid rgba(53,224,255,.35); padding: 1px 6px; }
+.desb-cond { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 10px; color: var(--verde); margin-top: 3px; }
+.desb-cond .ico { flex: none; }
+.desb-ok { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; letter-spacing: .12em; cursor: pointer; background: rgba(34,224,160,.12); border: 1px solid var(--verde); color: var(--verde); padding: 10px 22px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); transition: background .15s, box-shadow .15s; }
+.desb-ok:hover { background: rgba(34,224,160,.22); box-shadow: 0 0 18px rgba(34,224,160,.35); }
 
 /* ── ÁREA ADMINISTRATIVA ──────────────────────────────────── */
 .admin { min-height: 100vh; padding: 18px; overflow-y: auto; }
@@ -2451,25 +2462,37 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 /* ═══════════════════════════════════════════════════════════════
    HOVER RICO nos marcadores de conflito
    ═══════════════════════════════════════════════════════════════ */
-.gt-conflito { position: fixed; z-index: var(--z-tooltip); display: none; width: 244px; padding: 12px 13px;
-  box-sizing: content-box; border-radius: 10px; background: rgba(6,11,20,.96); border: 1px solid var(--perigo);
-  backdrop-filter: blur(12px); box-shadow: 0 14px 44px rgba(0,0,0,.8); pointer-events: none;
-  animation: entrar .12s ease; overflow: hidden; }
-/* o rover naval é mais largo — a caixa acompanha pra não transbordar (card vertical de 290px) */
-.gt-conflito.largo { width: 290px; padding: 0; border-color: rgba(143,180,255,.5); }
-.gt-conflito > b { font-family: var(--disp); font-size: 15px; color: var(--texto); }
-.gtc-cab { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
-.gtc-cab img { width: 22px; height: 15px; object-fit: cover; border-radius: 2px; border: 1px solid var(--borda); }
-.gtc-cab b { font-size: 12.5px; }
+/* Cartão no padrão tipEstado (.gt-cidade): chanfro no canto, trilho lateral 2px na cor
+   semântica (--cc), etiqueta --mono em linha própria, nome --disp embaixo. */
+.gt-conflito { position: fixed; z-index: var(--z-tooltip); display: none; width: 250px; padding: 11px 14px 12px;
+  --cc: var(--cyan); background: linear-gradient(150deg, rgba(9,15,27,.97), rgba(4,7,13,.96));
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px));
+  box-shadow: inset 2px 0 0 var(--cc), inset 0 1px 0 rgba(180,215,255,.12), 0 12px 38px rgba(0,0,0,.78);
+  pointer-events: none; animation: entrar .12s ease; overflow: hidden; }
+/* toms semânticos — o marcador tom-* do template sobe pro cartão (mostrarTipMarcador) */
+.gt-conflito.tom-hostil { --cc: var(--perigo); }
+.gt-conflito.tom-surto  { --cc: var(--ambar); }
+.gt-conflito.tom-rumor  { --cc: #b98cff; }
+.gt-conflito.tom-zona   { --cc: #78e65a; }
+.gt-conflito.tom-neutro { --cc: var(--cyan); }
+/* o rover naval (fah-nav) mantém a caixa própria, mais larga (card vertical de 290px) */
+.gt-conflito.largo { width: 290px; padding: 0; clip-path: none; border-radius: 10px;
+  border: 1px solid rgba(143,180,255,.5); background: rgba(6,11,20,.96); backdrop-filter: blur(12px);
+  box-shadow: 0 14px 44px rgba(0,0,0,.8); }
+/* etiqueta em linha própria, depois o nome grande — respiro entre os dois */
+.gtc-tag { font-family: var(--mono); font-size: 7.5px; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--cc); margin-bottom: 4px; }
+.gtc-nome { display: flex; align-items: center; gap: 7px; font-family: var(--disp); font-size: 16px;
+  font-weight: 700; color: var(--texto); line-height: 1.1; margin-bottom: 7px; }
+.gtc-nome img { width: 22px; height: 15px; object-fit: cover; border-radius: 2px; border: 1px solid var(--borda); }
 .gtc-vs { color: var(--perigo); font-family: var(--disp); font-size: 14px; }
-.gtc-sub { display: inline-block; font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em;
-  padding: 2px 7px; border-radius: 20px; border: 1px solid var(--fraco); color: var(--fraco); margin-bottom: 7px; }
-.gtc-sub.gtc-guerra { border-color: var(--perigo); color: var(--perigo); }
-.gt-conflito p { margin: 0 0 8px; font-size: 11px; line-height: 1.55; color: #b9c9e2; }
+.gt-conflito p { margin: 0; font-size: 11px; line-height: 1.5; color: #b9c9e2; }
 .gt-conflito p b { color: #fff; }
-.gtc-barra { height: 5px; border-radius: 3px; background: #0d1729; overflow: hidden; margin-bottom: 8px; }
+.gtc-barra { height: 5px; border-radius: 3px; background: #0d1729; overflow: hidden; margin-top: 8px; }
 .gtc-barra i { display: block; height: 100%; background: linear-gradient(90deg, var(--ambar), var(--perigo)); }
-.gtc-cta { font-family: var(--mono); font-size: 9px; color: var(--cyan); letter-spacing: .04em; }
+/* CTA no rodapé, separado por hairline superior, na cor do cartão */
+.gtc-cta { display: block; margin-top: 9px; padding-top: 7px; box-shadow: inset 0 1px 0 rgba(150,190,240,.14);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--cc); }
 
 /* ═══════════════════════════════════════════════════════════════
    AJUDA EXTERNA — escolher um lado sem disparar um tiro
@@ -3113,7 +3136,7 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .bp-instalar:hover:not(:disabled), .avancar:hover:not(:disabled) { transform: none; filter: brightness(1.09); }
 
 /* selos e pílulas: skew no lugar do raio 20px */
-.fisc-selo, .ptp-banda, .mkp-selo, .gtc-sub, .cs-fonte, .ja-selo, .mud, .ja-pill,
+.fisc-selo, .ptp-banda, .mkp-selo, .cs-fonte, .ja-selo, .mud, .ja-pill,
 .emp-tag, .mv-o-perfil, .mf-rel, .mkc-n {
   border-radius: 0 !important; }
 .fisc-selo, .mkp-selo, .ja-selo { transform: skewX(-10deg); }
@@ -3480,13 +3503,6 @@ button[data-tip], .tip-q { cursor: pointer; }
 .mm-in.guerra, .mm-in.guerra_npc, .mm-in.nuke, .mm-in.radioativa { --mm-c: var(--perigo); }
 .mm-in.tensao, .mm-in.revolta { --mm-c: var(--ambar); }
 .mm-in.ocupado { --mm-c: #ff9628; }
-/* o glifo de informação: discreto, pulsa devagar, e acende no hover do marcador */
-.mm-info { display: inline-grid; place-items: center; width: 11px; height: 11px; flex: none;
-  font-family: var(--mono); font-size: 7px; font-weight: 700; font-style: normal; line-height: 1;
-  color: var(--mm-c, var(--cyan)); border: 1px solid currentColor; border-radius: 50%;
-  opacity: .55; animation: mmInfoPulso 2.4s ease-in-out infinite; }
-@keyframes mmInfoPulso { 50% { opacity: 1; box-shadow: 0 0 7px -1px currentColor; } }
-.mm-in:hover .mm-info { opacity: 1; box-shadow: 0 0 8px -1px currentColor; }
 
 /* ═══════════════════════════════════════════════════════════════
    INSÍGNIA DOCADA — decidir sem tapar o país
