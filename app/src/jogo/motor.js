@@ -485,7 +485,7 @@ export class Jogo {
       if (!mob.detectado && Math.random() < chanceDeteccao(est, mob)) {
         mob.detectado = true; mob.novoAviso = true;
         est._toastsGlobo = est._toastsGlobo || [];
-        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} está mobilizando forças contra você. Ataque em ~${Math.max(1, mob.restante)} batida(s). Reforce a defesa.` });
+        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} está mobilizando forças contra você. Ataque em ~${Math.max(1, mob.restante)} ${Math.max(1, mob.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa.` });
         this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Inteligência', texto: `ALERTA: ${mob.nome} concentra tropas na nossa direção — ataque iminente.`, cor: '#ffb020' }]);
       }
     }
@@ -504,7 +504,7 @@ export class Jogo {
       if (Math.random() < chanceDeteccao(est, mob)) {
         mob.detectado = true; mob.novoAviso = true;
         est._toastsGlobo = est._toastsGlobo || [];
-        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} iniciou uma mobilização militar na nossa direção. Ataque em ~${total} batida(s).` });
+        est._toastsGlobo.push({ tom: 'conflito', titulo: 'INTELIGÊNCIA', texto: `${mob.nome} iniciou uma mobilização militar na nossa direção. Ataque em ~${total} ${total > 1 ? 'meses' : 'mês'}.` });
         this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Inteligência', texto: `ALERTA: ${mob.nome} inicia mobilização militar — os satélites já veem o movimento.`, cor: '#ffb020' }]);
       }
       est.mobilizacoes.push(mob);

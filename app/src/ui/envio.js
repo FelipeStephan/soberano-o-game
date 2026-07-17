@@ -13,7 +13,7 @@
 // A regra que dá a espinha: DEFENDER É MAIS BARATO QUE ATACAR (ver territorio.js).
 // Mandar pouco contra guarnição forte não é "um ataque fraco", é um massacre do seu
 // lado. O painel diz isso na cara, antes.
-import { resolverAtaqueAoEstado, guarnicaoDefensivaDetalhe, tropaLivre, donoDe } from '../jogo/territorio.js';
+import { guarnicaoDefensivaDetalhe, tropaLivre, donoDe } from '../jogo/territorio.js';
 import { temIntel } from '../jogo/espionagem.js';
 import { resolverEnvio } from '../jogo/campanha.js';
 import { UNIDADES, UNIDADE_POR_ID, DOMINIOS, poderDeploy, custoDeploy } from '../dados/forcas.js';
@@ -79,14 +79,13 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
         : `<div class="env-jaguerra">${ico('swords', 16)} <span>Vocês já estão em guerra. Esta é mais uma ofensiva de uma campanha aberta.</span></div>`}
 
       <div class="env-quadro">
-        <div class="env-cel">
-          <span>Guarnição de ${esc(p.nome)}${def.estimada && !ocultoDef && defesa > 0 ? ' <small class="env-est">via espionagem</small>' : ''}</span>
-          <b class="${ocultoDef ? 'amb' : defesa > 0 ? 'ruim' : 'bom'}">${ocultoDef ? '🕵️ ?' : (defesa || 'nenhuma')}</b>
-          <i>${ocultoDef ? 'força secreta — espione para revelar'
-            : defesa ? (defUnid.length
-              ? defUnid.map(([u, q]) => `${UNIDADE_POR_ID[u]?.icone || ''} ${Number(q).toLocaleString('pt-BR')}`).join(' · ')
-              : 'força defendendo') : 'território aberto'}</i>
-        </div>
+        ${ocultoDef ? '' : `<div class="env-cel">
+          <span>Guarnição de ${esc(p.nome)}${def.estimada && defesa > 0 ? ' <small class="env-est">intel</small>' : ''}</span>
+          <b class="${defesa > 0 ? 'ruim' : 'bom'}">${defesa || 'nenhuma'}</b>
+          <i>${defesa ? (defUnid.length
+            ? defUnid.map(([u, q]) => `${UNIDADE_POR_ID[u]?.icone || ''} ${Number(q).toLocaleString('pt-BR')}`).join(' · ')
+            : 'força defendendo') : 'território aberto'}</i>
+        </div>`}
         <div class="env-cel">
           <span>Vantagem do defensor</span><b class="amb">1,6×</b>
           <i>ele está entrincheirado</i>
@@ -145,17 +144,14 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
 
       if (!total) {
         prog.className = 'env-prog';
-        prog.innerHTML = `${ico('info', 13)} <span>Escolha o que vai. A força enviada é comparada com a guarnição local — e o defensor vale 1,6× o número dele.</span>`;
+        prog.innerHTML = `${ico('info', 13)} <span>Escolha o que vai. O defensor luta entrincheirado — o desfecho só se conhece no terreno.</span>`;
         return;
       }
-      const sim = resolverAtaqueAoEstado(e, p.id, poder);
-      const vence = !sim.segurou;
-      prog.className = `env-prog ${vence ? 'bom' : 'ruim'}`;
-      prog.innerHTML = `${ico(vence ? 'trending-up' : 'triangle-alert', 13)}
-        <span><b>${poder}</b> de força contra <b>${sim.defesa}</b> de defesa efetiva.
-        ${vence
-          ? `<b class="bom">${esc(p.nome)} cai.</b> Você perde ~${sim.perdaAtacante}% da força enviada tomando o território.`
-          : `<b class="ruim">Eles seguram.</b> Você perde ~${sim.perdaAtacante}% da força enviada e não toma nada. Mande mais, ou não mande.`}
+      // SEM PROGNÓSTICO: o jogo não prevê "cai / não cai / perde X%". O jogador vê a
+      // força que ELE manda, o custo e as consequências diplomáticas — o resto é guerra.
+      prog.className = 'env-prog';
+      prog.innerHTML = `${ico('swords', 13)}
+        <span>Força enviada: <b>${poder}</b>.${defesa != null && defesa > 0 ? ` Guarnição conhecida: <b>${defesa}</b>.` : ''}
         ${custo > e.tesouro ? `<br><b class="ruim">Sem caixa:</b> o transporte custa ${dinheiro(custo)} e você tem ${dinheiro(e.tesouro)}.` : `<br>Transporte: <b>${dinheiro(custo)}</b>.`}
         ${!jaEmGuerra ? `<br>Consequência diplomática: relação com ${esc(nomeDe(alvoIso))} despenca${bloco.isos.length ? `, e ${bloco.isos.length} aliado(s) do bloco reagem` : ''}.` : ''}
         </span>`;

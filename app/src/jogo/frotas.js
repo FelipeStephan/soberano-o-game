@@ -23,20 +23,73 @@ export function distGraus(a, b) { return Math.hypot(a.lat - b.lat, (a.lng - b.ln
 // instantâneo, mas não uma hora" — e escala linear com a distância (quanto menor, menos tempo).
 export function duracaoTransito(dg) { return Math.round(clamp(dg * 750, 8000, 90000)); }
 
+// ── ROTA POR ÁGUA (polilinha) ─────────────────────────────────────────
+// A frota não pode importar o globo (camadas!), então quem SABE calcular rota marítima
+// (ui/globo.js, via jogo/rotasMar.js) REGISTRA um provedor aqui na montagem. Sem provedor
+// (ou com a malha ainda montando), o trânsito cai na reta antiga — nunca quebra.
+let provedorRota = null;
+export function setProvedorRota(fn) { provedorRota = typeof fn === 'function' ? fn : null; }
+
+// Delta de longitude com WRAP no antimeridiano: uma rota que cruza o Pacífico salta de
+// +179 pra -179 — sem isto, a interpolação varreria o mapa inteiro no sentido errado.
+function dLngWrap(a, b) { let d = b - a; if (d > 180) d -= 360; else if (d < -180) d += 360; return d; }
+function distSeg(p, q) { return Math.hypot(q.lat - p.lat, dLngWrap(p.lng, q.lng) * 0.7); }
+function normLng(l) { return l > 180 ? l - 360 : l < -180 ? l + 360 : l; }
+
+// Comprimento REAL da polilinha (soma dos segmentos, com wrap de longitude).
+export function comprimentoRota(rota) {
+  let t = 0;
+  for (let i = 1; i < rota.length; i += 1) t += distSeg(rota[i - 1], rota[i]);
+  return t;
+}
+
+// Ponto a uma FRAÇÃO (0–1) do comprimento da rota — interpola por distância acumulada,
+// segmento a segmento, pra velocidade constante ao longo da polilinha.
+function pontoNaRota(rota, frac) {
+  const total = comprimentoRota(rota);
+  if (total <= 0) return { lat: rota[rota.length - 1].lat, lng: rota[rota.length - 1].lng };
+  let alvo = clamp(frac, 0, 1) * total;
+  for (let i = 1; i < rota.length; i += 1) {
+    const seg = distSeg(rota[i - 1], rota[i]);
+    if (alvo <= seg || i === rota.length - 1) {
+      const t = seg > 0 ? clamp(alvo / seg, 0, 1) : 1;
+      return {
+        lat: rota[i - 1].lat + (rota[i].lat - rota[i - 1].lat) * t,
+        lng: normLng(rota[i - 1].lng + dLngWrap(rota[i - 1].lng, rota[i].lng) * t),
+      };
+    }
+    alvo -= seg;
+  }
+  return { lat: rota[rota.length - 1].lat, lng: rota[rota.length - 1].lng };
+}
+
 // Põe a frota EM TRÂNSITO até `destino`, a partir de AGORA (Date.now()). Guarda tudo no
 // objeto — quem desenha só interpola. Devolve a duração em ms.
-export function iniciarTransito(fr, destino, agora) {
+// `rota` (opcional) é uma polilinha [{lat,lng},...] por ÁGUA; sem ela, tenta o provedor
+// registrado (rotaMaritima do globo); se nada vier, reta como sempre (fallback seguro).
+export function iniciarTransito(fr, destino, agora, rota) {
   const origem = { lat: fr.lat, lng: fr.lng };
   fr.origem = origem;
   fr.destino = { lat: destino.lat, lng: destino.lng };
+  let r = Array.isArray(rota) && rota.length >= 2 ? rota : null;
+  if (!r && provedorRota) {
+    try { const p = provedorRota(origem, fr.destino); if (Array.isArray(p) && p.length >= 2) r = p; } catch { r = null; }
+  }
+  fr.rota = r ? r.map((p) => ({ lat: p.lat, lng: p.lng })) : null;
+  if (!fr.rota) delete fr.rota;
+  // Duração pelo comprimento REAL do caminho (contornar a África demora mais que a reta),
+  // com a MESMA constante de sempre (750ms/grau, clamp 8s–90s).
+  const dist = fr.rota ? comprimentoRota(fr.rota) : distGraus(origem, fr.destino);
   fr.partiuEm = agora;
-  fr.chegaEm = agora + duracaoTransito(distGraus(origem, destino));
+  fr.chegaEm = agora + duracaoTransito(dist);
   return fr.chegaEm - fr.partiuEm;
 }
 
 export function emTransito(fr, agora) { return !!(fr && fr.destino && fr.chegaEm && agora < fr.chegaEm); }
 
 // Posição interpolada AGORA, com easing de embarcação (arranca suave, cruza, freia suave).
+// Com `fr.rota`, o easing anda AO LONGO da polilinha (distância acumulada por segmento) —
+// a frota costeia o continente; sem rota, reta origem→destino como antes.
 export function posicaoAtual(fr, agora) {
   if (!fr.destino || !fr.chegaEm || !fr.origem) return { lat: fr.lat, lng: fr.lng, k: 1 };
   const dur = Math.max(1, fr.chegaEm - fr.partiuEm);
@@ -44,6 +97,10 @@ export function posicaoAtual(fr, agora) {
   const e = k < 0.15 ? (k / 0.15) ** 2 * 0.15
     : k > 0.85 ? 1 - ((1 - k) / 0.15) ** 2 * 0.15
       : 0.15 + (k - 0.15) / 0.70 * 0.70;
+  if (Array.isArray(fr.rota) && fr.rota.length >= 2) {
+    const p = pontoNaRota(fr.rota, e);
+    return { lat: p.lat, lng: p.lng, k };
+  }
   return {
     lat: fr.origem.lat + (fr.destino.lat - fr.origem.lat) * e,
     lng: fr.origem.lng + (fr.destino.lng - fr.origem.lng) * e,
@@ -62,7 +119,7 @@ export function tickTransito(frotas, agora) {
     fr.lat = p.lat; fr.lng = p.lng;
     if (agora >= fr.chegaEm) {
       fr.lat = fr.destino.lat; fr.lng = fr.destino.lng;
-      delete fr.origem; delete fr.destino; delete fr.partiuEm; delete fr.chegaEm;
+      delete fr.origem; delete fr.destino; delete fr.partiuEm; delete fr.chegaEm; delete fr.rota;
       chegaram.push(fr);
     }
   }

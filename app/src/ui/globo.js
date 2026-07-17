@@ -27,7 +27,7 @@ import { NACOES } from '../dados/registro.js';
 import { ico } from './icones.js';
 
 import { registrarEstados, registrarCidades, semearGuarnicoes, todosEstados, paisCarregado, tropaLivre } from '../jogo/territorio.js';
-import { tickTransito, emTransito, frotasDetectadas, resolverBatalhaNaval, forcaFrota, poderNaval, semearFrotasInimigas, distGraus } from '../jogo/frotas.js';
+import { tickTransito, emTransito, frotasDetectadas, resolverBatalhaNaval, forcaFrota, poderNaval, semearFrotasInimigas, distGraus, setProvedorRota } from '../jogo/frotas.js';
 import { temIntel } from '../jogo/espionagem.js';
 import { corEstado, linhaEstado, alturaEstado, tipEstado, montarPontos, tipPonto, estadosVisiveis, resumoDominios } from './tatico.js';
 
@@ -362,6 +362,10 @@ export async function montarGlobo(container, jogo, {
   // NÃO usar requestIdleCallback aqui: o globo renderiza todo frame via rAF e o
   // navegador nunca fica "idle" — o callback simplesmente não dispara (testado).
   setTimeout(() => construirMalha(features), 700);
+  // Registra o PROVEDOR DE ROTA nas frotas: qualquer iniciarTransito (inclusive o deploy
+  // porto→destino disparado por ui/naval.js) passa a navegar por ÁGUA. Enquanto a malha
+  // não fica pronta, rotaMaritima devolve null e frotas.js cai na reta — nunca trava.
+  setProvedorRota((origem, destino) => rotaMaritima(origem, destino));
 
   // ── CAMADA 3D: satélites em órbita + esquadrilhas em missão ─────────
   const orbitas = new THREE.Group();
@@ -394,11 +398,40 @@ export async function montarGlobo(container, jogo, {
   // traçado de esteira e, ao chegar, roda a detecção de proximidade.
   function navegarFrota(d, origem, destino, aoChegar) {
     esconderTipMarcador();
-    // DURAÇÃO ∝ DISTÂNCIA: um navio não teleporta. Travessia curta ~7s, transoceânica
-    // até ~60s — dá pra ver a esquadra cruzando o mapa devagar, como deve ser.
-    const distGraus = Math.hypot(destino.lat - origem.lat, (destino.lng - origem.lng) * 0.7);
-    const dur = Math.max(7000, Math.min(60000, distGraus * 1100));
-    desenharLinha(destino, 'foco', Math.min(9000, dur), origem);   // a esteira/rota
+    // ROTA POR ÁGUA: a mesma rotaMaritima do resto do jogo (A* sobre a máscara de terra).
+    // Sem malha pronta (ou bacia desconexa), cai na reta antiga — nunca trava.
+    const marinha = rotaMaritima(origem, destino);
+    const rota = (marinha && marinha.length >= 2) ? marinha : [origem, destino];
+    // wrap de longitude no antimeridiano (rota cruzando o Pacífico salta de +179 pra -179)
+    const dLngW = (a, b) => { let x = b - a; if (x > 180) x -= 360; else if (x < -180) x += 360; return x; };
+    const dSeg = (p, q) => Math.hypot(q.lat - p.lat, dLngW(p.lng, q.lng) * 0.7);
+    const acum = [0];
+    for (let i = 1; i < rota.length; i += 1) acum.push(acum[i - 1] + dSeg(rota[i - 1], rota[i]));
+    const compTotal = acum[acum.length - 1] || 0.0001;
+    // DURAÇÃO ∝ DISTÂNCIA REAL da rota: um navio não teleporta. Travessia curta ~7s,
+    // transoceânica até ~60s — e contornar a África conta o contorno, não a reta.
+    const dur = Math.max(7000, Math.min(60000, compTotal * 1100));
+    // A ESTEIRA segue a rota: desenha a polilinha em trechos (em vez de um arco reto
+    // atravessando o continente). Poucos trechos bastam — a leitura é da rota, não do px.
+    if (rota.length > 2) {
+      const passos = Math.min(8, rota.length - 1);
+      for (let i = 0; i < passos; i += 1) {
+        const a = rota[Math.round((i / passos) * (rota.length - 1))];
+        const b = rota[Math.round(((i + 1) / passos) * (rota.length - 1))];
+        desenharLinha(b, 'foco', Math.min(9000, dur), a);
+      }
+    } else desenharLinha(destino, 'foco', Math.min(9000, dur), origem);
+    // interpola AO LONGO da polilinha por distância acumulada (velocidade constante)
+    const pontoEm = (frac) => {
+      const alvo = frac * compTotal;
+      let i = 1;
+      while (i < acum.length - 1 && acum[i] < alvo) i += 1;
+      const seg = acum[i] - acum[i - 1];
+      const t = seg > 0 ? Math.min(1, Math.max(0, (alvo - acum[i - 1]) / seg)) : 1;
+      let lng = rota[i - 1].lng + dLngW(rota[i - 1].lng, rota[i].lng) * t;
+      if (lng > 180) lng -= 360; else if (lng < -180) lng += 360;
+      return { lat: rota[i - 1].lat + (rota[i].lat - rota[i - 1].lat) * t, lng };
+    };
     const ini = performance.now(); let ultimo = 0;
     const passo = (t) => {
       const k = Math.min(1, (t - ini) / dur);
@@ -407,8 +440,9 @@ export async function montarGlobo(container, jogo, {
       const e = k < 0.15 ? (k / 0.15) ** 2 * 0.15
         : k > 0.85 ? 1 - ((1 - k) / 0.15) ** 2 * 0.15
           : 0.15 + (k - 0.15) / 0.70 * 0.70;
-      d.lat = origem.lat + (destino.lat - origem.lat) * e;
-      d.lng = origem.lng + (destino.lng - origem.lng) * e;
+      const p = pontoEm(e);
+      d.lat = p.lat;
+      d.lng = p.lng;
       if (d.frotaRef) { d.frotaRef.lat = d.lat; d.frotaRef.lng = d.lng; }
       if (t - ultimo > 45) { globe.htmlElementsData(marcadores); ultimo = t; }   // ~22 fps
       if (k < 1) requestAnimationFrame(passo);
@@ -1342,7 +1376,9 @@ export async function montarGlobo(container, jogo, {
       novos.push(d);
       // O radar sob o pino cresce com o PODER da frota (mais veículos = varredura maior);
       // só não pisca se for furtiva — submarino não aparece no mapa de ninguém.
-      if (!soSub) focos.push({ lat: fr.lat, lng: fr.lng, cor: 'rgba(143,180,255,', raio: 3 + Math.min(4, total * 0.3), vel: 1.4, periodo: 1200, forca: 0.5 + Math.min(0.25, total * 0.02) });
+      // Radar do mar DISCRETO: raio base 2 (era 3), bônus até 2.5 (era 4), força fixa ~0.4 —
+      // o pulso no globo estava grande demais pra um pino de frota.
+      if (!soSub) focos.push({ lat: fr.lat, lng: fr.lng, cor: 'rgba(143,180,255,', raio: 2 + Math.min(2.5, total * 0.3), vel: 1.4, periodo: 1200, forca: 0.4 });
     }
 
     // ── FROTAS INIMIGAS DETECTADAS ──────────────────────────────────
@@ -1390,7 +1426,7 @@ export async function montarGlobo(container, jogo, {
           titulo: `${nomeI} · força ${forcaI}`, tip: roverI,
         });
         novos.push(di);
-        focos.push({ lat: fi.lat, lng: fi.lng, cor: 'rgba(255,59,92,', raio: 3 + Math.min(4, totalI * 0.3), vel: 1.5, periodo: 1100, forca: 0.55 });
+        focos.push({ lat: fi.lat, lng: fi.lng, cor: 'rgba(255,59,92,', raio: 2 + Math.min(2.5, totalI * 0.3), vel: 1.5, periodo: 1100, forca: 0.4 });
       }
     }
 

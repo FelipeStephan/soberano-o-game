@@ -86,10 +86,14 @@ export function criarTempoReal(jogo, hooks = {}) {
   function renderFila() {
     const alvo = document.querySelector('#fila-tempo');
     if (!alvo) return;
-    if (!fila.length) {
+    // UMA FILA SÓ: as ações do jogador e as OFENSIVAS EM PREPARO (estado.operacoes, a
+    // guerra com tempo do motor) dividem a mesma barra. A operação entra como um chip
+    // ⚔ (não cancelável aqui — quem resolve é o motor); a ação continua cancelável.
+    const ops = jogo.estado.operacoes || [];
+    if (!fila.length && !ops.length) {
       alvo.innerHTML = '<span class="ft-vazia">fila livre — escolha uma ação; ela roda no relógio</span>';
     } else {
-      alvo.innerHTML = fila.map((it, i) => {
+      const chipsAcoes = fila.map((it, i) => {
         const pct = Math.max(0, Math.min(100, ((it.tempo - it.restante) / it.tempo) * 100));
         return `<button class="ft-chip ${it.rodando ? 'rodando' : 'espera'}" data-idx="${i}" title="Cancelar e devolver o caixa">
           <span class="ft-ic">${it.acao.icone || ''}</span>
@@ -98,34 +102,23 @@ export function criarTempoReal(jogo, hooks = {}) {
           <i class="ft-fill" style="width:${pct}%"></i>
           ${ico('x', 10)}
         </button>`;
-      }).join('');
-      alvo.querySelectorAll('.ft-chip').forEach((b) => b.addEventListener('click', () => cancelar(Number(b.dataset.idx))));
+      });
+      const chipsOps = ops.map((o) => {
+        const pct = Math.max(0, Math.min(100, ((o.total - o.restante) / o.total) * 100));
+        return `<div class="ft-chip op ${o.detectado ? 'detectada' : 'rodando'}">
+          <span class="ft-ic">${o.detectado ? '⚠' : '⚔'}</span>
+          <span class="ft-nome">${esc(o.alvoNome)}</span>
+          <span class="ft-t">${o.detectado ? 'DETECTADA' : `${Math.max(1, o.restante)} ${Math.max(1, o.restante) > 1 ? 'meses' : 'mês'}`}</span>
+          <i class="ft-fill" style="width:${pct}%"></i>
+        </div>`;
+      });
+      alvo.innerHTML = [...chipsAcoes, ...chipsOps].join('');
+      alvo.querySelectorAll('.ft-chip[data-idx]').forEach((b) => b.addEventListener('click', () => cancelar(Number(b.dataset.idx))));
     }
     const rel = document.querySelector('#tr-relogio');
     if (rel) rel.textContent = fmtTempo(jogo.estado.relogio.segundos);
     const bt = document.querySelector('#tr-beat');
     if (bt) bt.style.width = `${Math.max(0, Math.min(100, (1 - ateBeat / BEAT_S) * 100))}%`;
-    renderOperacoes();
-  }
-
-  // OFENSIVAS EM PREPARO — as MINHAS operações se montando (guerra com tempo). Mostra
-  // progresso e se o alvo já detectou. Pintado por batida, junto da fila.
-  function renderOperacoes() {
-    const barra = document.querySelector('#op-barra');
-    const alvo = document.querySelector('#fila-op');
-    if (!barra || !alvo) return;
-    const ops = jogo.estado.operacoes || [];
-    barra.style.display = ops.length ? '' : 'none';
-    if (!ops.length) { alvo.innerHTML = ''; return; }
-    alvo.innerHTML = ops.map((o) => {
-      const pct = Math.max(0, Math.min(100, ((o.total - o.restante) / o.total) * 100));
-      return `<div class="ft-chip op ${o.detectado ? 'detectada' : 'rodando'}">
-        <span class="ft-ic">${o.detectado ? '⚠' : '⚔'}</span>
-        <span class="ft-nome">${esc(o.alvoNome)}</span>
-        <span class="ft-t">${o.detectado ? 'DETECTADA' : `${Math.max(1, o.restante)} batida(s)`}</span>
-        <i class="ft-fill" style="width:${pct}%"></i>
-      </div>`;
-    }).join('');
   }
 
   return { enfileirar, cancelar, podeEnfileirar, iniciar, parar, renderFila, CAP, BEAT_S,

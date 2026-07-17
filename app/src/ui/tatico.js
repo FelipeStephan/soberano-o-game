@@ -151,9 +151,9 @@ export function tipEstado(estado, f, teatro = false) {
     <div class="gtc2-meta">${esc(p.tipo || 'Território')}</div>
     ${conf ? `<div class="gtc2-conf">${esc(nomePais(conf.por))} avança para retomar · pressão ${Math.round(conf.intensidade || 0)}/100</div>` : ''}
     ${oculto
-      ? '<div class="gtc2-guarn oculto"><b>🕵️ Guarnição secreta</b><div class="tt-un"><span>Força desconhecida — espione este país para revelar a defesa de cada estado.</span></div></div>'
+      ? ''
       : fc
-        ? `<div class="gtc2-guarn"><b>Guarnição · força ${fc}${estimada ? ' <small class="gtc2-est">via espionagem</small>' : ''}</b>
+        ? `<div class="gtc2-guarn"><b>Guarnição · força ${fc}${estimada ? ' <small class="gtc2-est">intel</small>' : ''}</b>
             <div class="tt-un">${unidades.map(([u, q]) => `<span>${UNIDADE_POR_ID[u]?.icone || ''} ${q.toLocaleString('pt-BR')} ${esc(UNIDADE_POR_ID[u]?.nome || u)}</span>`).join('')}</div></div>`
         : '<div class="gtc2-vazio">Sem tropas posicionadas · território aberto</div>'}
     ${cta ? `<div class="gtc2-cta ${teatro && cls !== 'meu' && cls !== 'conquistado' ? 'armado' : ''}">${cta}</div>` : ''}

@@ -17,7 +17,7 @@
 //
 // 3. EMOJI. ⚔️🚫🪖 num jogo que quer ser um centro de comando. Tudo Lucide agora.
 import { avaliarGuerra, resolverGuerra, sugerirDeploy, combustivelDaGuerra } from '../jogo/guerra.js';
-import { iniciarOperacaoGuerra } from '../jogo/ofensiva.js';
+import { iniciarOperacaoGuerra, duracaoOfensiva, fatorEscopoOfensiva } from '../jogo/ofensiva.js';
 import { UNIDADES, DOMINIOS, poderDeploy, custoDeploy, alcanceDoDeploy } from '../dados/forcas.js';
 import { basesQueAlcancam } from '../dados/bases.js';
 import { PAISES, dePais } from '../dados/paises.js';
@@ -199,7 +199,7 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
       ${semPA ? `<div class="gp-bloqueio">${ico('ban', 14)} Sem pontos de ação — a ofensiva custa ${PA_GUERRA} PA.</div>` : ''}
       <div class="gp-bloqueio" id="gp-erro" style="display:none"></div>
       <button class="gp-lancar" id="gp-lancar" ${semPA ? 'disabled' : ''}>
-        ${ico('swords', 17)} <span>LANÇAR OFENSIVA</span>
+        ${ico('swords', 17)} <span>LANÇAR OFENSIVA</span> <small id="gp-tempo"></small>
       </button>
     </div>
 
@@ -324,6 +324,16 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
     else erro.style.display = 'none';
     btn.disabled = semPA || semForca || semGrana || semAlcance;
 
+    // PREPARO ESTIMADO no próprio botão: tempoBase × fator de escopo (ver jogo/ofensiva.js —
+    // 0.35 + 0.65 × nEstados/total). Batida do mundo = 30s (ui/tempoReal.js).
+    const elTempo = modal.querySelector('#gp-tempo');
+    if (elTempo) {
+      if (poder > 0) {
+        const batidas = Math.max(1, Math.round(duracaoOfensiva(poder) * fatorEscopoOfensiva(prioridades.length, estadosAlvo.length)));
+        elTempo.textContent = `· preparo ~${batidas * 30}s`;
+      } else elTempo.textContent = '';
+    }
+
     for (const u of UNIDADES) {
       const q = modal.querySelector(`#q-${u.id}`);
       if (q) q.textContent = (deploy[u.id] || 0).toLocaleString('pt-BR');
@@ -362,6 +372,7 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
         const eixo = modal.querySelector('#gp-eixo');
         if (txt) txt.textContent = ids.length ? `${ids.length} alvo(s) · principal: ${nomeEstado(ids[0])}` : 'Definir estratégia no mapa';
         eixo?.classList.toggle('ativo', ids.length > 0);
+        atualizar();   // recalcula o preparo estimado (o escopo mudou)
       },
     });
   });
@@ -377,6 +388,8 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
       multPoder: ponto.poder, custo: custoFinal,
       origem: ponto.coord || null,
       prioridade: prioridades.length ? prioridades : null,
+      // ESCOPO: n de estados-alvo escolhidos vs total do país — encurta o preparo
+      nEstados: prioridades.length, totalEstados: estadosAlvo.length,
     });
     if (r.falha) {
       const e = modal.querySelector('#gp-erro'); e.style.display = ''; e.innerHTML = `${ico('ban', 14)} ${esc(r.falha)}`; return;
@@ -584,7 +597,7 @@ export function desfechoCarrossel(container, res, jogo, feature, aoFim) {
         <div class="gdw-prox">
           <div class="gdw-prox-tit">${ico('landmark', 13)} PRÓXIMO PASSO · CAMINHO PARA A ANEXAÇÃO</div>
           <div class="gdw-prox-barra"><div style="width:${pctEstavel}%"></div></div>
-          <div class="gdw-prox-linha"><span>Batidas estáveis</span><b>${turnosEstavel}/${ANEXACAO_TURNOS_ESTAVEL}</b></div>
+          <div class="gdw-prox-linha"><span>Meses estáveis</span><b>${turnosEstavel}/${ANEXACAO_TURNOS_ESTAVEL}</b></div>
           <div class="gdw-prox-linha"><span>Insurgência agora</span><b class="${insOk ? 'ok' : 'ruim'}">${conq.insurgencia}%<i> · precisa ≤${ANEXACAO_INSURGENCIA_MAX}%</i></b></div>
           <div class="gdw-prox-linha"><span>Upkeep projetado</span><b>${dinheiro(uk.total)}<i>/turno</i></b></div>
           <div class="gdw-prox-nota">${ico('info', 11)} Abra ${esc(defensor)} no globo e MANTENHA A ORDEM para acelerar — sem manutenção, a insurgência sobe e você pode perder o que tomou antes de anexar.</div>

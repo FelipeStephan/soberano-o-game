@@ -20,6 +20,14 @@ export function duracaoOfensiva(poderEnviado = 0) {
   return Math.max(2, Math.min(9, Math.round(2 + poderEnviado / 45)));
 }
 
+// ESCOPO DA OFENSIVA: tomar 3 estados de 27 não pode demorar o mesmo que o país inteiro.
+// Fórmula: fator = 0.35 + 0.65 × (nEstados/totalEstados), clamp [0.25, 1] — 3/27 ≈ 42%
+// do tempo cheio; sem seleção (país inteiro) = 100%; piso 25% do base, teto o base atual.
+export function fatorEscopoOfensiva(nEstados = 0, totalEstados = 0) {
+  if (!nEstados || !totalEstados || nEstados >= totalEstados) return 1;
+  return clamp(0.35 + 0.65 * (nEstados / totalEstados), 0.25, 1);
+}
+
 // Chance de o ALVO flagrar a operação NESTA batida. Lê a inteligência do alvo (NPC) e a
 // sua contra-inteligência (segurança); cresce com o tempo decorrido. Intel alta do alvo =
 // detecta cedo (defesa reforçada); intel baixa = você pega ele de surpresa.
@@ -54,7 +62,9 @@ export function iniciarOperacaoGuerra(estado, feature, deploy, opts = {}) {
   estado.tesouro = round2(estado.tesouro - custoTotal);
   for (const [id, q] of Object.entries(deploy)) if (q) estado.forcas[id] = Math.max(0, (estado.forcas[id] || 0) - q);
 
-  const total = duracaoOfensiva(poderEnviado);
+  // tempo escala com o ESCOPO: menos estados-alvo = preparo mais curto (ver fatorEscopoOfensiva)
+  const fator = fatorEscopoOfensiva(opts.nEstados || 0, opts.totalEstados || 0);
+  const total = Math.max(1, Math.round(duracaoOfensiva(poderEnviado) * fator));
   const op = {
     id: `op_${estado.turno || 0}_${Math.round(poderEnviado)}_${(estado.operacoes.length)}`, tipo: 'guerra',
     alvoIso: av.iso, alvoNome: av.nome, deploy: { ...deploy },

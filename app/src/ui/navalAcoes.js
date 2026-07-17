@@ -13,6 +13,19 @@ import { ico } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+// ── MEDIDORES LEGÍVEIS ─────────────────────────────────────────────────
+// "Alcance 34°" não diz nada pro jogador. Cada atributo vira uma barra
+// normalizada + uma palavra-classe ("global", "radar forte", "fantasma").
+const pctDe = (v, max) => Math.max(0, Math.min(100, Math.round((v / max) * 100)));
+const classeAlcance = (v) => (v < 10 ? 'costeiro' : v < 22 ? 'regional' : 'global');
+const classeDeteccao = (v) => (v < 8 ? 'curto' : v < 14 ? 'médio' : 'forte');
+const classeFurtiv = (v) => (v < 30 ? 'visível' : v < 70 ? 'discreta' : 'fantasma');
+const barra = (rotulo, pct, palavra, extra = '') => `<div class="nva-barra ${extra}">
+  <i>${rotulo}</i>
+  <div class="nva-barra-trilha"><b style="width:${pct}%"></b></div>
+  <em>${esc(palavra)}</em>
+</div>`;
+
 export function abrirAcoesNaval(fr, jogo, helpers = {}) {
   if (document.querySelector('.nva-modal')) return;
   const e = jogo.estado;
@@ -41,10 +54,10 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
       <div class="nva-tit"><h2>${esc(nomeReal)}</h2><span>${esc(linhas || 'força naval')} · presença ${fr.presenca}</span></div>
       <button class="pp-fechar nva-x">${ico('x', 16)}</button>
     </div>
-    <div class="nva-grade">
-      <span><i>Alcance</i><b>${tech.alcance}°</b></span>
-      <span><i>Detecção</i><b>${tech.deteccao}°</b></span>
-      <span class="${soSub ? 'furtivo' : ''}"><i>Furtividade</i><b>${tech.furtividade}${soSub ? ' 🥷' : ''}</b></span>
+    <div class="nva-barras">
+      ${barra('Alcance', pctDe(tech.alcance, 40), classeAlcance(tech.alcance))}
+      ${barra('Detecção', pctDe(tech.deteccao, 20), `radar ${classeDeteccao(tech.deteccao)}`)}
+      ${barra('Furtividade', pctDe(tech.furtividade, 100), classeFurtiv(tech.furtividade) + (soSub ? ' 🥷' : ''), 'furtiva')}
     </div>
     ${alvo ? `<div class="nva-alvo ${alvo.hostil ? 'hostil' : alvo.parceiro ? 'amigo' : 'neutro'}">
       ${ico(alvo.hostil ? 'swords' : alvo.parceiro ? 'handshake' : 'radar', 14)}

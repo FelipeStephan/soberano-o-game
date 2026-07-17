@@ -124,7 +124,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <div><span class="rot">Nação</span><span class="val">${esc(f.pais)}</span></div>
         </div>
         <div class="topo-sep"></div>
-        <div class="stat" data-tip="O mês do seu mandato. O mundo corre em tempo real — cada batida é um mês; a cada 12 meses o ano vira. Seu reinado termina quando o tempo (ou o povo) acabar." data-tip-t="Tempo no poder" data-tip-k="TEMPO REAL"><span class="rot">Mandato</span><span class="val"><span id="t-turno">${mesAnoDoJogo(1).label}</span> <i>· mês 1/${jogo.eraTurnoMax}</i></span></div>
+        <div class="stat" data-tip="O mês do seu mandato. O mundo corre em tempo real — o calendário anda mês a mês; a cada 12 meses o ano vira. Seu reinado termina quando o tempo (ou o povo) acabar." data-tip-t="Tempo no poder" data-tip-k="TEMPO REAL"><span class="rot">Mandato</span><span class="val"><span id="t-turno">${mesAnoDoJogo(1).label}</span> <i>· mês 1/${jogo.eraTurnoMax}</i></span></div>
         <div class="stat destaque"><span class="rot">Tesouro Nacional</span><span class="val" id="t-tesouro">–</span></div>
         <div class="stat"><span class="rot">Pontos de Ação</span><span class="val" id="t-pa">–</span></div>
         <div class="topo-sep"></div>
@@ -870,7 +870,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
       <div class="acoes-cab">
         <div class="tabs">${tabs}</div>
         <div class="acoes-status">
-          <span class="tr-relogio" data-tip="Tempo de jogo. O mundo corre sozinho — a cada batida a economia, as guerras e as invasões avançam. Não há mais 'passar turno': aja e o relógio segue." data-tip-t="Tempo real" data-tip-k="O MUNDO NÃO ESPERA" data-tip-cor="ambar">${ico('clock', 12)} <b id="tr-relogio">00:00</b><i class="tr-beat-trilho" data-tip="Contagem para a próxima batida do mundo."><i id="tr-beat"></i></i></span>
+          <span class="tr-relogio" data-tip="Tempo de jogo. O mundo corre sozinho — a cada mês a economia, as guerras e as invasões avançam. Não há mais 'passar turno': aja e o relógio segue." data-tip-t="Tempo real" data-tip-k="O MUNDO NÃO ESPERA" data-tip-cor="ambar">${ico('clock', 12)} <b id="tr-relogio">00:00</b><i class="tr-beat-trilho" data-tip="Contagem para a virada do mês."><i id="tr-beat"></i></i></span>
           <span>${dinheiro(jogo.estado.tesouro)}</span>
           <button class="ac-toggle" id="ac-toggle" data-tip="${consoleAberto ? 'Minimizar' : 'Expandir'}">${ico(consoleAberto ? 'chevron-down' : 'chevron-up', 14)}</button>
         </div>
@@ -881,10 +881,6 @@ export function iniciarJogo(container, jogo, opts = {}) {
       <div class="fila-barra tempo">
         <div class="fila-rot">${ico('list-ordered', 12)} <span>Fila de comando</span> <small class="fila-cap">até ${tr?.CAP || 2} em execução</small></div>
         <div class="fila" id="fila-tempo"></div>
-      </div>
-      <div class="fila-barra tempo operacoes" id="op-barra" style="display:none">
-        <div class="fila-rot">${ico('swords', 12)} <span>Ofensivas em preparo</span></div>
-        <div class="fila" id="fila-op"></div>
       </div>`;
 
     el.acoes.querySelector('#ac-toggle').addEventListener('click', () => { consoleAberto = !consoleAberto; renderAcoes(); });
@@ -977,7 +973,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const m = novos[0];
     novos.forEach((x) => { x.novoAviso = false; });
     if (document.querySelector('.carta-wrap .cena') || document.querySelector('.lg-barra')) return;
-    alertaUrgente({ titulo: 'AMEAÇA DETECTADA', texto: `${m.nome} mobiliza forças contra você — ataque em ~${Math.max(1, m.restante)} batida(s). Reforce a defesa enquanto há tempo.`, tom: 'alerta' });
+    alertaUrgente({ titulo: 'AMEAÇA DETECTADA', texto: `${m.nome} mobiliza forças contra você — ataque em ~${Math.max(1, m.restante)} ${Math.max(1, m.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa enquanto há tempo.`, tom: 'alerta' });
   }
 
   // VOCÊ FOI INVADIDO, no tempo real: alerta urgente + a mesma página de invasão do turno,

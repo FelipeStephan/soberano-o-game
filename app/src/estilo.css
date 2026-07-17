@@ -2455,8 +2455,8 @@ button:disabled { opacity: .38; cursor: not-allowed; }
   box-sizing: content-box; border-radius: 10px; background: rgba(6,11,20,.96); border: 1px solid var(--perigo);
   backdrop-filter: blur(12px); box-shadow: 0 14px 44px rgba(0,0,0,.8); pointer-events: none;
   animation: entrar .12s ease; overflow: hidden; }
-/* o rover naval é mais largo — a caixa acompanha pra não transbordar */
-.gt-conflito.largo { width: 268px; padding: 0; border-color: rgba(143,180,255,.5); }
+/* o rover naval é mais largo — a caixa acompanha pra não transbordar (card vertical de 290px) */
+.gt-conflito.largo { width: 290px; padding: 0; border-color: rgba(143,180,255,.5); }
 .gt-conflito > b { font-family: var(--disp); font-size: 15px; color: var(--texto); }
 .gtc-cab { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
 .gtc-cab img { width: 22px; height: 15px; object-fit: cover; border-radius: 2px; border: 1px solid var(--borda); }
@@ -4152,25 +4152,29 @@ button[data-tip], .tip-q { cursor: pointer; }
 .mm-in.presurto { opacity: .6; animation: pdmPulseFraco 2.6s ease-in-out infinite; }
 @keyframes pdmPulseFraco { 0%,100% { opacity: .45; } 50% { opacity: .85; } }
 
-/* ROVER RICO DA FROTA (no hover do pino) — igual à ficha de Forças Armadas, sem "?" */
-.fah-nav { display: flex; gap: 10px; width: 268px; }
-.fah-nav .fah-foto { position: relative; width: 88px; height: auto; min-height: 78px; flex: none; border-radius: 0;
-  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
-.fah-nav .fah-foto img { width: 100%; height: 100%; object-fit: cover; }
-.fah-nav .fah-dom { position: absolute; bottom: 4px; left: 4px; font-family: var(--mono); font-size: 7px; letter-spacing: .12em;
-  padding: 2px 5px; background: rgba(53,224,255,.9); color: #04121a; }
-.fah-nav .fah-corpo { flex: 1; min-width: 0; }
+/* ROVER RICO DA FROTA (no hover do pino) — card vertical: capa em cima, dados embaixo */
+.fah-nav { display: flex; flex-direction: column; width: 290px; }
+.fah-nav .fah-foto { position: relative; width: 100%; height: 110px; min-height: 0; flex: none; border-radius: 0;
+  clip-path: none; overflow: hidden; background: #05080f; display: grid; place-items: center; color: #8fb4ff; }
+.fah-nav .fah-foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* badge de domínio: filete mínimo no canto da capa — nada de bloco azul tapando a foto */
+.fah-nav .fah-dom { position: absolute; top: 6px; right: 6px; bottom: auto; left: auto; z-index: 2;
+  font-family: var(--mono); font-size: 7px; letter-spacing: .14em; padding: 2px 5px;
+  background: rgba(5,10,18,.62); color: #9fd8ff; box-shadow: inset 0 0 0 1px rgba(53,224,255,.35); backdrop-filter: blur(2px); }
+.fah-nav .fah-corpo { flex: 1; min-width: 0; padding: 11px 13px 12px; }
 .fah-nav .fah-nome { font-family: var(--disp); font-size: 15px; font-weight: 700; color: #fff; line-height: 1.05; }
-.fah-nav .fah-fab { font-family: var(--mono); font-size: 9px; color: var(--fraco); margin: 2px 0 7px; }
-.fah-nav .fah-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(150,190,240,.12); }
-.fah-nav .fah-grade span { background: rgba(9,15,26,.96); padding: 5px 7px; display: flex; flex-direction: column; }
+.fah-nav .fah-fab { font-family: var(--mono); font-size: 9px; color: var(--fraco); margin: 3px 0 9px; }
+.fah-nav .fah-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(150,190,240,.12);
+  box-shadow: 0 0 0 1px rgba(150,190,240,.12); }
+.fah-nav .fah-grade span { background: rgba(9,15,26,.96); padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
 .fah-nav .fah-grade i { font-family: var(--mono); font-size: 7px; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco); font-style: normal; }
 .fah-nav .fah-grade b { font-family: var(--mono); font-size: 13px; color: #cfe0ff; }
 .fah-nav .fah-grade .destaq b { color: var(--cyan); }
 .fah-nav .fah-grade .furtivo b { color: #b98cff; }
-.fah-nav .fah-cta { margin-top: 7px; font-family: var(--mono); font-size: 8px; letter-spacing: .04em; color: #8fb4ff; display: flex; align-items: center; gap: 5px; }
-/* frota inimiga: badge e moldura vermelhos */
+.fah-nav .fah-cta { margin-top: 8px; font-family: var(--mono); font-size: 8px; letter-spacing: .04em; color: #8fb4ff; display: flex; align-items: center; gap: 5px; }
+/* frota inimiga: badge e moldura vermelhos (na capa, versão discreta semitransparente) */
 .fah-dom.hostil { background: var(--perigo); color: #fff; }
+.fah-nav .fah-dom.hostil { background: rgba(255,59,92,.55); color: #ffe4e9; box-shadow: inset 0 0 0 1px rgba(255,59,92,.6); }
 .fah-nav.inimiga .fah-nome { color: #ffd0d8; }
 .fah-nav.inimiga .fah-grade .destaq b { color: var(--perigo); }
 
@@ -4187,11 +4191,17 @@ button[data-tip], .tip-q { cursor: pointer; }
 .nva-tit h2 { margin: 0; font-family: var(--disp); font-size: 17px; }
 .nva-tit span { font-family: var(--mono); font-size: 9px; color: var(--fraco); }
 .nva-x { margin-left: auto; }
-.nva-grade { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: rgba(150,190,240,.12); margin: 0 15px; }
-.nva-grade span { background: rgba(9,15,26,.96); padding: 8px 10px; display: flex; flex-direction: column; }
-.nva-grade i { font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco); font-style: normal; }
-.nva-grade b { font-family: var(--mono); font-size: 15px; color: #cfe0ff; }
-.nva-grade .furtivo b { color: #b98cff; }
+/* medidores legíveis: rótulo + barra fina estilo terminal + palavra-classe */
+.nva-barras { margin: 0 15px; padding: 10px 12px; display: flex; flex-direction: column; gap: 7px;
+  background: rgba(9,15,26,.96); box-shadow: inset 0 0 0 1px rgba(150,190,240,.12); }
+.nva-barra { display: grid; grid-template-columns: 66px 1fr 78px; align-items: center; gap: 9px; }
+.nva-barra i { font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco); font-style: normal; }
+.nva-barra-trilha { height: 4px; background: rgba(150,190,240,.14); overflow: hidden; }
+.nva-barra-trilha b { display: block; height: 100%; background: var(--cyan); transition: width .35s ease; }
+.nva-barra em { font-family: var(--mono); font-size: 8px; letter-spacing: .06em; text-transform: uppercase; font-style: normal;
+  color: #cfe0ff; text-align: right; white-space: nowrap; }
+.nva-barra.furtiva .nva-barra-trilha b { background: #b98cff; }
+.nva-barra.furtiva em { color: #b98cff; }
 .nva-alvo { display: flex; align-items: center; gap: 8px; margin: 11px 15px 0; padding: 8px 10px; font-size: 11.5px; line-height: 1.4; color: #c3d4ee; }
 .nva-alvo.hostil { background: rgba(255,59,92,.08); box-shadow: inset 2px 0 0 var(--perigo); } .nva-alvo.hostil .ico { color: var(--perigo); }
 .nva-alvo.amigo { background: rgba(34,224,160,.07); box-shadow: inset 2px 0 0 var(--verde); } .nva-alvo.amigo .ico { color: var(--verde); }

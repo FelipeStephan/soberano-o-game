@@ -71,7 +71,7 @@ export function podeAnexar(estado, iso) {
   if (!c || !oc) return { pode: false, motivo: 'Território não ocupado.' };
   if (oc.anexado) return { pode: false, motivo: 'Já anexado.' };
   if ((oc.turnosEstavel || 0) < ANEXACAO_TURNOS_ESTAVEL) {
-    return { pode: false, motivo: `Segure o controle: ${oc.turnosEstavel || 0}/${ANEXACAO_TURNOS_ESTAVEL} batidas estáveis (insurgência baixa + upkeep em dia).` };
+    return { pode: false, motivo: `Segure o controle: ${oc.turnosEstavel || 0}/${ANEXACAO_TURNOS_ESTAVEL} meses estáveis (insurgência baixa + upkeep em dia).` };
   }
   if ((c.insurgencia || 0) > ANEXACAO_INSURGENCIA_MAX) {
     return { pode: false, motivo: `Insurgência em ${c.insurgencia}% — precisa cair abaixo de ${ANEXACAO_INSURGENCIA_MAX}% pra anexar.` };
