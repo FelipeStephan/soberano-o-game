@@ -224,7 +224,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
   jogo.ehOnline = !!(online && net);
   // MUNDO ÚNICO (Etapa 1): o código da sala vira a SEED compartilhada — todo cliente
   // rola os mesmos dados na mesma batida (ver motor.beatMundo + jogo/rng.js).
-  jogo._seedSala = (online && sala?.codigo) ? sala.codigo : null;
+  jogo._seedSala = (online && opts.sala?.codigo) ? opts.sala.codigo : null;
   let telefonia = null;   // linha direta entre presidentes (chamada de voz + DM)
   if (online && net) {
     onlineCtrl = ligarOnline(jogo, net, {
