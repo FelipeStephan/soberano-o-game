@@ -36,6 +36,21 @@ export function ligarOnline(jogo, net, hooks) {
 
   const badge = hooks.container?.querySelector('#online-badge');
 
+  // Recalcula quem é humano a partir de uma lista de jogadores da sala.
+  function absorverJogadores(lista) {
+    jogadores = (lista || []).filter((j) => j.pais);
+    porPais.clear();
+    for (const j of jogadores) if (j.pais && j.pais !== meuIso) porPais.set(j.pais, j);
+    pintarBadge();
+  }
+
+  // BUG QUE ISTO CONSERTA: quem ENTRAVA por último no jogo começava com jogadores=[]
+  // e só populava no PRÓXIMO broadcast de sala — que nunca vinha se ninguém mais mexia.
+  // Resultado: o convidado não "via" o host como humano (sem botão de contato, ligação
+  // só funcionava num sentido). O cliente do lobby JÁ guarda o último roster em
+  // net.estado().jogadores — semeamos dele na hora de ligar.
+  absorverJogadores(net.estado().jogadores);
+
   function pintarBadge() {
     if (!badge) return;
     const est = net.estado();
@@ -49,6 +64,10 @@ export function ligarOnline(jogo, net, hooks) {
   // ── EVENTO CHEGANDO de outro humano ────────────────────────────────
   function receber(ev) {
     if (!ev || ev.dePais === meuIso) return;   // ignora eco do próprio
+    // MUNDO COMPARTILHADO: o host é a autoridade do "mundo ao vivo". Ele retransmite os
+    // posts do X, plantões e o período; os convidados APLICAM (em vez de gerar os seus,
+    // que divergiam). Assim a sala inteira vê a MESMA timeline e o mesmo relógio.
+    if (ev.tipo === 'mundo') { aplicarMundo(ev.dados || {}); return; }
     const est = ESTILO[ev.tipo] || { cor: '#7488ad', urgente: false, rot: (ev.tipo || 'AGIU').toUpperCase(), ic: 'radio' };
     const origem = ev.deNome ? `${ev.deNome} (${nomeDe(ev.dePais)})` : nomeDe(ev.dePais);
 
@@ -133,14 +152,23 @@ export function ligarOnline(jogo, net, hooks) {
     document.querySelectorAll('.onl-alerta').forEach((e) => e.remove());
   }
 
+  // ── MUNDO recebido do host (convidado aplica) ──────────────────────────
+  function aplicarMundo(d) {
+    if (Array.isArray(d.posts) && d.posts.length) { jogo._empilharFeed?.(d.posts); hooks.renderFeed?.(); }
+    // animação no globo espelhando o host (escaramuça/petróleo)
+    const g = hooks.globoCtrl?.();
+    if (d.anim && g) {
+      const de = g.ondeEsta?.(d.anim.de); const para = g.ondeEsta?.(d.anim.para || d.anim.iso);
+      if (d.anim.tipo === 'escaramuca' && de && para) { g.desenharLinha?.(para, 'ataque', 6000, de); g.salvaMisseis?.(para, 2, de); }
+      else if (d.anim.tipo === 'petroleo' && para) g.ondaRadar?.(para, { cor: 0xffb020, max: 55 });
+    }
+    // relógio da sala: o período do HOST vira o período mostrado (sem mexer no turno local)
+    if (Number.isFinite(d.turno)) { jogo._periodoSala = d.turno; hooks.sincronizarPeriodo?.(d.turno); }
+  }
+
   // Reassume os callbacks da conexão que a home abriu (sem reconectar).
   net.setHandlers({
-    onSala: (msg) => {
-      jogadores = (msg.jogadores || []).filter((j) => j.pais);
-      porPais.clear();
-      for (const j of jogadores) if (j.pais && j.pais !== meuIso) porPais.set(j.pais, j);
-      pintarBadge();
-    },
+    onSala: (msg) => { absorverJogadores(msg.jogadores); hooks.onRoster?.(jogadores); },
     onEvento: receber,
     onConexao: (ok) => { if (badge && !ok) badge.classList.remove('online-ativo'); },
   });
@@ -149,6 +177,9 @@ export function ligarOnline(jogo, net, hooks) {
   return {
     humano,
     jogadores: () => jogadores.slice(),
+    // AUTORIDADE DO MUNDO: quem é host gera o mundo ao vivo e o retransmite; convidado só aplica.
+    souHost: () => !!net.estado().host,
+    relayMundo: (dados) => net.evento('mundo', null, '', dados),
     // VOCÊ agiu sobre um país. Se for humano, dispara o alerta pra ele. Sempre publica
     // no feed da sala (todos veem o impacto — é o World Trends).
     notificar: (tipo, alvoIso, texto, dados) => {

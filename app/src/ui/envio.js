@@ -13,7 +13,7 @@
 // A regra que dá a espinha: DEFENDER É MAIS BARATO QUE ATACAR (ver territorio.js).
 // Mandar pouco contra guarnição forte não é "um ataque fraco", é um massacre do seu
 // lado. O painel diz isso na cara, antes.
-import { guarnicaoDefensivaDetalhe, tropaLivre, donoDe } from '../jogo/territorio.js';
+import { guarnicaoDefensivaDetalhe, tropaLivre, donoDe, recolherTudo } from '../jogo/territorio.js';
 import { temIntel } from '../jogo/espionagem.js';
 import { resolverEnvio } from '../jogo/campanha.js';
 import { UNIDADES, UNIDADE_POR_ID, DOMINIOS, poderDeploy, custoDeploy } from '../dados/forcas.js';
@@ -96,6 +96,10 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
         </div>
       </div>
 
+      ${!uteis.length ? `<div class="env-semtropa">${ico('triangle-alert', 16)}
+        <div><b>Toda a sua tropa está guarnecendo território.</b> Não sobrou reserva livre pra esta ofensiva — por isso o clique "não move nada". Libere as guarnições para o quartel e elas ficam disponíveis para atacar a partir daqui.
+        <button class="env-liberar" id="env-liberar">${ico('undo-2', 13)} LIBERAR RESERVA</button></div></div>` : ''}
+
       <div class="env-lista">
         ${DOMINIOS.map((d) => {
           const us = uteis.filter((u) => u.dominio === d);
@@ -127,6 +131,16 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
     </div>`;
 
     modal.querySelector('#env-x').addEventListener('click', sair);
+
+    // LIBERAR RESERVA — recolhe as guarnições terrestres pro quartel e re-renderiza, agora
+    // COM tropa disponível pra ofensiva. Resolve o "clico e não move nada" quando tudo
+    // está posicionado. É o mesmo motor do Pentágono, aqui no momento do ataque.
+    modal.querySelector('#env-liberar')?.addEventListener('click', () => {
+      const r = recolherTudo(e);
+      if (r.ok) jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: '#ffb020', texto: `${r.total.toLocaleString('pt-BR')} unidades recolhidas ao quartel — prontas para a ofensiva.` }]);
+      globoCtrl?.atualizar?.();
+      render();
+    });
     modal.querySelector('#env-no').addEventListener('click', sair);
 
     const prog = modal.querySelector('#env-prog');

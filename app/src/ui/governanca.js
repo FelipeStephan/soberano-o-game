@@ -12,9 +12,16 @@
 // fila, então NENHUM marcador novo no motor. A entrada na fila vai por
 // tr.enfileirar quando o controlador é passado, ou pela ponte filaComando
 // (mesma usada pela ficha de equipamento/mercado) quando não é.
+//
+// Render: o modal é montado UMA vez. O arrasto do slider NUNCA re-renderiza —
+// só atualiza em place os nós da projeção (ver projetar()). Motivo: refazer
+// innerHTML no `input` destruía o próprio <input type=range> no meio do
+// arrasto e o navegador soltava o drag (o pino "engasgava").
 import { calcularFluxo } from '../jogo/economia.js';
 import { dinheiro } from '../jogo/formato.js';
 import { enfileirarNaFila, filaRegistrada } from '../jogo/filaComando.js';
+import { abrirAliancas } from './aliancas.js';
+import { minhasAliancas } from '../jogo/aliancas.js';
 import { ico } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -84,7 +91,12 @@ function efeitosImposto(atual, alvo) {
   return ef;
 }
 
-export function abrirGovernanca(jogo, { tr, onFim } = {}) {
+export function abrirGovernanca(jogo, { tr, onFim, globoCtrl } = {}) {
+  // Rótulo do botão de aliança: mostra a que você fundou, ou o convite a fundar.
+  function minhaAliancaLabel() {
+    const al = minhasAliancas(jogo.estado).find((a) => a.fundador === (jogo.estado.iso || 'USA'));
+    return al ? `${esc(al.nome)} — ${al.membros.length} membro(s)` : 'Criar uma aliança';
+  }
   const e = jogo.estado;
   const atual = Math.round(e.aliquota || 0);
   let alvo = atual;   // o que o slider aponta agora
@@ -109,12 +121,20 @@ export function abrirGovernanca(jogo, { tr, onFim } = {}) {
 
   function render(flash) {
     const fluxoAtual = fluxoCom(atual);
-    const fluxoAlvo = fluxoCom(alvo);
-    const zAtual = zonaDe(atual);
     const zAlvo = zonaDe(alvo);
-    const delta = alvo - atual;
-    const ganho = Math.round((fluxoAlvo.receita - fluxoAtual.receita) * 100) / 100;
-    const efImp = efeitosImposto(atual, alvo);
+    const delta0 = alvo - atual;
+
+    // ── panorama como TILES de dashboard — cada métrica com leitura visual ──
+    // A cor do tile é SEMÂNTICA (--sc): a barra e o número contam a mesma história.
+    const divPct = Math.min(Math.max(e.divida, 0), 150) / 150 * 100;   // escala até 150% do PIB
+    const clsDiv = e.divida > 90 ? 'ruim' : e.divida > 60 ? 'aten' : 'ok';
+    const aprov = Math.min(Math.max(Math.round(e.aprovacao), 0), 100);
+    const clsApr = aprov < 35 ? 'ruim' : aprov < 55 ? 'aten' : 'ok';
+
+    // ── fluxo de caixa: receita × despesa como barras opostas ──
+    const maxFx = Math.max(fluxoAtual.receita, fluxoAtual.despesa, 0.01);
+    const wRec = fluxoAtual.receita / maxFx * 100;
+    const wDesp = fluxoAtual.despesa / maxFx * 100;
 
     modal.innerHTML = `<div class="gov-painel">
       <div class="gov-cab">
@@ -126,24 +146,50 @@ export function abrirGovernanca(jogo, { tr, onFim } = {}) {
       </div>
 
       <div class="gov-panorama">
-        <span>${ico('circle-dollar-sign', 10)} PIB <b>${dinheiro(e.pib)}</b></span>
-        <span>${ico('vault', 10)} Tesouro <b>${dinheiro(e.tesouro)}</b></span>
-        <span>${ico('trending-down', 10)} Dívida <b class="${e.divida > 90 ? 'ruim' : ''}">${Math.round(e.divida)}% do PIB</b></span>
-        <span>${ico('percent', 10)} Impostos <b>${atual}%</b></span>
-        <span>${ico('users', 10)} Aprovação <b class="${e.aprovacao < 35 ? 'ruim' : ''}">${Math.round(e.aprovacao)}%</b></span>
+        <div class="gov-stat">
+          <span class="gov-stat-rot">${ico('circle-dollar-sign', 9)} PIB</span>
+          <b class="gov-stat-val">${dinheiro(e.pib)}</b>
+        </div>
+        <div class="gov-stat">
+          <span class="gov-stat-rot">${ico('vault', 9)} Tesouro</span>
+          <b class="gov-stat-val">${dinheiro(e.tesouro)}</b>
+        </div>
+        <div class="gov-stat ${clsDiv}">
+          <span class="gov-stat-rot">${ico('trending-down', 9)} Dívida</span>
+          <b class="gov-stat-val">${Math.round(e.divida)}<small>% do PIB</small></b>
+          <div class="gov-stat-barra" title="a marca é o limite: 100% do PIB"><i style="width:${divPct}%"></i><u style="left:${100 / 150 * 100}%"></u></div>
+        </div>
+        <div class="gov-stat ${clsApr}">
+          <span class="gov-stat-rot">${ico('users', 9)} Aprovação</span>
+          <b class="gov-stat-val">${aprov}<small>%</small></b>
+          <div class="gov-stat-barra" title="abaixo de 35% é zona de crise; acima de 55%, conforto"><i style="width:${aprov}%"></i><u style="left:35%"></u><u style="left:55%"></u></div>
+        </div>
+        <div class="gov-stat">
+          <span class="gov-stat-rot">${ico('percent', 9)} Impostos</span>
+          <b class="gov-stat-val">${atual}<small>%</small></b>
+          <div class="gov-stat-zonas"><i class="z-fraca"></i><i class="z-saudavel"></i><i class="z-pesada"></i><i class="z-sufoco"></i><u style="left:${atual / 60 * 100}%"></u></div>
+        </div>
       </div>
 
       <div class="gov-corpo">
+        <div class="gov-sec">${ico('arrow-right-left', 11)} Fluxo de caixa — mês corrente</div>
+        <div class="gov-fluxo">
+          <div class="gov-fx"><span>Receita</span><div class="gov-fx-t"><i class="rec" style="width:${wRec}%"></i></div><b class="bom">${dinheiro(fluxoAtual.receita)}</b></div>
+          <div class="gov-fx"><span>Despesa</span><div class="gov-fx-t"><i class="desp" style="width:${wDesp}%"></i></div><b class="ruim">${dinheiro(fluxoAtual.despesa)}</b></div>
+          <div class="gov-fx-saldo">
+            <span>Saldo/mês <small>inclui petróleo e dividendos</small></span>
+            <b class="${fluxoAtual.saldo >= 0 ? 'bom' : 'ruim'}">${fluxoAtual.saldo >= 0 ? '+' : '−'}${dinheiro(Math.abs(fluxoAtual.saldo))}</b>
+          </div>
+        </div>
+
         <div class="gov-sec">${ico('percent', 11)} Impostos — carga tributária</div>
         <div class="gov-imposto">
           <div class="gov-medidor">
             <div class="gov-zonas">
               <i class="z-fraca" style="width:${(20 / 60) * 100}%"></i><i class="z-saudavel" style="width:${(15 / 60) * 100}%"></i><i class="z-pesada" style="width:${(10 / 60) * 100}%"></i><i class="z-sufoco" style="width:${(15 / 60) * 100}%"></i>
             </div>
-            <div class="gov-pino atual" style="left:${(atual / 60) * 100}%" title="alíquota vigente">
-              <b>${atual}%</b>
-            </div>
-            ${delta !== 0 ? `<div class="gov-pino alvo" style="left:${(alvo / 60) * 100}%"><b>${alvo}%</b></div>` : ''}
+            <div class="gov-pino atual" style="left:${(atual / 60) * 100}%" title="alíquota vigente"><b>${atual}%</b></div>
+            <div class="gov-pino alvo ${delta0 === 0 ? 'oculto' : ''}" style="left:${(alvo / 60) * 100}%" title="alíquota proposta"><b>${alvo}%</b></div>
             <div class="gov-escala"><span>0</span><span>20</span><span>35</span><span>45</span><span>60%</span></div>
           </div>
           <input class="gov-slider" type="range" min="0" max="60" step="1" value="${alvo}">
@@ -154,13 +200,13 @@ export function abrirGovernanca(jogo, { tr, onFim } = {}) {
             </div>
             <div class="gov-proj-r">
               <span>Receita/mês</span>
-              <b>${dinheiro(fluxoAlvo.receita)}</b>
-              ${delta !== 0 ? `<i class="${ganho >= 0 ? 'bom' : 'ruim'}">${ganho >= 0 ? '+' : ''}${dinheiro(Math.abs(ganho)).replace('US$ ', ganho < 0 ? '-US$ ' : 'US$ ')}/mês</i>` : `<i>vigente</i>`}
+              <b>${dinheiro(fluxoCom(alvo).receita)}</b>
+              <i>vigente</i>
             </div>
           </div>
-          ${delta !== 0 ? `<div class="gov-custo-pol">${tagsEfeitos(efImp)}</div>
-          <button class="gov-aplicar" type="button">${ico('gavel', 12)} <span>APLICAR REFORMA → ${alvo}%</span> <i>⚡1 · 20s</i></button>`
-          : `<div class="gov-custo-pol vazio">Arraste o cursor para propor uma nova alíquota — a projeção responde ao vivo.</div>`}
+          <div class="gov-custo-pol ${delta0 === 0 ? 'oculto' : ''}">${delta0 === 0 ? '' : tagsEfeitos(efeitosImposto(atual, alvo))}</div>
+          <div class="gov-dica ${delta0 !== 0 ? 'oculto' : ''}">Arraste o cursor para propor uma nova alíquota — a projeção responde ao vivo.</div>
+          <button class="gov-aplicar ${delta0 === 0 ? 'oculto' : ''}" type="button">${ico('gavel', 12)} <span>APLICAR REFORMA → ${alvo}%</span> <i>⚡1 · 20s</i></button>
         </div>
 
         <div class="gov-sec">${ico('scroll-text', 11)} Leis — reformas de governo</div>
@@ -175,6 +221,13 @@ export function abrirGovernanca(jogo, { tr, onFim } = {}) {
           </div>`).join('')}
         </div>
 
+        <div class="gov-sec">${ico('handshake', 11)} Diplomacia — blocos e alianças</div>
+        <button class="gov-alianca" id="gov-alianca" type="button">
+          <span class="gov-al-ic">${ico('handshake', 18)}</span>
+          <span class="gov-al-txt"><b>${minhaAliancaLabel()}</b><small>Funde um bloco sob a sua bandeira, convide nações e ganhe força militar ou econômica.</small></span>
+          <span class="gov-al-seta">${ico('chevron-right', 15)}</span>
+        </button>
+
         ${flash ? `<div class="gov-flash ${flash.ok ? 'ok' : 'ruim'}">${ico(flash.ok ? 'clock' : 'triangle-alert', 13)} <span>${esc(flash.msg)}</span></div>` : ''}
 
         <div class="gov-rodape">${ico('landmark', 11)} <span>Leis tramitam na <b>fila de comando</b> — os efeitos valem quando o relógio fecha. Guerra e arsenal ficam no rodapé; aqui é governo.</span></div>
@@ -183,12 +236,56 @@ export function abrirGovernanca(jogo, { tr, onFim } = {}) {
 
     modal.querySelector('.gov-x').addEventListener('click', fechar);
 
-    // slider: só a projeção re-renderiza (estado `alvo` vive fora do render)
+    // Abrir a mesa de alianças (o motor + roleplay moram em ui/aliancas.js).
+    modal.querySelector('#gov-alianca')?.addEventListener('click', () => {
+      abrirAliancas(jogo, { globoCtrl, onFim: () => render() });
+    });
+
+    // ── PROJEÇÃO EM PLACE — o coração do fix do slider ──────────────────
+    // O PORQUÊ: o listener antigo chamava render() a cada `input` — o innerHTML
+    // novo destruía o próprio <input type=range> no MEIO do arrasto e o
+    // navegador soltava o drag (o pino "engasgava" e largava o mouse). Agora
+    // todos os nós que a projeção toca são capturados uma vez e o arrasto só
+    // mexe em textContent/style/classList. O modal inteiro nunca é refeito.
     const slider = modal.querySelector('.gov-slider');
-    slider.addEventListener('input', () => { alvo = Number(slider.value); render(); });
+    const nAlvo = modal.querySelector('.gov-pino.alvo');
+    const nAlvoB = nAlvo.querySelector('b');
+    const nZona = modal.querySelector('.gov-zona');
+    const nAviso = modal.querySelector('.gov-proj-l small');
+    const nRec = modal.querySelector('.gov-proj-r b');
+    const nDelta = modal.querySelector('.gov-proj-r i');
+    const nEfs = modal.querySelector('.gov-custo-pol');
+    const nDica = modal.querySelector('.gov-dica');
+    const nAplicar = modal.querySelector('.gov-aplicar');
+    const nAplicarTxt = nAplicar.querySelector('span');
+
+    function projetar() {
+      const delta = alvo - atual;
+      const fx = fluxoCom(alvo);
+      const z = zonaDe(alvo);
+      const ganho = Math.round((fx.receita - fluxoAtual.receita) * 100) / 100;
+      // pino alvo desliza junto com o polegar — mesmo eixo, sem re-render
+      nAlvo.style.left = `${(alvo / 60) * 100}%`;
+      nAlvoB.textContent = `${alvo}%`;
+      nAlvo.classList.toggle('oculto', delta === 0);
+      // leitura da zona + receita projetada ao vivo
+      nZona.textContent = z.rot;
+      nZona.style.setProperty('--zc', z.cor);
+      nAviso.textContent = z.aviso;
+      nRec.textContent = dinheiro(fx.receita);
+      if (delta === 0) { nDelta.textContent = 'vigente'; nDelta.className = ''; }
+      else { nDelta.textContent = `${ganho >= 0 ? '+' : '−'}${dinheiro(Math.abs(ganho))}/mês`; nDelta.className = ganho >= 0 ? 'bom' : 'ruim'; }
+      // preço político + botão (sempre no DOM; só alterna visibilidade)
+      nEfs.innerHTML = delta === 0 ? '' : tagsEfeitos(efeitosImposto(atual, alvo));
+      nEfs.classList.toggle('oculto', delta === 0);
+      nDica.classList.toggle('oculto', delta !== 0);
+      nAplicar.classList.toggle('oculto', delta === 0);
+      nAplicarTxt.textContent = `APLICAR REFORMA → ${alvo}%`;
+    }
+    slider.addEventListener('input', () => { alvo = Number(slider.value); projetar(); });
 
     // APLICAR — reforma tributária como ação sintética com efeitos inline
-    modal.querySelector('.gov-aplicar')?.addEventListener('click', () => {
+    nAplicar.addEventListener('click', () => {
       const ef = efeitosImposto(atual, alvo);
       const acao = {
         id: `gov_imposto_${Date.now()}`,
@@ -220,6 +317,9 @@ export function abrirGovernanca(jogo, { tr, onFim } = {}) {
       render({ ok: true, msg: `${l.nome} na fila de comando — sanção em ${l.tempo}s.` });
       setTimeout(fechar, 900);
     }));
+
+    // sincroniza a projeção com o alvo atual (importante no re-render do flash)
+    projetar();
   }
 
   render();

@@ -50,8 +50,18 @@ export const BLOCOS = {
 // Fornecedores de armas: se você tem boa relação, ganha desconto militar.
 export const FORNECEDORES = ['USA', 'DEU', 'FRA', 'GBR', 'KOR', 'ISR', 'JPN'];
 
+// ── ALIANÇAS CRIADAS PELO JOGADOR (injetadas por jogo/aliancas.js) ─────
+// blocos.js é a FONTE que coalizão/mercado/reação já consultam. Em vez de espalhar
+// "e também as alianças" por cada consumidor, guardamos aqui uma cópia normalizada
+// (mesmo shape {nome, intensidade, militar, isos}) e mesclamos em blocosDoIso. Assim
+// a aliança do jogador VIRA um bloco de verdade em todo o jogo, de graça. A dependência
+// é só um sentido (aliancas.js → blocos.js), sem ciclo.
+let ALIANCAS_SYNC = [];
+export function registrarAliancas(lista) { ALIANCAS_SYNC = Array.isArray(lista) ? lista : []; }
+export function aliancasSync() { return ALIANCAS_SYNC; }
+
 export function blocosDoIso(iso) {
-  return Object.values(BLOCOS).filter((b) => b.isos.includes(iso));
+  return [...Object.values(BLOCOS), ...ALIANCAS_SYNC].filter((b) => b.isos.includes(iso));
 }
 
 // Os blocos a que EU pertenço. É isto que responde "quem são os meus?" — e a resposta
@@ -98,7 +108,8 @@ export function meusAliadosDeBloco() {
   return [...out.values()];
 }
 
-// Desconto militar por alianças com fornecedores (rel >= 50). Máx 30%.
+// Desconto militar por alianças com fornecedores (rel >= 50) E por PACTO MILITAR
+// criado pelo jogador (membro fabricante = arsenal compartilhado, desconto maior). Máx 40%.
 export function descontoMilitar(estado) {
   let desc = 0;
   const aliados = [];
@@ -109,7 +120,19 @@ export function descontoMilitar(estado) {
     const rel = Number(estado[info.rel] ?? 0);
     if (rel >= 50) { desc += 0.08; aliados.push(info.nome); }
   }
-  return { fracao: Math.min(0.3, desc), aliados };
+  // membros do meu PACTO MILITAR que fabricam armas: coprodução rende desconto extra
+  const me = jogadorIso();
+  const jaContado = new Set(aliados);
+  for (const b of ALIANCAS_SYNC) {
+    if (!b.militar || !b.isos.includes(me)) continue;
+    for (const iso of b.isos) {
+      if (iso === me || !FORNECEDORES.includes(iso)) continue;
+      const nome = PAISES[iso]?.nome || iso;
+      if (jaContado.has(nome)) continue;
+      desc += 0.1; jaContado.add(nome); aliados.push(nome);   // aliado de pacto pesa mais que relação
+    }
+  }
+  return { fracao: Math.min(0.4, desc), aliados };
 }
 
 export { chaveRelacao };

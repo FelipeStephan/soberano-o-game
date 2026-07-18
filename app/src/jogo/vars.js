@@ -20,9 +20,11 @@ export const VARS = {
   aliquota: { rotulo: 'Impostos',      grupo: 'economia', min: 0, max: 60, cap: 8, sufixo: '%', dica: 'A fatia da economia que vira imposto. Mais imposto enche o caixa, mas irrita o povo e o mercado.' },
 
   // ── Capacidades (0–100) ─────────────────────────────────────────────
-  inteligencia:   { rotulo: 'Inteligência',    grupo: 'capacidade', min: 0, max: 100, cap: 25, dica: 'A força dos seus espiões: descobrir segredos, sabotar, prever golpes.' },
-  capacidade_ind: { rotulo: 'Indústria',       grupo: 'capacidade', min: 0, max: 100, cap: 25, dica: 'A capacidade das suas fábricas — produzir armas, equipamentos e bens em escala.' },
-  uranio:         { rotulo: 'Urânio',          grupo: 'capacidade', min: 0, max: 100, cap: 25, dica: 'Combustível do programa nuclear. Sem urânio, não há ogiva.' },
+  // `cor` liga a barra e o chip na HUD (bloco Capacidades) — mesmas cores do COR_IMP em
+  // ui/jogo.js. Sem ela, a capacidade vira texto solto e o jogador não a "vê" evoluir.
+  inteligencia:   { rotulo: 'Inteligência',    grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#35e0ff', dica: 'A força dos seus espiões: descobrir segredos, sabotar, prever golpes.' },
+  capacidade_ind: { rotulo: 'Indústria',       grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#ffa94f', dica: 'A capacidade das suas fábricas — produzir armas, equipamentos e bens em escala.' },
+  uranio:         { rotulo: 'Urânio',          grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#9be15d', dica: 'Combustível do programa nuclear. Sem urânio, não há ogiva.' },
 
   // ── Poder territorial / arsenal ─────────────────────────────────────
   territorio: { rotulo: 'Territórios', grupo: 'poder', min: 0, max: 999, cap: 2, dica: 'Quantos territórios você controla — o seu, mais os que conquistou.' },

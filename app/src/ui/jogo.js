@@ -33,6 +33,8 @@ import { multiplicadoresOfensiva } from '../jogo/ofensiva.js';
 import { dispararBreaking } from './breaking.js';
 import { abrirPontosQuentes, fecharPontosQuentes } from './pontosQuentes.js';
 import { abrirIndiceMundial } from './indiceMundial.js';
+import { abrirBlocosVisor } from './blocos.js';
+import { montarTelefonia } from './telefone.js';
 import { abrirMercado } from './mercado.js';
 import { abrirEquipamento } from './equipamento.js';
 import { abrirSoldados } from './soldados.js';
@@ -137,6 +139,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <button class="ta-btn conselho" id="btn-conselho" ${tipAttr('Seu gabinete lê o cenário inteiro — economia, guerra, opinião pública — e diz o que faria no seu lugar, com o motivo de cada sugestão. Conselho de quem só enxerga os números; a decisão continua sendo sua.', { t: 'Conselheiro', k: 'GABINETE', cor: 'roxo' })}>${ico('brain', 15)}<span>CONSELHEIRO</span></button>
           <button class="ta-btn empresas" id="btn-empresas" ${tipAttr('As empresas que operam sob a sua bandeira: quem produz, quanto rende e o que dá pra estatizar, privatizar ou incentivar. É o motor do PIB — mexer aqui muda a economia inteira.', { t: 'Empresas', k: 'COMPLEXO ECONÔMICO', cor: 'verde' })}>${ico('building-2', 15)}<span>EMPRESAS</span></button>
           <button class="ta-btn mercado" id="btn-mercado" ${tipAttr('Onde se compra material de guerra: caça, tanque, navio, satélite. Preço e prazo mudam com o bloco a que você pertence e com o clima do mundo — em tempo de tensão, tudo fica mais caro.', { t: 'Mercado', k: 'COMPRA DE ARMAS', cor: 'ambar' })}>${ico('store', 15)}<span>MERCADO</span></button>
+          <button class="ta-btn blocos" id="btn-blocos" ${tipAttr('O tabuleiro das alianças: todos os blocos ativos — militares e econômicos — com membros, poder somado, PIB e intensidade. É onde você funda e acompanha a sua própria aliança.', { t: 'Blocos', k: 'ALIANÇAS GLOBAIS', cor: 'cyan' })}>${ico('handshake', 15)}<span>BLOCOS</span></button>
           <button class="ta-btn indice" id="btn-indice" ${tipAttr('O placar do planeta — o mesmo pra todos os jogadores. Veja quem lidera em PIB, poder militar, petróleo e território, e onde VOCÊ está no ranking.', { t: 'Índice Mundial', k: 'RANKING GLOBAL', cor: 'cyan' })}>${ico('trophy', 15)}<span>ÍNDICE</span></button>
         </div>
         <span class="badge" id="badge-modo">–</span>
@@ -212,12 +215,25 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // real (guerra/aliança/comércio de outros humanos → feed, globo, alertas, Modo Defesa).
   // Em modo offline, `net` é null e nada disto roda.
   let onlineCtrl = null;
+  // Flag legível por qualquer UI: em sala online algumas telas mudam de comportamento
+  // (ex.: o planejador de guerra NÃO mostra prognóstico determinístico — mata a emoção
+  // e entrega informação demais contra humanos; ver AUDITORIA-ONLINE).
+  jogo.ehOnline = !!(online && net);
+  let telefonia = null;   // linha direta entre presidentes (chamada de voz + DM)
   if (online && net) {
     onlineCtrl = ligarOnline(jogo, net, {
       container,
       globoCtrl: () => globoCtrl,
       renderFeed: () => renderFeed(),
       atualizar: () => { renderHud(); renderFeed(); renderTopo(); globoCtrl?.atualizar(); },
+      sincronizarPeriodo: () => renderTopo(),   // convidado: relógio da sala mudou → repinta o topo
+    });
+    // TELEFONE VERMELHO: escuta o canal `direto` (que ligarOnline não usa — setHandlers
+    // faz merge, então onDireto entra sem atropelar onSala/onEvento).
+    telefonia = montarTelefonia(jogo, net, { globoCtrl: () => globoCtrl });
+    net.setHandlers({
+      onDireto: (m) => telefonia.aoDireto(m),
+      onDiretoFalhou: (m) => { /* alvo saiu da sala no meio: a UI da chamada resolve pelo timeout */ },
     });
   }
 
@@ -238,6 +254,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
   });
   // ÍNDICE MUNDIAL: o ranking global — pode abrir a qualquer hora (é só leitura).
   container.querySelector('#btn-indice')?.addEventListener('click', () => abrirIndiceMundial(jogo));
+  container.querySelector('#btn-blocos')?.addEventListener('click', () => abrirBlocosVisor(jogo));
   // BRENT: clicar abre o histórico de impactos no barril (alta/baixa + motivo).
   container.querySelector('#t-brent-stat')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
@@ -285,12 +302,17 @@ export function iniciarJogo(container, jogo, opts = {}) {
   function iniciarMundoAoVivo(ctrl) {
     setInterval(() => {
       if (jogo.fase !== 'planejamento') return;
+      // MUNDO COMPARTILHADO: numa sala online, SÓ o host gera o mundo ao vivo. O convidado
+      // não roda o seu (que divergia) — ele recebe do host via ligarOnline/aplicarMundo.
+      if (jogo.ehOnline && onlineCtrl && !onlineCtrl.souHost?.()) return;
       // nunca por cima de outra cena (modal, flash, ofensiva)
       if (document.querySelector('.modal-fundo') || document.querySelector('.lg-barra')) return;
       if (Math.random() < 0.35) return;   // nem todo tick pulsa — previsibilidade mata
       const p = pulsoAoVivo(jogo.estado);
       if (!p) return;
       pulsoN += 1;
+      // eu (host, ou offline) gerei este pulso — se sou host, RETRANSMITO pra sala inteira
+      const postsRelay = [];
 
       // 1) ANIMA o mapa quando é escaramuça/petróleo.
       if (p.tipo === 'escaramuca') {
@@ -301,12 +323,13 @@ export function iniciarJogo(container, jogo, opts = {}) {
       }
 
       // 2) EMPURRA no X — a timeline anda em tempo real (não só ao passar turno).
-      jogo._empilharFeed?.([{ tipo: 'cidadao', handle: HANDLES_MUNDO[pulsoN % HANDLES_MUNDO.length], nome: 'Boletim Mundo', texto: p.texto }]);
+      const postMundo = { tipo: 'cidadao', handle: HANDLES_MUNDO[pulsoN % HANDLES_MUNDO.length], nome: 'Boletim Mundo', texto: p.texto };
+      jogo._empilharFeed?.([postMundo]); postsRelay.push(postMundo);
       // às vezes, um perfil com viés reage ao que aconteceu no mundo
       if (Math.random() < 0.5) {
         const tema = p.tipo === 'petroleo' ? 'crise' : p.tom === 'aviso' ? 'guerra' : null;
         const posts = tema ? reacoesSociais(jogo.estado.iso || 'USA', tema, jogo.ficha?.pais, pulsoN).slice(0, 1) : [];
-        if (posts.length) jogo._empilharFeed?.(posts);
+        if (posts.length) { jogo._empilharFeed?.(posts); postsRelay.push(...posts); }
       }
 
       // 3) O barril mexeu? Atualiza o topo (seta ▲ + motivo + histórico) e solta PLANTÃO.
@@ -318,6 +341,15 @@ export function iniciarJogo(container, jogo, opts = {}) {
         jogo.estado.brent_hist = jogo.estado.brent_hist.slice(0, 12);
         renderTopo();
         if (p.breaking) dispararBreaking(jogo, { assunto: `Petróleo dispara para US$ ${Math.round(jogo.estado.preco_petroleo)} com guerra no exterior`, contexto: p.motivo, tom: 'quente' });
+      }
+
+      // HOST retransmite o pulso (posts + animação + período) pra sala inteira ver o MESMO mundo
+      if (jogo.ehOnline && onlineCtrl?.souHost?.()) {
+        onlineCtrl.relayMundo({
+          posts: postsRelay,
+          anim: p.tipo === 'escaramuca' ? { tipo: 'escaramuca', de: p.de, para: p.para } : p.tipo === 'petroleo' ? { tipo: 'petroleo', iso: p.iso } : null,
+          turno: jogo.turno,
+        });
       }
 
       renderFeed();
@@ -362,6 +394,28 @@ export function iniciarJogo(container, jogo, opts = {}) {
     setTimeout(() => globoCtrl?.globe && (globoCtrl.globe.width(container.querySelector('#globo').clientWidth)), 60);
   });
 
+  // BOTÃO DIREITO = FECHAR (pedido do dono). Em vez do menu do navegador, o clique-direito
+  // fecha a janela/modal aberta mais recente da sessão. Se não há nada aberto, some a
+  // seleção. A lista está do mais "por cima" (chat/telefone) pro mais de fundo (modal-fundo);
+  // fecha UM por clique — clicar o próprio botão de fechar do modal (que dispara o onFim/
+  // limpeza dele) e, sem botão, remove o nó.
+  const SELETORES_FECHAVEIS = ['.tel-chat', '.tel-dm-notif', '.tel-over', '.tel-toque', '.nrel-flut', '.nva-flut', '.escn-wrap', '.pen-modal', '.blv-modal', '.alc-modal', '.modal-fundo'];
+  window.addEventListener('contextmenu', (ev) => {
+    // deixa o menu nativo só em campos de texto (copiar/colar numa DM, por ex.)
+    if (ev.target?.closest?.('input, textarea')) return;
+    ev.preventDefault();
+    for (const sel of SELETORES_FECHAVEIS) {
+      const abertos = document.querySelectorAll(sel);
+      if (abertos.length) {
+        const alvo = abertos[abertos.length - 1];   // o último no DOM = o mais recente
+        const x = alvo.querySelector('.pp-fechar, .tel-x, .nva-x, .blv-x, .alc-x, .pen-x, #nv-x, #ref-x');
+        if (x) x.click(); else alvo.remove();
+        return;
+      }
+    }
+    globoCtrl?.limparSelecao?.();
+  });
+
   // monta o globo 3D
   montarGlobo(container.querySelector('#globo'), jogo, {
     onPaisClick: abrirPainelPais,
@@ -386,6 +440,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
     onDistribuir: () => abrirDistribuir(jogo, { globoCtrl, onFim: () => { renderHud(); renderTopo(); } }),
     // Clicar num conflito/pandemia do Mundo Vivo → intervir (ajuda, mediação, pesquisa).
     onIntervir: (dados) => abrirIntervencao(dados, jogo, { globoCtrl, onFim: () => { renderHud(); renderFeed(); renderTopo(); } }),
+    // ONLINE: país jogado por humano ganha ENTRAR EM CONTATO no dock (embaixo de DECIDIR).
+    ehHumano: (iso) => !!onlineCtrl?.ehHumano(iso),
+    onContato: (iso) => telefonia?.abrirContato(iso),
   })
     .then((ctrl) => {
       globoCtrl = ctrl;
@@ -424,7 +481,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
 
   // ── HUD ──────────────────────────────────────────────────────────────
   function renderTopo() {
-    el.turno.textContent = mesAnoDoJogo(jogo.turno).label;
+    // numa sala online, o RELÓGIO é o do host (jogo._periodoSala) — todos veem o mesmo mês.
+    const turnoExibido = (jogo.ehOnline && Number.isFinite(jogo._periodoSala)) ? jogo._periodoSala : jogo.turno;
+    el.turno.textContent = mesAnoDoJogo(turnoExibido).label;
     el.tesouro.textContent = dinheiro(jogo.estado.tesouro);
     el.pa.textContent = jogo.estado.pontos_acao;
     // O cabeçalho estava com espaço ocioso — agora carrega o pulso do mundo:
@@ -585,7 +644,17 @@ export function iniciarJogo(container, jogo, opts = {}) {
       <div class="bloco caps">
         <h3><i class="hx">07</i> Capacidades <i class="fio"></i></h3>
         <div class="grade">
-          ${CAPACIDADES.map((k) => `<div class="cel" ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}><span class="rot">${VARS[k].rotulo}${q(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}</span><span class="v">${valorFmt(k)}${dl(k)}</span></div>`).join('')}
+          ${CAPACIDADES.map((k) => {
+            // capacidade 0–100 agora é INDICADOR VISÍVEL: chip colorido + valor na cor +
+            // mini-barra do progresso. É o que faz Indústria/Inteligência/Urânio "aparecerem"
+            // como algo que se acompanha, e não texto perdido na grade.
+            const cor = VARS[k].cor || '#8fb4ff';
+            return `<div class="cel cap-med" ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}>
+              <span class="rot"><i class="med-chip" style="background:${cor};color:${cor}"></i>${VARS[k].rotulo}${q(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}</span>
+              <span class="v" style="color:${cor}">${valorFmt(k)}${dl(k)}</span>
+              ${barra(jogo.estado[k], 0, 100, cor)}
+            </div>`;
+          }).join('')}
           <div class="cel" ${tipAttr(VARS.territorio.dica, { t: 'Territórios', k: 'CAPACIDADE' })}><span class="rot">Territórios${q(VARS.territorio.dica, { t: 'Territórios', k: 'CAPACIDADE' })}</span><span class="v">${jogo.estado.territorio}${dl('territorio')}</span></div>
           <div class="cel arsenal" ${tipAttr(VARS.ogivas.dica, { t: 'Ogivas Nucleares', k: 'ARSENAL ESTRATÉGICO', cor: 'perigo' })}><span class="rot">☢ Ogivas${q(VARS.ogivas.dica, { t: 'Ogivas Nucleares', k: 'ARSENAL ESTRATÉGICO', cor: 'perigo' })}</span><span class="v">${jogo.estado.ogivas}${dl('ogivas')}</span></div>
         </div>
@@ -1029,7 +1098,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const basesAqui = basesEm(jogo.estado, code);
     const botaoBase = (elegBase.pode || basesAqui.length)
       ? `<button class="pp-base ${basesAqui.length ? 'tem' : ''}" id="pp-base">
-          ${ico('radio-tower', 16)}
+          ${ico('radio-tower', 15)}
           <span>${basesAqui.length
             ? `${basesAqui.length} INSTALAÇÃO(ÕES) ATIVA(S) — GERENCIAR`
             : 'INSTALAR BASE MILITAR'}</span>
@@ -1144,9 +1213,10 @@ export function iniciarJogo(container, jogo, opts = {}) {
       </div>`;
 
       const jogadas = `<div class="gp2-jogadas">
-        <button class="pp-guerra" id="pp-guerra">${ico('swords', 18)} <span>PLANEJAR OFENSIVA MILITAR</span></button>
+        ${onlineCtrl?.ehHumano(code) ? `<button class="pp-contato" id="pp-contato">${ico('phone', 15)} <span>ENTRAR EM CONTATO</span><i>msg ou ligação</i></button>` : ''}
+        <button class="pp-guerra" id="pp-guerra">${ico('swords', 15)} <span>PLANEJAR OFENSIVA MILITAR</span></button>
         ${emGuerra ? `<button class="pp-paz" id="pp-paz">${ico('handshake', 16)} <span>NEGOCIAR SAÍDA DA GUERRA</span><i>em guerra</i></button>` : ''}
-        ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 16)} <span>ESPIONAR ESTE PAÍS</span><i>rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
+        ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 15)} <span>ESPIONAR ESTE PAÍS</span><i>rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
         ${botaoBase}
         ${alvosDeAjuda(jogo.estado).some((a) => a.iso === code) ? `<button class="pp-ajuda" id="pp-ajuda">${ico('heart-handshake', 16)} <span>APOIAR NESTA GUERRA</span><i>em conflito</i></button>` : ''}
         ${(jogo.estado.ogivas > 0 && !souEu(code)) ? `<button class="pp-nuke" id="pp-nuke">${ico('radiation', 16)} <span>LANÇAMENTO NUCLEAR</span><i>${jogo.estado.ogivas} ogiva(s)</i></button>` : ''}
@@ -1171,6 +1241,8 @@ export function iniciarJogo(container, jogo, opts = {}) {
     modal.querySelector('.pp-fechar').addEventListener('click', fechar);
     modal.addEventListener('click', (e) => { if (e.target === modal) fechar(); });
     const atualizarTudo = () => { renderHud(); renderFeed(); renderAcoes(); renderTopo(); globoCtrl?.atualizar(); };
+    // TELEFONE VERMELHO: contato direto com o humano que joga este país (mensagem/ligação)
+    modal.querySelector('#pp-contato')?.addEventListener('click', () => { fechar(); telefonia?.abrirContato(code); });
     modal.querySelector('#pp-guerra')?.addEventListener('click', () => {
       fechar();
       globoCtrl?.focar?.(feature);

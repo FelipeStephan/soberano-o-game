@@ -14,6 +14,7 @@ import { equipamentosDoPais } from '../dados/registro.js';
 import { FOTO_UNIDADE, bandeira, ISO2_DE } from '../dados/imagens.js';
 import { PAISES } from '../dados/paises.js';
 import { TIPOS_BASE, instalarBaseEstado, basesNoEstado } from '../dados/bases.js';
+import { silhuetaDe } from './territorioSvg.js';
 import { ico, ICO } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -89,12 +90,17 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
     // Só mostramos o que existe: unidade sem nenhuma no país inteiro é ruído.
     const uteis = UNIDADES.filter((u) => (livre[u.id] || 0) > 0 || (g[u.id] || 0) > 0);
 
-    modal.innerHTML = `<div class="ref-painel">
+    // total de tropas guarnecendo (pro resumo do topo, SEM fileira de emojis)
+    const totalAqui = Object.values(g).reduce((s, q) => s + (q || 0), 0);
+    // a SILHUETA do estado — o vetor da forma, direto da feature do globo
+    const silhueta = silhuetaDe(feature.geometry, { id: p.id, tam: 40 });
+
+    modal.innerHTML = `<div class="ref-painel v2">
       <div class="ref-cab">
-        <span class="ref-simbolo">${ico('shield', 22)}</span>
+        <span class="ref-simbolo ${silhueta ? 'com-mapa' : ''}">${silhueta || ico('shield', 22)}</span>
         <div class="ref-tit"><h2>${esc(p.nome)}</h2>
           <div class="ref-sub">${esc(p.tipo)} · ${cls === 'conquistado' ? 'conquistado por você' : 'seu território'}</div></div>
-        <span class="ref-forca">força <b id="ref-fc">${fc}</b></span>
+        <div class="ref-forca-hero"><small>FORÇA</small><b id="ref-fc-cab">${fc}</b></div>
         <button class="pp-fechar" id="ref-x">${ico('x', 16)}</button>
       </div>
 
@@ -112,9 +118,11 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
           : 'Sem reforço, o território cai no fechamento do turno. Mande tropa AGORA — cada unidade empurra a pressão pra baixo.'}</div>
       </div>` : ''}
 
-      <div class="ref-legenda">
-        <span>${ico('warehouse', 12)} <b>Quartel central</b>: tropa sem posição definida</span>
-        <span>${ico('map-pin', 12)} <b>Aqui</b>: tropa defendendo ${esc(p.nome)}</span>
+      <div class="ref-topo-linha">
+        ${fc > 0
+          ? `<span>${ico('shield', 12)} <b>${totalAqui.toLocaleString('pt-BR')}</b> unidades guarnecendo — os números "aqui" estão em cada linha</span>
+             <button class="ref-recolher-tudo" id="ref-recall" data-tip="Recolher toda a guarnição de volta ao quartel">${ico('undo-2', 12)} recolher tudo</button>`
+          : `<span>${ico('info', 12)} Nenhuma tropa designada aqui — puxe do quartel nas linhas abaixo</span>`}
       </div>
 
       ${uteis.length ? `<div class="ref-lista">
@@ -144,16 +152,38 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
         }).join('')}
       </div>` : `<div class="ref-alheio">${ico('info', 15)} <span>Seu arsenal está vazio. Compre unidades no mercado antes de posicionar tropa.</span></div>`}
 
-      ${secaoBase()}
+      ${uteis.length ? `<div class="ref-poder" id="ref-poder">
+        <div class="ref-poder-l"><small>PODER DA GUARNIÇÃO</small>
+          <div class="ref-poder-n"><b id="ref-fc">${fc}</b><i class="ref-poder-delta" id="ref-delta"></i></div>
+          <div class="ref-poder-barra"><i id="ref-poder-fill" style="width:${Math.min(100, fc * 10)}%"></i></div>
+        </div>
+        <div class="ref-poder-r" id="ref-prev"></div>
+      </div>
+      <button class="ref-confirmar" id="ref-ok">${ico('send', 15)} <span>CONFIRMAR MOVIMENTAÇÃO</span></button>` : ''}
 
-      <div class="ref-prev" id="ref-prev"></div>
-      ${uteis.length ? `<button class="ref-confirmar" id="ref-ok">${ico('send', 15)} <span>CONFIRMAR MOVIMENTAÇÃO</span></button>` : ''}
+      ${secaoBase()}
     </div>`;
 
     modal.querySelector('#ref-x').addEventListener('click', sair);
 
+    // RECOLHER TODA A GUARNIÇÃO — o atalho direto pra liberar a tropa deste estado.
+    // É o "como eu tiro a tropa daqui?" resolvido em um clique.
+    modal.querySelector('#ref-recall')?.addEventListener('click', () => {
+      const toda = { ...guarnicao(e, p.id) };
+      if (!Object.keys(toda).length) return;
+      const r = recolher(e, p.id, toda);
+      if (r.falha) return;
+      const conf3 = e.conflitosEstado?.[p.id];
+      globoCtrl?.atualizar?.();
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: '#ffb020', texto: `Guarnição de ${esc(p.nome)} recolhida ao quartel. ${conf3 ? 'CUIDADO: o território ficou descoberto sob pressão inimiga.' : 'A tropa está livre para ser realocada.'}` }]);
+      render();
+    });
+
     const prev = modal.querySelector('#ref-prev');
+    // O PODER VIVO — o pedido do dono: "quando eu colocar um caça, embaixo vai crescendo
+    // o número". O rodapé é o herói: o número salta, o delta pisca, a barra estica.
     const recalc = () => {
+      if (!prev) return;   // arsenal vazio: não há rodapé de poder
       let manda = 0; let traz = 0;
       for (const inp of modal.querySelectorAll('.ref-qtd')) {
         const u = inp.dataset.u;
@@ -170,8 +200,15 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
       for (const [u, v] of Object.entries(envio)) simulada[u] = Math.max(0, (simulada[u] || 0) + v);
       const fcNova = forcaGuarnicao(simulada);
       const fcAtual = forcaGuarnicao(g);
-      modal.querySelector('#ref-fc').textContent = fcNova;
       const delta = Math.round((fcNova - fcAtual) * 100) / 100;
+      const nFc = modal.querySelector('#ref-fc');
+      nFc.textContent = fcNova;
+      nFc.classList.toggle('subiu', delta > 0); nFc.classList.toggle('caiu', delta < 0);
+      const nCab = modal.querySelector('#ref-fc-cab'); if (nCab) nCab.textContent = fcNova;
+      const nDelta = modal.querySelector('#ref-delta');
+      if (nDelta) { nDelta.textContent = delta ? `${delta > 0 ? '+' : ''}${delta}` : ''; nDelta.className = `ref-poder-delta ${delta > 0 ? 'bom' : delta < 0 ? 'ruim' : ''}`; }
+      const nFill = modal.querySelector('#ref-poder-fill');
+      if (nFill) nFill.style.width = `${Math.min(100, fcNova * 10)}%`;
       const custo = custoMovimento(e, envio);
       const semGrana = custo.total > (e.tesouro || 0);
       const btn = modal.querySelector('#ref-ok');
@@ -181,9 +218,9 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
           ? `MOVIMENTAR · custa ${custo.total} tri` : 'CONFIRMAR MOVIMENTAÇÃO';
       }
       prev.innerHTML = (manda || traz)
-        ? `${ico('trending-up', 12)} ${manda ? `<b class="bom">${manda.toLocaleString('pt-BR')}</b> chegando` : ''}${manda && traz ? ' · ' : ''}${traz ? `<b class="ruim">${traz.toLocaleString('pt-BR')}</b> saindo` : ''} — força ${fcAtual} → <b>${fcNova}</b> ${delta ? `<span class="${delta > 0 ? 'bom' : 'ruim'}">(${delta > 0 ? '+' : ''}${delta})</span>` : ''}
-          <div class="ref-custo ${semGrana ? 'ruim' : ''}">${ico('fuel', 11)} logística ${custo.log} + combustível ${custo.comb} + mobilização ${custo.base} = <b>${custo.total} tri</b>${semGrana ? ' · <b class="ruim">tesouro insuficiente</b>' : ''}</div>`
-        : '';
+        ? `${manda ? `<b class="bom">▲ ${manda.toLocaleString('pt-BR')}</b> chegando` : ''}${manda && traz ? ' · ' : ''}${traz ? `<b class="ruim">▼ ${traz.toLocaleString('pt-BR')}</b> saindo` : ''}
+          <div class="ref-custo ${semGrana ? 'ruim' : ''}">${ico('fuel', 11)} log ${custo.log} + comb ${custo.comb} + mob ${custo.base} = <b>${custo.total} tri</b>${semGrana ? ' · <b class="ruim">sem caixa</b>' : ''}</div>`
+        : `<span class="ref-poder-dica">mexa nas linhas — o poder responde aqui</span>`;
     };
 
     modal.querySelectorAll('.ref-item').forEach((item) => {
@@ -246,22 +283,29 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
     }));
   }
 
-  // Base militar no ESTADO ocupado: sem exigir o país inteiro. Só em território seu/conquistado.
+  // Base militar no estado — agora COLAPSADA num <details>: a tela é sobre mover tropa,
+  // e a base é decisão rara (estava roubando um terço do painel). ANÁLISE que o dono
+  // pediu: no seu território de ORIGEM a base vale pouco (você já opera de casa — o
+  // bônus de proximidade é marginal); em território CONQUISTADO/fronteira é onde ela
+  // brilha. Mantemos a opção nos dois, com a copy dizendo essa verdade.
   function secaoBase() {
     const jaTem = basesNoEstado(e, p.id).length > 0;
     if (jaTem) {
       const b = basesNoEstado(e, p.id)[0];
-      return `<div class="ref-base tem"><div class="ref-base-tit">${ico('radio-tower', 12)} BASE MILITAR INSTALADA</div>
+      return `<div class="ref-base tem"><div class="ref-base-tit">${ico('radio-tower', 12)} BASE INSTALADA</div>
         <div class="ref-base-ok">${ico('check', 13)} <b>${esc(b.nome)}</b> — este território projeta poder na região.</div></div>`;
     }
-    return `<div class="ref-base">
-      <div class="ref-base-tit">${ico('radio-tower', 12)} INSTALAR BASE MILITAR</div>
-      <div class="ref-base-nota">Você domina este território — pode instalar uma base aqui sem dominar o país inteiro. O ataque passa a partir DAQUI, com bônus de proximidade.</div>
+    const emCasa = classificar(e, p.id) !== 'conquistado';
+    return `<details class="ref-base-det">
+      <summary>${ico('radio-tower', 12)} <span>Instalar base militar aqui</span> <i>${ico('chevron-down', 13)}</i></summary>
+      <div class="ref-base-nota">${emCasa
+        ? 'No seu próprio território a base vale menos — você já opera de casa. Ela brilha em ESTADO DE FRONTEIRA (alcance extra) ou em território conquistado.'
+        : 'Território conquistado: a base ancora sua presença — o ataque passa a partir DAQUI, com bônus de proximidade.'}</div>
       <div class="ref-base-tipos">
         ${Object.values(TIPOS_BASE).map((t) => `<button class="ref-base-op" data-tipo="${t.id}" ${(e.tesouro || 0) < t.custo ? 'disabled' : ''} data-tip="${esc(t.desc)}" data-tip-t="${esc(t.nome)}" data-tip-k="ALCANCE ${t.alcance} KM">
           ${ico(t.ic, 15)}<span>${esc(t.nome)}</span><i>US$ ${t.custo} tri</i></button>`).join('')}
       </div>
-    </div>`;
+    </details>`;
   }
 
   // STATUS IMERSIVO — antes o confirmar fechava calado. Agora a movimentação vira uma

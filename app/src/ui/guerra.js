@@ -262,7 +262,16 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
     const previa = modal.querySelector('#gp-previa');
     if (previa) {
       if (poder <= 0 || !estadosCarregados() || !estadosDe(av.iso).length) previa.innerHTML = '';
-      else {
+      else if (jogo.ehOnline) {
+        // ONLINE: nada de "23 de 25 territórios, capital exposta" — contra humanos isso
+        // entrega o resultado antes da emoção (e a auditoria já pedia névoa). O Estado-
+        // Maior dá só a LEITURA: superioridade em palavras, sem contar território.
+        const leitura = razao >= 2.2 ? { t: 'superioridade esmagadora — a dúvida é o preço, não o desfecho', c: 'bom' }
+          : razao >= 1.3 ? { t: 'vantagem clara, mas guerra é guerra — nada está comprado', c: 'bom' }
+            : razao >= 0.85 ? { t: 'forças equilibradas — isto pode virar para qualquer lado', c: 'amb' }
+              : { t: 'você entra em DESVANTAGEM — o mar de sangue pode ser o seu', c: 'ruim' };
+        previa.innerHTML = `${ico('crosshair', 12)} <b>Estado-Maior:</b> <b class="${leitura.c}">${leitura.t}</b> · o desfecho, só o campo dirá`;
+      } else {
         const pl = planoDeCampanha(jogo.estado, av.iso, razao, ponto.coord || null, prioridades.length ? prioridades : null);
         const capTxt = pl.tomouCapital ? '<b class="bom">a capital cai</b>'
           : pl.capitalResistiu ? '<b class="ruim">a capital resiste</b> — reserva do inimigo'

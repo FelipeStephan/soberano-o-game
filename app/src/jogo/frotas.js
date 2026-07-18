@@ -126,6 +126,25 @@ export function tickTransito(frotas, agora) {
   return chegaram;
 }
 
+// ── RECOLHER FROTA ─────────────────────────────────────────────────────
+// A VOLTA que faltava: posicionar frota comprometia a tropa (guarnicoes[MAR_*]) e não
+// existia caminho de devolvê-la à reserva fora do botão "casa" — e o jogador ficava
+// com o quartel vazio sem entender por quê. Isto dissolve a frota e LIBERA as unidades
+// (elas voltam a contar em tropaLivre). É a peça central do "como eu tiro a tropa?".
+export function recolherFrota(estado, frotaId) {
+  const fr = (estado.frotas || []).find((f) => f.id === frotaId);
+  if (!fr) return { falha: 'Frota não encontrada.' };
+  estado.frotas = estado.frotas.filter((f) => f.id !== frotaId);
+  if (fr.guarnKey) { delete estado.guarnicoes?.[fr.guarnKey]; }
+  else {
+    // saves antigos sem guarnKey: acha a entrada MAR_ de composição igual
+    for (const [k, g] of Object.entries(estado.guarnicoes || {})) {
+      if (k.startsWith('MAR_') && JSON.stringify(g) === JSON.stringify(fr.unidades)) { delete estado.guarnicoes[k]; break; }
+    }
+  }
+  return { ok: true, unidades: { ...(fr.unidades || {}) }, portoNome: fr.portoNome || null };
+}
+
 // Força de combate CRUA de uma frota (não arredondada) — é o que o combate compara, pra
 // não empatar tudo em zero (o poder de um navio é pequeno; arredondar apagava a diferença).
 export function forcaFrota(fr) {

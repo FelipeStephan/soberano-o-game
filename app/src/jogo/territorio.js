@@ -175,7 +175,12 @@ export function guarnicaoDefensivaDetalhe(estado, idEstado) {
 export function tropaLivre(estado) {
   const livre = { ...(estado.forcas || {}) };
   for (const [id, g] of Object.entries(estado.guarnicoes || {})) {
-    if (donoDe(estado, id) !== (estado.iso || 'USA')) continue;
+    // As frotas no mar (MAR_*) SÃO minhas embarcações comprometidas — donoDe não as
+    // reconhece (a chave não tem prefixo de país), então tratamos explícito. Sem isto,
+    // navio posicionado numa frota continuava contando como "livre" e dava pra deployar
+    // a mesma esquadra duas vezes. Agora frota ocupa a tropa de verdade.
+    const minha = id.startsWith('MAR_') || donoDe(estado, id) === (estado.iso || 'USA');
+    if (!minha) continue;
     for (const [u, q] of Object.entries(g || {})) livre[u] = Math.max(0, (livre[u] || 0) - (q || 0));
   }
   return livre;
@@ -219,6 +224,54 @@ export function recolher(estado, idEstado, envio) {
   if (Object.keys(g).length) estado.guarnicoes[idEstado] = g;
   else delete estado.guarnicoes[idEstado];
   return { ok: true };
+}
+
+// ── RECOLHER TUDO — o botão de pânico do Estado-Maior ─────────────────
+// Devolve TODAS as guarnições terrestres à reserva de uma vez (frotas no mar ficam:
+// recolher navio é decisão separada, via recolherFrota). É o reset que faltava quando
+// o jogador distribuía tudo e ficava travado sem reserva.
+export function recolherTudo(estado) {
+  const eu = estado.iso || 'USA';
+  const devolvido = {};
+  let estados = 0;
+  for (const [id, g] of Object.entries(estado.guarnicoes || {})) {
+    if (id.startsWith('MAR_')) continue;               // frota se recolhe no mar, não daqui
+    if (donoDe(estado, id) !== eu) continue;           // guarnição em território que não é mais seu: perdida
+    for (const [u, q] of Object.entries(g || {})) devolvido[u] = (devolvido[u] || 0) + (q || 0);
+    delete estado.guarnicoes[id];
+    estados += 1;
+  }
+  const total = Object.values(devolvido).reduce((a, b) => a + b, 0);
+  if (!total) return { ok: false, motivo: 'Nenhuma tropa guarnecida para recolher.' };
+  return { ok: true, devolvido, estados, total };
+}
+
+// ── ONDE ESTÃO AS MINHAS TROPAS — o extrato da ocupação ───────────────
+// Responde a pergunta que o jogador fazia sem resposta: "se não há tropa livre, onde
+// ela ESTÁ?". Lista cada compromisso (estado guarnecido ou frota no mar) com a
+// composição — é a fonte do painel Pentágono e do aviso naval "sem embarcação livre".
+export function ondeComprometidas(estado, { unidades = null } = {}) {
+  const eu = estado.iso || 'USA';
+  const filtra = (g) => {
+    if (!unidades) return g;
+    const f = {};
+    for (const u of unidades) if (g[u]) f[u] = g[u];
+    return f;
+  };
+  const out = [];
+  for (const [id, g] of Object.entries(estado.guarnicoes || {})) {
+    if (donoDe(estado, id) !== eu && !id.startsWith('MAR_')) continue;
+    const comp = filtra(g || {});
+    const total = Object.values(comp).reduce((a, b) => a + (b || 0), 0);
+    if (!total) continue;
+    if (id.startsWith('MAR_')) {
+      const fr = (estado.frotas || []).find((f) => f.guarnKey === id);
+      out.push({ tipo: 'frota', id, frotaId: fr?.id || null, nome: fr?.portoNome ? `Frota (zarpou de ${fr.portoNome})` : 'Frota no mar', g: comp, total, lat: fr?.lat, lng: fr?.lng });
+    } else {
+      out.push({ tipo: 'estado', id, nome: PORID.get(id)?.nome || id, g: comp, total, lat: PORID.get(id)?.lat, lng: PORID.get(id)?.lng });
+    }
+  }
+  return out.sort((a, b) => b.total - a.total);
 }
 
 // ── DEFESA DE UM ESTADO CONTRA UM ATAQUE ──────────────────────────────
@@ -307,7 +360,7 @@ export function semearGuarnicoes(estado, { fracao = 0.55 } = {}) {
 //   • capital   → concentra na capital e no coração do país
 //   • fronteira → mais tropa perto de quem você está em guerra (defesa de verdade)
 // Retorna quanto moveu e pra quantos estados — pra UI mostrar o resultado.
-export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null } = {}) {
+export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null, frotasInimigas = null, conflitos = null } = {}) {
   const eu = estado.iso || 'USA';
   const meus = estadosDe(eu);
   if (!meus.length) return { ok: false, motivo: 'Este país não tem estados mapeados.' };
@@ -316,6 +369,11 @@ export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null } =
   if (totalLivre <= 0) return { ok: false, motivo: 'Não há tropa em reserva no quartel para distribuir.' };
 
   const inimigos = ((estado.emGuerra || []).map((iso) => ondeEsta?.(iso)).filter(Boolean));
+  // Fontes de AMEAÇA pro contra-ataque: países em guerra, frotas hostis no mar e os
+  // estados que JÁ estão sob pressão (conflitosEstado). O modo 'counter' empilha tropa
+  // onde a facada está vindo — é o "descobrir por onde vêm e concentrar lá".
+  const frotasHostis = frotasInimigas || estado.frotasInimigas || [];
+  const conf = conflitos || estado.conflitosEstado || {};
   const pesos = meus.map((e) => {
     let w = 1;
     if (modo === 'capital') w = pesoImportancia(e);           // concentra na capital e nos grandes centros
@@ -324,6 +382,20 @@ export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null } =
         const d = Math.min(...inimigos.map((en) => Math.hypot(e.lat - en.lat, e.lng - en.lng)));
         w = 1 / (1 + d / 18);                                 // mais perto do inimigo, mais peso
       } else { w = pesoImportancia(e); }                      // sem guerra: doutrina de capital/população
+    } else if (modo === 'counter') {
+      // 1) estado sob pressão AGORA pesa muito (a linha que está sangrando)
+      const pressao = conf[e.id]?.intensidade || 0;
+      w = 1 + pressao / 12;
+      // 2) proximidade de país em guerra (por onde a invasão terrestre vem)
+      if (inimigos.length) {
+        const dTerra = Math.min(...inimigos.map((en) => Math.hypot(e.lat - en.lat, e.lng - en.lng)));
+        w += 3 / (1 + dTerra / 14);
+      }
+      // 3) proximidade de frota hostil no mar (por onde o desembarque vem)
+      if (frotasHostis.length) {
+        const dMar = Math.min(...frotasHostis.map((f) => Math.hypot(e.lat - f.lat, (e.lng - f.lng) * 0.7)));
+        if (dMar <= 22) w += 2.4 / (1 + dMar / 10);           // só litoral ameaçado, decai rápido
+      }
     }
     return { e, w };
   });

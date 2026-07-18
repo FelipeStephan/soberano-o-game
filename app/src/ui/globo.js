@@ -17,7 +17,7 @@ import { liderDe } from '../dados/lideres.js';
 import { bandeiraDeFeature, bandeira, ISO2_DE, FOTO_UNIDADE } from '../dados/imagens.js';
 import { techDaFrota, forcaCombate } from '../dados/forcas.js';
 import { equipamentosDoPais } from '../dados/registro.js';
-import { abrirAcoesNaval } from './navalAcoes.js';
+import { abrirAcoesNaval, abrirAcoesFrotaInimiga } from './navalAcoes.js';
 import { abrirGovernanca } from './governanca.js';
 import { estaOcupado, ocupacaoDe } from '../jogo/ocupacao.js';
 import { MODELOS, luzes } from './modelos3d.js';
@@ -31,6 +31,7 @@ import { registrarEstados, registrarCidades, semearGuarnicoes, todosEstados, pai
 import { tickTransito, emTransito, iniciarTransito, comprimentoRota, frotasDetectadas, resolverBatalhaNaval, forcaFrota, poderNaval, semearFrotasInimigas, distGraus, setProvedorRota } from '../jogo/frotas.js';
 import { temIntel } from '../jogo/espionagem.js';
 import { corEstado, linhaEstado, alturaEstado, tipEstado, montarPontos, tipPonto, estadosVisiveis, resumoDominios } from './tatico.js';
+import { chamarIA } from '../maquina/openrouter.js';
 
 const TEX = 'https://cdn.jsdelivr.net/npm/three-globe/example/img';
 const centro = (f) => ({ lat: Number(f?.properties?.LABEL_Y ?? 0), lng: Number(f?.properties?.LABEL_X ?? 0) });
@@ -173,6 +174,7 @@ export function tensaoGlobal(estado) {
 
 export async function montarGlobo(container, jogo, {
   onPaisClick, onEstadoClick, onPaisSelecionado, onAlvoEstado, onAlvoMar, onDistribuir, onIntervir,
+  ehHumano, onContato,   // online: se o país é jogado por humano → botão ENTRAR EM CONTATO no dock
 }) {
   let features = [];
   try {
@@ -274,8 +276,10 @@ export async function montarGlobo(container, jogo, {
     })
     // Clicar no mar: com o Teatro armado é uma posição naval; sem ele, é o gesto
     // universal de "deixa pra lá" e a seleção some.
-    .onGlobeClick((c) => {
+    .onGlobeClick((c, ev) => {
       cliqueNaEsfera = true;                 // avisa o handler de fundo que o raio ACERTOU o globo
+      // BOTÃO DIREITO no mar NÃO posiciona frota — ele fecha janelas (ver fecharTopo abaixo).
+      if (ev && ev.button === 2) return;
       if (teatro) { onAlvoMar?.(c); return; }
       if (selecionado) limparSelecao();
     })
@@ -355,9 +359,15 @@ export async function montarGlobo(container, jogo, {
         el.style.cursor = 'grab';
         prepararArrastoFrota(el, d);
       }
-      // FROTA INIMIGA detectada: clicar ENGAJA (combate naval se você tiver frota no alcance).
+      // FROTA INIMIGA detectada: clicar abre o painel dela (mesmo formato do da sua frota).
+      // BUG QUE ISTO CONSERTA: só o `click` tinha stopPropagation — o globe.gl escuta os
+      // eventos de POINTER no container, então o clique atravessava o pino e o Teatro
+      // abria a POSIÇÃO NAVAL junto (dois popups). Trava o pointer inteiro, como o
+      // arrasto da frota própria já faz.
       if (d.frotaInimigaRef) {
         el.style.cursor = 'crosshair';
+        el.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); ev.preventDefault(); });
+        el.addEventListener('pointerup', (ev) => { ev.stopPropagation(); });
         el.addEventListener('click', (ev) => { ev.stopPropagation(); onFrotaInimigaClick(d.frotaInimigaRef); });
       }
       return el;
@@ -504,15 +514,17 @@ export async function montarGlobo(container, jogo, {
       el.style.cursor = 'grab';
       arcoGuia = null; pintarArcos();
       if (moveu && destino) {
-        // ROTA FINAL: o que o jogador desenhou. Com <3 pontos (arrasto reto), deixa a
-        // rota automática por água decidir o caminho (navegarFrota chama rotaMaritima).
-        const rotaManual = waypoints.length ? [origem, ...waypoints, destino] : null;
-        // ARRASTAR PARA DENTRO DE UM PAÍS = dispara ação: a frota navega até a costa e, ao
-        // chegar, abre as ações navais mirando aquele alvo (pressão/ofensiva a partir do mar).
-        const alvoIso = paisDoPonto(destino.lat, destino.lng);
+        // ARRASTAR PARA DENTRO DE UM PAÍS = intenção de agir contra ele. Detectamos o país
+        // ANTES de mexer no destino, e então EMPURRAMOS o ponto pra costa — a frota nunca
+        // entra em terra, ancora no mar mais próximo daquele país e abre a ação de lá.
         const meuIso = jogo.estado.iso || 'USA';
+        const alvoIso = paisDoPonto(destino.lat, destino.lng);
+        if (alvoIso && alvoIso !== meuIso) destino = empurrarParaCosta(destino, origem);
+        // ROTA FINAL: o que o jogador desenhou. Com o destino recuado pra costa, ajustamos
+        // também o último waypoint pra bater no novo ponto (senão a esteira apontava pra terra).
+        const rotaManual = waypoints.length ? [origem, ...waypoints, destino] : null;
         navegarFrota(d, origem, destino, (alvoIso && alvoIso !== meuIso)
-          ? () => { esconderTipMarcador(); onFrotaClick?.(d.frotaRef); }
+          ? () => { esconderTipMarcador(); onFrotaClick?.(d.frotaRef, { alvoIso }); }
           : null, rotaManual);
       } else { esconderTipMarcador(); onFrotaClick?.(d.frotaRef); }   // foi só um clique
     };
@@ -546,6 +558,23 @@ export async function montarGlobo(container, jogo, {
     return null;
   }
 
+  // EMPURRAR PARA A COSTA: se o ponto de destino caiu DENTRO de terra (o jogador
+  // arrastou a frota pra cima do país), recua o ponto na direção da origem em passos
+  // curtos até voltar a ser MAR. Assim a frota ancora na costa mais próxima do avanço
+  // — nunca "entra" no continente — e fica pronta pra pressionar/atacar dali.
+  function empurrarParaCosta(destino, origem) {
+    if (paisDoPonto(destino.lat, destino.lng) === null) return destino;   // já está no mar
+    const dLat = origem.lat - destino.lat, dLng = origem.lng - destino.lng;
+    const dist = Math.hypot(dLat, dLng) || 1;
+    const passoLat = (dLat / dist) * 0.6, passoLng = (dLng / dist) * 0.6;   // ~0.6° por passo
+    let lat = destino.lat, lng = destino.lng;
+    for (let i = 0; i < 60; i += 1) {                       // até ~36° recuando; para no 1º mar
+      lat += passoLat; lng += passoLng;
+      if (paisDoPonto(lat, lng) === null) return { lat: lat + passoLat * 0.4, lng: lng + passoLng * 0.4 };
+    }
+    return origem;   // caso extremo (tudo terra no caminho): fica onde estava
+  }
+
   // Países mais próximos de uma frota (pra detecção/ameaça). Reusa a métrica achatada.
   function paisesProximos(fr) {
     const eu = jogo.estado.iso || 'USA';
@@ -577,15 +606,21 @@ export async function montarGlobo(container, jogo, {
   }
 
   // Clicar no pino da frota abre as AÇÕES RÁPIDAS (reposicionar, voltar pra casa, atacar).
-  function onFrotaClick(fr) {
+  // ctx.alvoIso: quando a frota foi ARRASTADA pra cima de um país, o painel já abre
+  // mirando aquele país (contexto de ação direta, sem o jogador ter que procurar o alvo).
+  function onFrotaClick(fr, ctx = {}) {
     abrirAcoesNaval(fr, jogo, {
-      paisesProximos, ondaRadar, atualizar,
-      onFim: () => {},
+      paisesProximos, ondaRadar, atualizar, ondeEsta, alvoIso: ctx.alvoIso || null,
+      // ancoragem no globo + animação de mísseis pro ataque sem popup
+      telaDe, salvaMisseis, impacto, balao, desenharLinha,
+      // engajar uma frota inimiga a partir do painel usa o MESMO fluxo do clique no pino
+      engajarFrota: (fi) => onFrotaInimigaClick(fi),
     });
   }
 
-  // Clicar numa FROTA INIMIGA detectada: se eu tiver uma esquadra no alcance de engajamento,
-  // resolve o COMBATE NAVAL — a maior força vence (jogo/frotas.js). Senão, avisa pra aproximar.
+  // Clicar numa FROTA INIMIGA detectada abre o painel dela — MESMO formato ancorado do
+  // painel da sua frota (composição a bordo, atacar com seleção de força, intimar). O
+  // popover diferente que existia aqui morreu: dois mundos, uma só linguagem visual.
   function onFrotaInimigaClick(fr) {
     const e = jogo.estado;
     let atacante = null; let melhorD = Infinity;
@@ -595,36 +630,11 @@ export async function montarGlobo(container, jogo, {
       if (d <= alc && d < melhorD) { atacante = m; melhorD = d; }
     }
     esconderTipMarcador();
-    const nomeIni = PAISES[fr.code]?.nome || fr.code;
-    if (!atacante) {
-      jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Marinha', cor: '#ffb020',
-        texto: `Frota de ${nomeIni} avistada (força ${forcaFrota(fr)}), mas nenhuma esquadra sua está em alcance de engajamento. Aproxime uma frota para atacar.` }]);
-      return;
-    }
-    const res = resolverBatalhaNaval(atacante, fr);
-    const pnMeu = Math.round(res.forcaAtacante * 10);   // poder naval legível (índice)
-    const pnEle = Math.round(res.forcaDefensor * 10);
-    e.emGuerra = e.emGuerra || []; if (!e.emGuerra.includes(fr.code)) e.emGuerra.push(fr.code);
-    const chave = PAISES[fr.code]?.rel; if (chave) e[chave] = Math.max(-100, (e[chave] || 0) - 30);
-    e.temp_guerra = Math.min(100, (e.temp_guerra || 0) + 12);
-    ondaRadar?.({ lat: fr.lat, lng: fr.lng }, { cor: res.venceu ? 0x22e0a0 : 0xff3b5c, max: 62 });
-    if (res.venceu) {
-      e.frotasInimigas = (e.frotasInimigas || []).filter((f) => f.id !== fr.id);
-      atacante.unidades = res.sobreviventesVencedor;
-      if (!Object.values(atacante.unidades).some((q) => q > 0)) {
-        e.frotas = (e.frotas || []).filter((f) => f.id !== atacante.id);
-        if (atacante.guarnKey) delete e.guarnicoes?.[atacante.guarnKey];
-      } else if (atacante.guarnKey && e.guarnicoes) { e.guarnicoes[atacante.guarnKey] = { ...atacante.unidades }; }
-      jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Marinha', cor: '#22e0a0',
-        texto: `⚓ VITÓRIA NO MAR: sua frota (força ${pnMeu}) afundou a esquadra de ${nomeIni} (força ${pnEle}). Suas baixas: ${res.perdaVencedorPct}%.` }]);
-    } else {
-      e.frotas = (e.frotas || []).filter((f) => f.id !== atacante.id);
-      if (atacante.guarnKey) delete e.guarnicoes?.[atacante.guarnKey];   // a tropa afundou junto
-      fr.unidades = res.sobreviventesVencedor;
-      jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Marinha', cor: '#ff3b5c',
-        texto: `☠️ DERROTA NO MAR: a esquadra de ${nomeIni} (força ${pnEle}) afundou sua frota (força ${pnMeu}). O mar ficou com eles.` }]);
-    }
-    atualizar();
+    // a linha de tensão entre as duas esquadras (fica no globo durante a decisão)
+    if (atacante) desenharLinha({ lat: fr.lat, lng: fr.lng }, 'ataque', 6000, { lat: atacante.lat, lng: atacante.lng });
+    abrirAcoesFrotaInimiga(fr, atacante, jogo, {
+      telaDe, balao, salvaMisseis, impacto, ondaRadar, desenharLinha, atualizar, ondeEsta, paisesProximos,
+    });
   }
 
   // Depois de arrastar a frota: quem sente? Se a frota NÃO é furtiva e parou perto de um
@@ -1207,7 +1217,8 @@ export async function montarGlobo(container, jogo, {
           </div>
           ${k.lider ? `<div class="ins-lider">${ico('crown', 10)} <b>${esc(k.lider)}</b>${k.arquetipo ? ` <i class="ins-arq">${esc(k.arquetipo)}</i>` : ''}</div>` : ''}
           ${(k.capital || k.pib) ? `<div class="ins-meta">${k.capital ? `<span>${ico('map-pin', 9)} ${esc(k.capital)}</span>` : ''}${k.pib ? `<span>${ico('circle-dollar-sign', 9)} ${k.pib} tri</span>` : ''}</div>` : ''}
-          <button class="ins-go" type="button">${ico('gavel', 12)} <span class="ins-go-txt">DECIDIR</span></button>`;
+          <button class="ins-go" type="button">${ico('gavel', 12)} <span class="ins-go-txt">DECIDIR</span></button>
+          ${ehHumano?.(k.code) ? `<button class="ins-go ins-contato" type="button">${ico('phone', 12)} <span>ENTRAR EM CONTATO</span></button>` : ''}`;
       const btn = insDock.querySelector('.ins-go');
       const txt = insDock.querySelector('.ins-go-txt');
       btn.addEventListener('click', (ev) => {
@@ -1233,8 +1244,14 @@ export async function montarGlobo(container, jogo, {
       // Guerra fica no DISTRIBUIR acima; aqui é governo. onFim re-renderiza o dock.
       insDock.querySelector('.ins-governar')?.addEventListener('click', (ev) => {
         ev.stopPropagation();
-        abrirGovernanca(jogo, { onFim: () => { dockCodigo = null; atualizarDock(); } });
+        // passa um globoCtrl leve pro roleplay das alianças (pulso/linha/atualizar no globo)
+        abrirGovernanca(jogo, {
+          globoCtrl: { ondeEsta, ondaRadar, desenharLinha, atualizar },
+          onFim: () => { dockCodigo = null; atualizarDock(); },
+        });
       });
+      // ENTRAR EM CONTATO (online): abre a telefonia direto do dock, sem passar pelo DECIDIR.
+      insDock.querySelector('.ins-contato')?.addEventListener('click', (ev) => { ev.stopPropagation(); onContato?.(k.code); });
     }
     posicionarConexao();   // posição inicial já correta (o rAF só mantém viva depois)
   }
@@ -1242,6 +1259,23 @@ export async function montarGlobo(container, jogo, {
   // Desenha a linha capital → dock, por frame. Se a capital estiver na FACE OCULTA do
   // globo (atrás), esconde a linha (ela cruzaria o planeta), mas mantém o dock.
   const _v = new THREE.Vector3(); const _s = new THREE.Vector3();
+
+  // Projeta uma coord do globo para PIXEL na tela (relativo ao container do globo). É o
+  // que permite ANCORAR um painel HTML no pino da frota e fazê-lo andar junto com a
+  // rotação do planeta — a mesma matemática do dock da insígnia (posicionarConexao).
+  function telaDe(lat, lng, alt = 0.02) {
+    const rect = container.getBoundingClientRect();
+    if (!rect.width) return null;
+    const cam = globe.camera();
+    const cc = globe.getCoords(lat, lng, alt);
+    _v.set(cc.x, cc.y, cc.z);
+    const surf = globe.getCoords(lat, lng, 0);
+    _s.set(surf.x, surf.y, surf.z);
+    const frente = _s.clone().normalize().dot(cam.position.clone().sub(_s).normalize()) > 0.02;
+    _v.project(cam);
+    return { x: (_v.x * 0.5 + 0.5) * rect.width, y: (-_v.y * 0.5 + 0.5) * rect.height, frente, w: rect.width, h: rect.height };
+  }
+
   function posicionarConexao() {
     if (!dadosDock || !insSvg || !insDock || !insDock.classList.contains('on')) return;
     const rect = container.getBoundingClientRect();
@@ -1288,6 +1322,31 @@ export async function montarGlobo(container, jogo, {
     arcos = [...arcos, arco];
     pintarArcos();
     setTimeout(() => { arcos = arcos.filter((a) => a !== arco); pintarArcos(); }, duracao);
+  }
+
+  // ── TEXTO DE TENSÃO POR IA (pedido do dono) ────────────────────────────
+  // Em vez do texto fixo "à beira do confronto", a Máquina escreve uma FALA na voz
+  // daquele país, tingida pela relação (e pela guerra, se houver). Cacheado por país
+  // e por FAIXA de relação — só re-gera quando a relação muda de patamar, pra não
+  // torrar a API. Sem chave de IA, `chamarIA` falha e o texto fixo continua valendo.
+  const _tensaoPedindo = new Set();
+  async function enriquecerTensaoIA(code, nome, rel, guerra) {
+    jogo.estado._tensaoIA = jogo.estado._tensaoIA || {};
+    const faixa = guerra ? 'guerra' : rel <= -75 ? 'estopim' : 'hostil';
+    const cache = jogo.estado._tensaoIA[code];
+    if (cache && cache.faixa === faixa) return;               // já temos a fala deste patamar
+    if (_tensaoPedindo.has(code)) return;
+    _tensaoPedindo.add(code);
+    try {
+      const meuNome = PAISES[jogo.estado.iso]?.nome || 'nossa nação';
+      const r = await chamarIA({
+        system: 'Você é o porta-voz de um governo estrangeiro reagindo a outro país. Escreva UMA frase curta (máx 22 palavras), em português, TENSA e específica ao clima entre os dois — sem inventar eventos concretos que você não sabe. Só o clima. Responda em JSON {"t": "frase"}.',
+        user: `Seu país: ${nome}. O outro país: ${meuNome}. Relação atual: ${rel} de -100 a 100 (bem ruim). ${guerra ? 'Vocês estão EM GUERRA aberta.' : rel <= -75 ? 'Vocês estão à beira da guerra.' : 'A relação é hostil e desconfiada.'} Fale como ${nome} veria ${meuNome} agora.`,
+        temperature: 0.95, jsonMode: true,
+      });
+      const txt = (typeof r === 'string' ? r : r?.t || r?.texto || '').trim();
+      if (txt) { jogo.estado._tensaoIA[code] = { faixa, texto: txt }; atualizar(); }
+    } catch { /* sem IA: o texto fixo cobre */ } finally { _tensaoPedindo.delete(code); }
   }
 
   function atualizar() {
@@ -1533,8 +1592,14 @@ export async function montarGlobo(container, jogo, {
       const rel = Number(jogo.estado[info.rel] ?? 0);
       if (rel > -55) continue;
       const c = ondeEsta(code); if (!c) continue;
-      novos.push({ ...c, tipo: 'tensao', svg: ico('zap', 12), flag: bandeira(ISO2_DE[code], 40), rot: `${rel}`, titulo: `${info.nome} — relação ${rel}`,
-        tip: `<div class="gtc-tag tom-hostil">Relação ${rel} / 100</div><div class="gtc-nome">${esc(info.nome)}</div><p>${rel <= -75 ? 'À beira do confronto. Uma provocação e vira guerra.' : 'Relação hostil. Diplomacia aqui está por um fio.'} Quanto mais negativa, maior a chance de ataque, sabotagem e traição.</p>` });
+      const guerraC = (jogo.estado.emGuerra || []).includes(code);
+      enriquecerTensaoIA(code, info.nome, rel, guerraC);   // gera (uma vez, cacheado) a fala da IA
+      const iaTexto = jogo.estado._tensaoIA?.[code]?.texto;
+      const fallback = rel <= -75 ? 'À beira do confronto. Uma provocação e vira guerra.' : 'Relação hostil. Diplomacia aqui está por um fio.';
+      // ÍCONE: o ⚡ confundia (parecia energia). Agora é ESPADAS — leitura direta de "rival
+      // que pode te atacar". Guerra ativa fica com a mira (crosshair).
+      novos.push({ ...c, tipo: 'tensao', svg: ico(guerraC ? 'crosshair' : 'swords', 12), flag: bandeira(ISO2_DE[code], 40), rot: `${rel}`, titulo: `${info.nome} — relação ${rel}`,
+        tip: `<div class="gtc-tag tom-hostil">Relação ${rel} / 100</div><div class="gtc-nome">${esc(info.nome)}</div><p>${esc(iaTexto || fallback)}${iaTexto ? '' : ' Quanto mais negativa, maior a chance de ataque, sabotagem e traição.'}</p>` });
       // Tensão diplomática grave: radar âmbar, lento e discreto — é aviso, não guerra.
       if (rel <= -75) focos.push({ ...c, cor: 'rgba(255,176,32,', raio: 4, vel: 1.1, periodo: 1800, forca: 0.5 });
     }
@@ -1765,6 +1830,14 @@ export async function montarGlobo(container, jogo, {
     return p;
   }
 
+  // Geometria GeoJSON de um estado já carregado — alimenta as SILHUETAS (o vetor da
+  // forma do estado ao lado do nome, ui/territorioSvg.js). null se o país não abriu.
+  function geometriaDe(idEstado) {
+    if (!estadosGeo) return null;
+    const f = estadosGeo.find((x) => x.properties?.id === idEstado);
+    return f?.geometry || null;
+  }
+
   // Compatível com quem chamava a versão antiga: garante o índice + o SEU país.
   async function carregarTerritorios() {
     await carregarIndice();
@@ -1898,9 +1971,34 @@ export async function montarGlobo(container, jogo, {
     atualizar();
   }
 
+  // Extensão geográfica (em graus) de uma feature — o maior lado do seu bounding box,
+  // com a longitude corrigida pela latitude (perto do polo, 1° de lng é bem menor).
+  function extensaoGraus(f) {
+    const g = f?.geometry; if (!g) return null;
+    const polys = g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+    let minLat = 90, maxLat = -90, minLng = 180, maxLng = -180;
+    for (const poly of polys) for (const ring of poly) for (const [lng, lat] of ring) {
+      if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng;
+    }
+    if (maxLat < minLat) return null;
+    const latMed = (minLat + maxLat) / 2;
+    const spanLat = maxLat - minLat;
+    const spanLng = (maxLng - minLng) * Math.cos(latMed * Math.PI / 180);
+    return Math.max(spanLat, spanLng);
+  }
+
+  // Zoom que RESPEITA O TAMANHO do país: Brasil (~39°) fica em ~1.6 de altitude como
+  // antes, mas Israel (~3°) desce a ~0.55 e finalmente dá pra ver as cidades. Antes a
+  // altitude era fixa em 1.6 pra todo mundo — país pequeno nunca aproximava o suficiente.
   function focar(f) {
     const c = f?.properties ? centro(f) : f;
-    globe.pointOfView({ lat: c.lat, lng: c.lng, altitude: 1.6 }, 900);
+    let alt = 1.6;
+    if (f?.geometry) {
+      const span = extensaoGraus(f);
+      if (span != null) alt = Math.max(0.5, Math.min(2.2, 0.46 + span * 0.029));
+    }
+    globe.pointOfView({ lat: c.lat, lng: c.lng, altitude: alt }, 900);
   }
 
   // Toggle satélite ⇄ político — SEM apagar o globo (era o bug: image null = preto).
@@ -1923,7 +2021,7 @@ export async function montarGlobo(container, jogo, {
   return {
     atualizar, focar, alternarTextura, desenharLinha, lancarEsquadrilha,
     salvaMisseis, impacto, balao, alertaTemporario, lancarOgiva, detonacaoNuclear,
-    ondaRadar, interceptacaoNuclear, ondeEsta, globe, features,
+    ondaRadar, interceptacaoNuclear, ondeEsta, globe, features, telaDe, geometriaDe,
     alternarTeatro, carregarTerritorios, carregarPais, selecionarPais, limparSelecao,
     revelarConquista, limparRevelacao,
     temEstados: (iso) => Boolean(indiceEstados?.[iso]),

@@ -65,15 +65,28 @@ const REGIOES = {
   oceania: ['AUS', 'IDN', 'PHL'],
 };
 
-// Nomes FICTÍCIOS de patógenos — nada de doença real com nome real. r0 = velocidade de
-// contágio; letal = letalidade % (faixas sorteadas no nascimento).
+// PATÓGENOS — doenças REAIS retornando como novas variantes/cepas/escapes, cada uma
+// com uma HISTÓRIA que justifica o surto (o dono pediu: "traga algo que justifique a
+// nova pandemia, e um texto de história sobre cada vírus"). r0 = velocidade de contágio;
+// letal = letalidade % (faixas sorteadas no nascimento). São ficção plausível sobre base
+// real — variantes inventadas de doenças conhecidas, não afirmações sobre as reais.
 const PATOGENOS = [
-  { nome: 'Gripe de Almaty', tipo: 'influenza recombinante', r0: [1.2, 1.8], letal: [0.3, 0.9] },
-  { nome: 'Vírus Corumbá', tipo: 'arbovírus', r0: [1.0, 1.5], letal: [0.5, 1.5] },
-  { nome: 'Síndrome de Mindanao', tipo: 'coronavírus zoonótico', r0: [1.6, 2.4], letal: [1.0, 3.0] },
-  { nome: 'Febre de Tashkent', tipo: 'febre hemorrágica', r0: [1.1, 1.6], letal: [8, 22] },
-  { nome: 'Cepa Valdívia', tipo: 'influenza aviária', r0: [1.3, 2.0], letal: [4, 12] },
-  { nome: 'Vírus de Kivu-Norte', tipo: 'filovírus', r0: [0.9, 1.4], letal: [20, 45] },
+  { nome: 'Covid-19 · Variante Cérbero-Σ', tipo: 'coronavírus (escape imune)', r0: [2.0, 3.2], letal: [0.6, 1.8],
+    historia: 'Descendente distante de Ômicron, a Cérbero-Σ acumulou mutações na proteína spike que enganam a memória das vacinas antigas. Circulou meses como "só mais um resfriado" antes de os hospitais notarem que a onda não passava.' },
+  { nome: 'Ebola · Cepa Makona-2', tipo: 'filovírus', r0: [1.4, 2.0], letal: [30, 60],
+    historia: 'Uma reintrodução do Ebola a partir de reservatório animal na bacia do Congo, com uma mutação que estende o período infeccioso ANTES dos sintomas — o que sempre segurou o Ebola. Dessa vez ele viajou de avião antes de sangrar.' },
+  { nome: 'Febre Amarela · Surto Urbano', tipo: 'arbovírus (reurbanização)', r0: [1.6, 2.4], letal: [15, 35],
+    historia: 'A febre amarela voltou às cidades pela porta que nunca fechou: o Aedes aegypti. Décadas de cobertura vacinal em queda deixaram metrópoles inteiras suscetíveis, e um único caso silvestre bastou pra reacender o ciclo urbano.' },
+  { nome: 'H5N1 · Salto Mamífero', tipo: 'influenza aviária adaptada', r0: [1.8, 2.8], letal: [8, 20],
+    historia: 'A gripe aviária que assombrava granjas finalmente encontrou a chave da transmissão entre mamíferos, saltando de fazendas de visons para humanos. O mundo tinha vacinas para a gripe humana — não para esta.' },
+  { nome: 'Marburg · Vazamento de Laboratório', tipo: 'filovírus (bioseg.)', r0: [1.2, 1.8], letal: [40, 70],
+    historia: 'Primo hemorrágico do Ebola, o Marburg escapou de um laboratório de nível 4 num acidente que ninguém assume. Governos trocam acusações enquanto a linhagem — idêntica a uma amostra de pesquisa — não deixa dúvida sobre a origem.' },
+  { nome: 'Cólera · Cepa El Tor-9', tipo: 'bacteriana (saneamento)', r0: [1.5, 2.2], letal: [2, 8],
+    historia: 'Onde a guerra e a enchente quebram o saneamento, a cólera espera. A El Tor-9 é uma linhagem resistente aos antibióticos de primeira linha, e se espalha pela água mais rápido do que se constroem estações de tratamento.' },
+  { nome: 'Sarampo · Retorno MVX', tipo: 'recrudescência vacinal', r0: [3.0, 4.0], letal: [0.3, 1.2],
+    historia: 'O sarampo nunca foi embora — só esperou a imunidade de rebanho cair. Com a vacinação em mínimas históricas, o vírus mais contagioso que se conhece varreu escolas inteiras antes de qualquer boletim oficial.' },
+  { nome: 'MERS-CoV · Linhagem Camelo-7', tipo: 'coronavírus zoonótico', r0: [1.3, 1.9], letal: [20, 34],
+    historia: 'A síndrome respiratória do Oriente Médio ganhou eficiência humana sem perder a letalidade que a tornava temida. Saltou de novo dos camelos, dessa vez com fôlego para cadeias de transmissão urbanas.' },
 ];
 const rrange = ([a, b]) => a + Math.random() * (b - a);
 
@@ -196,7 +209,7 @@ function tickPandemias(estado, eu) {
     const antecedencia = 2 + Math.floor(Math.random() * 3) + Math.floor((estado.inteligencia || 0) / 25);
     estado.pandemias.push({
       id: `${p.nome}_${estado.turno || 0}`.replace(/\s/g, '_'),
-      nome: p.nome, tipo: p.tipo, origem, regiao, paises: [],
+      nome: p.nome, tipo: p.tipo, historia: p.historia, origem, regiao, paises: [],
       turnos: 0, fase: 'presurto', r0: rrange(p.r0), letalidade: rrange(p.letal),
       gravidade: 4 + Math.random() * 6, gravidadeAnt: 5, mortos: 0,
       curaAcumulada: 0, contencaoAcumulada: 0, turnosPresurtoRestantes: antecedencia,

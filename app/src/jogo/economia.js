@@ -8,6 +8,7 @@
 import { fluxoPetroleo } from '../dados/petroleo.js';
 import { custoBases } from '../dados/bases.js';
 import { taxaJuros } from './fiscal.js';
+import { rendaAlianca } from './aliancas.js';
 
 // ── CADÊNCIA MENSAL ───────────────────────────────────────────────────
 // Cada batida do mundo é UM MÊS (não um ano). `pib`, `aliquota`, `poder_militar`,
@@ -46,10 +47,11 @@ export function calcularFluxo(estado) {
   const petroleo = oleo.liquido;
 
   const dividendo = dividendoSoberania(estado);   // a renda de soberania (mantém o jogador líquido)
+  const bloco = rendaAlianca(estado);             // comércio interno de uma união econômica (aliancas.js)
 
   const despesa = round2(gastoSocial + manutencaoMilitar + juros + bases);
-  const saldo = round2(receita - despesa + petroleo + dividendo);
-  return { receita, despesa, saldo, juros, taxa, manutencaoMilitar, gastoSocial, bases, petroleo, dividendo, oleo };
+  const saldo = round2(receita - despesa + petroleo + dividendo + bloco);
+  return { receita, despesa, saldo, juros, taxa, manutencaoMilitar, gastoSocial, bases, petroleo, dividendo, bloco, oleo };
 }
 
 // Aplica o fluxo ao estado no fechamento do turno. Retorna um resumo pra UI.

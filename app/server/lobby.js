@@ -166,6 +166,25 @@ export function montarLobby(server) {
           break;
         }
 
+        // MENSAGEM DIRETA a UM jogador (pelo país dele): é o canal da TELEFONIA e dos
+        // DMs — sinalização WebRTC (offer/answer/ICE), convite/recusa de chamada e chat
+        // privado. Diferente de 'evento', NÃO é difundido: só o alvo recebe. `dados`
+        // passa íntegro (SDP tem quilobytes; truncar quebraria a chamada).
+        case 'direto': {
+          const sala = salas.get(c.sala);
+          if (!sala) break;
+          const alvoPais = nada(msg.alvo, 3).toUpperCase();
+          const alvoWs = [...sala.jogadores].find((w) => clientes.get(w)?.pais === alvoPais);
+          if (!alvoWs) { enviar(ws, { t: 'direto_falhou', alvo: alvoPais, motivo: 'offline' }); break; }
+          enviar(alvoWs, {
+            t: 'direto', de: c.id, deNome: c.nome, dePais: c.pais,
+            tipo: nada(msg.tipo, 30) || 'dm',
+            dados: msg.dados ?? null,
+            ts: Date.now(),
+          });
+          break;
+        }
+
         case 'sair':
           sairDaSala(ws);
           break;

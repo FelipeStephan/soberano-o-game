@@ -45,6 +45,8 @@ export function abrirPandemia(dados, jogo, { tr, onFim } = {}) {
         <button class="pp-fechar pdm-x">${ico('x', 16)}</button>
       </div>
 
+      ${!presurto && pd.historia ? `<div class="pdm-historia">${ico('book-open', 12)} <span>${esc(pd.historia)}</span></div>` : ''}
+
       <div class="pdm-status">
         <div class="pdm-grav">
           <div class="pdm-grav-top"><span>GRAVIDADE</span><b style="color:${dif.cor}">${g}/100 · ${dif.rot}</b><i style="color:${tendCor}">${tendIco} ${tend}</i></div>

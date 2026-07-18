@@ -60,6 +60,9 @@ export function conectarLobby({ nome = 'Anônimo', perfilId = null, onSala, onSa
           break;
         case 'salas': h.onSalas?.(msg.salas || []); break;
         case 'evento': h.onEvento?.(msg); break;
+        // canal 1:1 (telefonia/DM): entregue SÓ a você — não passa pelo feed público
+        case 'direto': h.onDireto?.(msg); break;
+        case 'direto_falhou': h.onDiretoFalhou?.(msg); break;
         case 'erro': h.onErro?.(msg.motivo || "Erro na sala."); break;
         default: break;
       }
@@ -84,6 +87,8 @@ export function conectarLobby({ nome = 'Anônimo', perfilId = null, onSala, onSa
     listar: () => enviar({ t: 'listar' }),
     escolherPais: (iso) => enviar({ t: 'pais', pais: iso }),
     evento: (tipo, alvo, texto, dados) => enviar({ t: 'evento', tipo, alvo, texto, dados }),
+    // mensagem dirigida a UM país (sinalização de chamada, DM) — só o alvo recebe
+    direto: (tipo, alvoPais, dados) => enviar({ t: 'direto', tipo, alvo: alvoPais, dados }),
     sair: () => { enviar({ t: 'sair' }); estado.sala = null; estado.host = false; estado.jogadores = []; },
     estado: () => ({ ...estado }),
     online: () => vivo,
