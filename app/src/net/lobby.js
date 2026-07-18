@@ -76,6 +76,8 @@ export function conectarLobby({ nome = 'Anônimo', perfilId = null, onSala, onSa
       switch (msg.t) {
         case 'bemvindo': estado.id = msg.id; break;
         case 'pong': registrarPong(msg.tc, msg.ts); break;
+        // O retrato do mundo da sala (mês/Brent/NPCs) — guardado pra o jogo adotar no boot.
+        case 'mundo_atual': estado.mundoAtual = msg.dados || null; h.onMundoAtual?.(msg.dados); break;
         case 'entrou':
           estado.sala = msg.codigo; estado.host = !!msg.host; entrou = true;
           break;

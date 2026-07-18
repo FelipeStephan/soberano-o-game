@@ -374,6 +374,34 @@ export class Jogo {
   // ═══════════════════════════════════════════════════════════════════
   // MODO TEMPO REAL — o mundo anda sozinho num relógio, sem "passar turno"
   // ═══════════════════════════════════════════════════════════════════
+  // ── MUNDO ÚNICO (Etapas 2-3): o mundo COMPARTILHADO viaja pela sala ──
+  // O HOST tira este retrato a cada batida e transmite; convidados APLICAM por cima
+  // do próprio estado. É o que faz Brent, guerras NPC, pandemias e o CALENDÁRIO
+  // serem UM só para a sala inteira — e o recém-chegado nascer no mês certo.
+  snapshotMundo() {
+    const e = this.estado;
+    return {
+      turno: this.turno,
+      preco_petroleo: e.preco_petroleo,
+      temp_guerra_mundo: e.temp_guerra,           // referência do clima (não sobrescreve o do jogador)
+      conflitosNPC: e.conflitosNPC || [],
+      pandemias: e.pandemias || [],
+      estreitos: e.estreitosFechados || null,
+    };
+  }
+
+  aplicarMundoCompartilhado(d) {
+    if (!d) return;
+    const e = this.estado;
+    // O CALENDÁRIO é o da sala — o convidado adota o mês do host na hora.
+    if (Number.isFinite(d.turno) && d.turno > this.turno) { this.turno = d.turno; e.turno = d.turno; }
+    if (Number.isFinite(d.preco_petroleo)) e.preco_petroleo = d.preco_petroleo;
+    if (Array.isArray(d.conflitosNPC)) e.conflitosNPC = d.conflitosNPC;
+    if (Array.isArray(d.pandemias)) e.pandemias = d.pandemias;
+    if (d.estreitos) e.estreitosFechados = d.estreitos;
+    this._periodoSala = d.turno;
+  }
+
   // `beatMundo()` é a "batida do mundo": a metade de fechamento do turno (economia,
   // mundo vivo, invasão, petróleo…) rodando num timer, SEM a carta de crise e SEM
   // resolver a fila (as ações resolvem sozinhas quando o tempo delas acaba). Uma batida

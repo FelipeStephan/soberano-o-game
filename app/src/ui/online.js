@@ -12,6 +12,10 @@ import { ico } from './icones.js';
 import { PAISES } from '../dados/paises.js';
 import { abrirDefesa } from './defesa.js';
 import { alertaUrgente } from './efeitos.js';
+import { breakingRemoto } from './breaking.js';
+import { tentarIntervencao } from '../jogo/intervencaoConflito.js';
+import { techDaFrota } from '../dados/forcas.js';
+import { tocarEfeito } from './audio.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -20,8 +24,10 @@ const nomeDe = (iso) => PAISES[iso]?.nome || iso;
 const ESTILO = {
   guerra:     { cor: '#ff3b5c', urgente: true,  rot: 'DECLAROU GUERRA', ic: 'swords' },
   ataque_estado: { cor: '#ff3b5c', urgente: true, rot: 'ATACOU SEU TERRITÓRIO', ic: 'crosshair' },
+  naval:      { cor: '#35e0ff', urgente: true,  rot: 'ATAQUE NAVAL', ic: 'ship' },
   nuclear:    { cor: '#ff3b5c', urgente: true,  rot: 'LANÇAMENTO NUCLEAR', ic: 'radiation' },
   sancao:     { cor: '#ffb020', urgente: false, rot: 'IMPÔS SANÇÕES', ic: 'ban' },
+  mediacao:   { cor: '#35e0ff', urgente: false, rot: 'MEDIA UM CONFLITO', ic: 'handshake' },
   espionagem: { cor: '#b98cff', urgente: false, rot: 'OPERAÇÃO DE ESPIONAGEM', ic: 'eye' },
   alianca:    { cor: '#22e0a0', urgente: true,  rot: 'PROPÔS ALIANÇA', ic: 'handshake' },
   comercio:   { cor: '#22e0a0', urgente: true,  rot: 'PROPÔS ACORDO COMERCIAL', ic: 'coins' },
@@ -68,6 +74,19 @@ export function ligarOnline(jogo, net, hooks) {
     // posts do X, plantões e o período; os convidados APLICAM (em vez de gerar os seus,
     // que divergiam). Assim a sala inteira vê a MESMA timeline e o mesmo relógio.
     if (ev.tipo === 'mundo') { aplicarMundo(ev.dados || {}); return; }
+    // A BATIDA do host: o convidado avança o próprio mês em sincronia e aplica o
+    // mundo compartilhado (Brent, guerras NPC, pandemias). É o coração do mundo único.
+    if (ev.tipo === 'beat') { hooks.aoBeatHost?.(ev.dados || {}); return; }
+    // FROTA de outro jogador no mar: aparece no SEU globo (e some quando recolhe).
+    if (ev.tipo === 'frota_pos') { upsertFrotaHumana(ev); return; }
+    if (ev.tipo === 'frota_out') { removerFrotaHumana(ev); return; }
+    // PLANTÃO de outro jogador: o mesmo breaking, o mesmo texto, na tela de todos.
+    if (ev.tipo === 'breaking') { breakingRemoto(jogo, ev.dados || {}); return; }
+    // MEDIAÇÃO: a diplomacia de um jogador MOVE o conflito da sala — o host aplica os
+    // pontos no mundo autoritativo e a próxima batida espalha o avanço pra todos.
+    if (ev.tipo === 'mediacao' && ev.dados?.conflitoId && net.estado().host) {
+      try { tentarIntervencao(jogo.estado, ev.dados.conflitoId, ev.dados.frente || 'mediar'); } catch { /* conflito já acabou */ }
+    }
     const est = ESTILO[ev.tipo] || { cor: '#7488ad', urgente: false, rot: (ev.tipo || 'AGIU').toUpperCase(), ic: 'radio' };
     const origem = ev.deNome ? `${ev.deNome} (${nomeDe(ev.dePais)})` : nomeDe(ev.dePais);
 
@@ -79,8 +98,18 @@ export function ligarOnline(jogo, net, hooks) {
     }]);
     hooks.renderFeed?.();
 
-    // 2) balão no globo, no país de quem agiu
+    // 2) O ATAQUE APARECE NO GLOBO DE TODOS: linha + mísseis do agressor ao alvo
+    //    (som só se o alvo for VOCÊ — guerra alheia anima muda). Balão em quem agiu.
     const g = hooks.globoCtrl?.();
+    if (g && (ev.tipo === 'guerra' || ev.tipo === 'ataque_estado' || ev.tipo === 'naval' || ev.tipo === 'nuclear')) {
+      const de = ev.dados?.de || g.ondeEsta?.(ev.dePais);
+      const para = ev.dados?.para || (ev.alvo ? g.ondeEsta?.(ev.alvo) : null);
+      if (de && para) {
+        g.desenharLinha?.(para, 'ataque', 9000, de);
+        g.salvaMisseis?.(para, ev.tipo === 'nuclear' ? 1 : 3, de, { som: ev.alvo === meuIso });
+        g.ondaRadar?.(para, { cor: ev.tipo === 'nuclear' ? 0xff3b5c : 0xffb020, max: 45 });
+      }
+    }
     g?.balao?.(g.ondeEsta?.(ev.dePais), ev.texto || est.rot, est.urgente ? 'ruim' : 'aviso');
 
     // 3) se a bomba é COM VOCÊ, alerta urgente — e, se for guerra/ataque, MODO DEFESA
@@ -91,6 +120,11 @@ export function ligarOnline(jogo, net, hooks) {
           agressor: { iso: ev.dePais, nome: ev.deNome || nomeDe(ev.dePais) },
           dados: ev.dados || null,
           onFim: () => hooks.atualizar?.(),
+        });
+      } else if (ev.tipo === 'naval' || ev.tipo === 'nuclear') {
+        alertaUrgente({
+          titulo: ev.tipo === 'nuclear' ? '☢ ATAQUE NUCLEAR CONTRA VOCÊ' : 'ATAQUE NAVAL CONTRA VOCÊ',
+          texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque',
         });
       } else if (ev.tipo === 'alianca' || ev.tipo === 'comercio') {
         propostaRecebida(ev, est);
@@ -152,6 +186,52 @@ export function ligarOnline(jogo, net, hooks) {
     document.querySelectorAll('.onl-alerta').forEach((e) => e.remove());
   }
 
+  // ── FROTAS DE OUTROS JOGADORES no seu globo ─────────────────────────
+  // A frota humana entra como "frota inimiga" (o pino hostil que o globo já sabe
+  // renderizar) com id estável por jogador — mover atualiza, recolher remove.
+  const frotasAvisadas = new Set();   // 1 alerta de detecção por frota (senão vira spam)
+  function upsertFrotaHumana(ev) {
+    const d = ev.dados || {};
+    if (!ev.dePais || d.lat == null) return;
+    const e = jogo.estado;
+    e.frotasInimigas = e.frotasInimigas || [];
+    const id = `hum_${ev.dePais}_${d.id || 1}`;
+    const atual = e.frotasInimigas.find((f) => f.id === id);
+    const frota = {
+      id, code: ev.dePais, humana: true, lat: d.lat, lng: d.lng,
+      unidades: d.unidades || { navios: 4 }, presenca: d.presenca ?? 6,
+    };
+    if (atual) Object.assign(atual, frota);
+    else e.frotasInimigas.push(frota);
+    const g = hooks.globoCtrl?.();
+    g?.atualizar?.();
+    // ÁGUAS TERRITORIAIS: frota humana perto da SUA costa → a sua defesa costeira
+    // DETECTA e grita — alerta, notícia e radar no ponto. Furtividade conta: esquadra
+    // só de submarinos encurta (e muito) o alcance em que você a enxerga.
+    const minha = g?.ondeEsta?.(meuIso);
+    if (!minha) return;
+    const dist = Math.hypot(frota.lat - minha.lat, (frota.lng - minha.lng) * 0.7);
+    const furt = techDaFrota(frota.unidades).furtividade ?? 30;
+    const alcanceDeteccao = Math.max(4, 16 * (1 - furt / 140));
+    if (dist <= alcanceDeteccao && !frotasAvisadas.has(id)) {
+      frotasAvisadas.add(id);
+      const nomeDono = ev.deNome ? `${ev.deNome} (${nomeDe(ev.dePais)})` : nomeDe(ev.dePais);
+      alertaUrgente({ titulo: 'ESQUADRA DETECTADA NA SUA COSTA', texto: `A marinha de ${nomeDono} entrou nas suas águas territoriais.`, tom: 'ataque' });
+      tocarEfeito('radar', { volume: 0.5 });
+      g?.ondaRadar?.({ lat: frota.lat, lng: frota.lng }, { cor: 0xff3b5c, max: 45 });
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚓ Defesa Costeira', cor: '#ff3b5c',
+        texto: `Radar litorâneo detectou a esquadra de ${nomeDono} a ${dist.toFixed(0)}° da costa. Presença estimada: ${frota.presenca}.` }]);
+      hooks.renderFeed?.();
+    }
+  }
+  function removerFrotaHumana(ev) {
+    const e = jogo.estado;
+    if (!e.frotasInimigas) return;
+    const prefixo = `hum_${ev.dePais}_`;
+    e.frotasInimigas = e.frotasInimigas.filter((f) => !String(f.id).startsWith(prefixo));
+    hooks.globoCtrl?.()?.atualizar?.();
+  }
+
   // ── MUNDO recebido do host (convidado aplica) ──────────────────────────
   function aplicarMundo(d) {
     if (Array.isArray(d.posts) && d.posts.length) { jogo._empilharFeed?.(d.posts); hooks.renderFeed?.(); }
@@ -180,6 +260,11 @@ export function ligarOnline(jogo, net, hooks) {
     // AUTORIDADE DO MUNDO: quem é host gera o mundo ao vivo e o retransmite; convidado só aplica.
     souHost: () => !!net.estado().host,
     relayMundo: (dados) => net.evento('mundo', null, '', dados),
+    // A BATIDA do host viaja pra sala (e o servidor a cacheia pro próximo que entrar).
+    relayBeat: (dados) => net.evento('beat', null, '', dados),
+    // A SUA frota no mar, visível pra sala: posição/composição resumida — e a saída.
+    relayFrota: (dados) => net.evento('frota_pos', null, '', dados),
+    relayFrotaSaiu: (frotaId) => net.evento('frota_out', null, '', { id: frotaId }),
     // VOCÊ agiu sobre um país. Se for humano, dispara o alerta pra ele. Sempre publica
     // no feed da sala (todos veem o impacto — é o World Trends).
     notificar: (tipo, alvoIso, texto, dados) => {

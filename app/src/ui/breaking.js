@@ -63,12 +63,28 @@ export async function dispararBreaking(jogo, ctx = {}) {
   const veiculo = ctx.veiculo || escolherVeiculo(ctx.iso || jogo?.estado?.iso, fila.length);
   // A IA escreve enquanto a fila anda; quando chegar a vez, o texto já está pronto.
   const texto = await gerarManchete(veiculo, ctx);
+  // MUNDO ÚNICO: o plantão ecoa na sala com o MESMO texto — todos leem a mesma
+  // manchete. `remoto` impede o eco de ecoar de volta (loop).
+  if (!ctx.remoto) jogo?._relayOnline?.('breaking', null, texto,
+    { veiculoNome: veiculo.nome, handle: veiculo.handle, texto, tom: ctx.tom || 'quente' });
   fila.push({ veiculo, texto, tom: ctx.tom || 'quente' });
   // ECO NO X: a regra editorial da casa — nem toda notícia do X é breaking, mas TODO
   // breaking aparece no X. A faixa some em ~7,5s; o post fica, com o card de link do
   // veículo, pra quem perdeu o plantão poder reler (e pro online, pro mundo comentar).
   jogo?._empilharFeed?.([{
     tipo: 'veiculo', veiculo: veiculo.nome, handle: veiculo.handle,
+    texto: `🔴 PLANTÃO — ${texto}`, manchete: texto, tom: 'breaking',
+  }]);
+  bombear();
+}
+
+// PLANTÃO VINDO DA SALA: outro jogador disparou um breaking — mostramos o MESMO
+// texto aqui (sem re-gerar pela IA, sem re-ecoar). É o "todos veem a mesma notícia".
+export function breakingRemoto(jogo, { veiculoNome, handle, texto, tom = 'quente' } = {}) {
+  if (!texto) return;
+  fila.push({ veiculo: { nome: veiculoNome || 'PLANTÃO', handle: handle || '@plantao' }, texto, tom });
+  jogo?._empilharFeed?.([{
+    tipo: 'veiculo', veiculo: veiculoNome || 'PLANTÃO', handle: handle || '@plantao',
     texto: `🔴 PLANTÃO — ${texto}`, manchete: texto, tom: 'breaking',
   }]);
   bombear();

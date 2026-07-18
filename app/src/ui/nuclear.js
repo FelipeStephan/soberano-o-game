@@ -92,6 +92,11 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
 
     const relato = dispararOgiva(jogo.estado, iso);
 
+    // MUNDO ÚNICO: o lançamento nuclear ecoa na sala inteira — todos veem a ogiva.
+    jogo._relayOnline?.('nuclear', iso,
+      `${jogo.ficha?.presidente || jogo.ficha?.pais || 'Um jogador'} LANÇOU UMA OGIVA NUCLEAR contra ${av.nome}.`,
+      { para: feature?.properties ? { lat: feature.properties.LABEL_Y, lng: feature.properties.LABEL_X } : null, interceptado: relato.interceptado });
+
     // o 3D: a ogiva sobe, reentra e — se o escudo do alvo for bom — é ABATIDA no ar.
     // Interceptada: clarão ciano no céu + radar defensivo gigante, sem clarão de tela.
     // Não interceptada: cogumelo, sirene e o mundo apagando junto.

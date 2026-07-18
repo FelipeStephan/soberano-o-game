@@ -132,6 +132,10 @@ export function montarLobby(server) {
           sala.jogadores.add(ws);
           c.sala = sala.codigo;
           enviar(ws, { t: 'entrou', codigo: sala.codigo, host: c.id === sala.hostId });
+          // MUNDO ÚNICO: quem chega tarde recebe o RETRATO ATUAL do mundo da sala
+          // (mês, Brent, guerras NPC…) — nasce em outubro/2028 se a sala está lá,
+          // não em janeiro/2026. O retrato é a última batida que o host transmitiu.
+          if (sala.mundoAtual) enviar(ws, { t: 'mundo_atual', dados: sala.mundoAtual });
           difundirSala(sala);
           break;
         }
@@ -155,6 +159,8 @@ export function montarLobby(server) {
         case 'evento': {
           const sala = salas.get(c.sala);
           if (!sala) break;
+          // A BATIDA do host é cacheada: é o que o servidor entrega ao próximo que entrar.
+          if (msg.tipo === 'beat' && c.id === sala.hostId && msg.dados) sala.mundoAtual = msg.dados;
           difundirEvento(sala, {
             t: 'evento', de: c.id, deNome: c.nome, dePais: c.pais,
             tipo: nada(msg.tipo, 30) || 'msg',

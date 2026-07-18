@@ -83,6 +83,11 @@ export function abrirIntervencao(dados, jogo, { onFim, globoCtrl, tr } = {}) {
       // "ORDEM ENFILEIRADA" com tr ausente foi um bug real).
       const r = tr ? tr.enfileirar(acao) : { ok: false, motivo: 'fila de comando indisponível' };
       if (!r.ok) return;
+      // MUNDO ÚNICO: a mediação é REGISTRADA na sala — o host aplica os pontos no
+      // conflito compartilhado (outros jogadores podem somar esforços) e todos veem.
+      jogo._relayOnline?.('mediacao', null,
+        `${op.rot} no conflito ${dados.nomeA} × ${dados.nomeB} — a diplomacia se move.`,
+        { conflitoId: c.id, frente: op.frente });
       modal.querySelector('.intv-painel').innerHTML = `<div class="intv-feito">
         <div class="intv-ok">${ico('clock', 30)}</div>
         <h2>ORDEM ENFILEIRADA</h2>
@@ -96,6 +101,8 @@ export function abrirIntervencao(dados, jogo, { onFim, globoCtrl, tr } = {}) {
     if (op.custo) e.tesouro = Math.round((e.tesouro - op.custo) * 100) / 100;
     const mud = aplicarEfeitos(e, op.efeitos || {});
     op.mundo?.();                       // efeito no conflito/pandemia em si
+    // ajuda humanitária/apoio também ecoa na sala — o mundo vê quem estende a mão
+    jogo._relayOnline?.('ajuda', null, op.manchete || `${op.rot} — ${dados.nomeA || ''}`, { conflitoId: dados.ref?.id || null });
     globoCtrl?.atualizar?.();
     jogo._empilharFeed?.([{ tipo: 'sistema', handle: dados.tipo === 'conflito' ? 'Diplomacia' : 'Saúde global',
       cor: dados.tipo === 'conflito' ? '#35e0ff' : '#b98cff', texto: op.manchete }]);

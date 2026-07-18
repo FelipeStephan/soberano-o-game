@@ -7,7 +7,7 @@ import { dinheiro } from '../jogo/formato.js';
 import { acoesPais } from '../jogo/diplomacia.js';
 import { UNIDADES, DOMINIOS, forcaCombate } from '../dados/forcas.js';
 import { descontoMilitar } from '../dados/blocos.js';
-import { iso, souEu, rotuloRelacao, relacaoAtual, nomePais, verbo } from '../dados/paises.js';
+import { iso, souEu, rotuloRelacao, relacaoAtual, nomePais, verbo, PAISES } from '../dados/paises.js';
 import { ocupacaoDe, acoesOcupacao } from '../jogo/ocupacao.js';
 import { upkeepDe, acaoManterOrdem, acaoAnexar, podeAnexar, ANEXACAO_TURNOS_ESTAVEL } from '../jogo/manutencao.js';
 import { riscoDe } from '../dados/riscos.js';
@@ -233,7 +233,15 @@ export function iniciarJogo(container, jogo, opts = {}) {
       renderFeed: () => renderFeed(),
       atualizar: () => { renderHud(); renderFeed(); renderTopo(); globoCtrl?.atualizar(); },
       sincronizarPeriodo: () => renderTopo(),   // convidado: relógio da sala mudou → repinta o topo
+      // A BATIDA DO HOST chegou: o convidado roda o beat local em sincronia (seed da
+      // sala = mesmos dados) e aplica o mundo compartilhado por cima. UM calendário.
+      aoBeatHost: (dados) => tr?.beatExterno(dados),
     });
+    // Canal de saída pra qualquer módulo (naval, nuclear, envio, frota) ecoar a ação
+    // na sala sem depender do onlineCtrl no escopo: jogo._relayOnline(tipo, alvo, texto, dados).
+    jogo._relayOnline = (tipo, alvo, texto, dados) => onlineCtrl?.notificar(tipo, alvo, texto, dados);
+    jogo._relayFrota = (dados) => onlineCtrl?.relayFrota(dados);
+    jogo._relayFrotaSaiu = (id) => onlineCtrl?.relayFrotaSaiu(id);
     // TELEFONE VERMELHO: escuta o canal `direto` (que ligarOnline não usa — setHandlers
     // faz merge, então onDireto entra sem atropelar onSala/onEvento).
     telefonia = montarTelefonia(jogo, net, { globoCtrl: () => globoCtrl });
@@ -1022,6 +1030,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
   }
 
   function aposBeatTempo(res) {
+    // MUNDO ÚNICO: o HOST transmite a batida à sala — o servidor cacheia o retrato
+    // pro próximo que entrar, e cada convidado avança o mês em sincronia.
+    if (jogo.ehOnline && onlineCtrl?.souHost()) onlineCtrl.relayBeat(jogo.snapshotMundo());
     refreshTempo(res?.economia?.mudancas);
     consumirBreakingDoTurno(res);           // plantão (petróleo/mídia) no máximo 1 por batida
     animarEventosVivos(res.eventosVivos);   // arcos/conflitos no globo
@@ -1276,9 +1287,14 @@ export function iniciarJogo(container, jogo, opts = {}) {
         origemCasa: globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA'),
         onFim: atualizarTudo,
         onLancar: (info) => {
-          // Alvo humano? Ele entra em MODO DEFESA na hora, com o recon do estado atacado.
-          if (onlineCtrl?.ehHumano(code)) {
-            onlineCtrl.notificar('guerra', code, `${jogo.ficha.presidente || 'O inimigo'} lançou uma ofensiva militar contra você!`, { alvoEstado: info?.alvoEstado || null });
+          // MUNDO ÚNICO: TODA ofensiva ecoa na sala — todos veem a linha e os mísseis
+          // no globo. Se o alvo for humano, ele ainda entra em MODO DEFESA na hora.
+          if (jogo.ehOnline) {
+            const de = globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA');
+            const para = globoCtrl?.ondeEsta?.(code);
+            onlineCtrl?.notificar('guerra', code,
+              `${jogo.ficha.presidente || jogo.ficha.pais} lançou uma ofensiva militar contra ${PAISES[code]?.nome || code}!`,
+              { alvoEstado: info?.alvoEstado || null, de, para });
           }
         },
       });
@@ -1956,8 +1972,20 @@ export function iniciarJogo(container, jogo, opts = {}) {
   }
 
   // MODO TEMPO REAL: cria o relógio (fila + batida do mundo) e o liga. Sem "passar turno".
-  tr = criarTempoReal(jogo, { render: renderAcoes, aposAcao: aposAcaoTempo, aposBeat: aposBeatTempo });
+  tr = criarTempoReal(jogo, {
+    render: renderAcoes, aposAcao: aposAcaoTempo, aposBeat: aposBeatTempo,
+    // MUNDO ÚNICO: numa sala online, só o HOST bate o relógio do mundo — o convidado
+    // recebe a batida pela rede (aoBeatHost em ligarOnline → tr.beatExterno).
+    souBeatLocal: () => !jogo.ehOnline || !!onlineCtrl?.souHost(),
+  });
   if (jogo.fase !== 'fim') tr.iniciar();
+
+  // RECÉM-CHEGADO NA SALA: adota o retrato do mundo que o servidor entregou no
+  // `entrar` (mês, Brent, guerras NPC) — nasce no MESMO calendário de todo mundo.
+  if (jogo.ehOnline && net?.estado?.().mundoAtual) {
+    jogo.aplicarMundoCompartilhado(net.estado().mundoAtual);
+    renderTopo();
+  }
 
   renderBadge(); renderHud(); renderFeed(); renderAcoes();
   window.__jogo = jogo; // hook de debug (dev)

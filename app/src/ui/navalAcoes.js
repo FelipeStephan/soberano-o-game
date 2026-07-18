@@ -205,6 +205,12 @@ async function executarAtaqueNucleo({ fr, a, selecao, defesa, jogo, helpers, pal
     }
   }
 
+  // MUNDO ÚNICO: o ataque naval ecoa na sala — todos veem os mísseis no globo,
+  // e se o alvo for um jogador humano, ele é alertado na hora.
+  jogo._relayOnline?.('naval', codigoAlvo,
+    `${meuNome} ${res.venceu ? (a.tipo === 'frota' ? 'afundou a esquadra de' : 'bombardeou') : 'atacou (e foi repelido por)'} ${iniNome}.`,
+    { de: origem, para: coordAlvo, venceu: res.venceu });
+
   jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Marinha', cor: res.venceu ? '#22e0a0' : '#ff3b5c',
     texto: res.venceu
       ? `${a.tipo === 'frota' ? '⚓' : '🎯'} ${meuNome} ${a.tipo === 'frota' ? 'afundou a esquadra de' : 'bombardeou'} ${iniNome}. Baixas suas: ${res.perdaAtacantePct}%.`

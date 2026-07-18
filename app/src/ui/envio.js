@@ -205,6 +205,10 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl, resgate = false } 
     if (dep.misseis) globoCtrl?.salvaMisseis?.({ lat: p.lat, lng: p.lng }, Math.min(6, Math.ceil(dep.misseis / 40)));
     globoCtrl?.focar?.({ lat: p.lat, lng: p.lng });
 
+    // MUNDO ÚNICO: o ataque ao estado ecoa na sala — o dono do território (se humano)
+    // é alertado e entra em Modo Defesa; os demais veem os mísseis no globo.
+    jogo._relayOnline?.('ataque_estado', alvoIso, r.manchete, { para: { lat: p.lat, lng: p.lng }, estadoNome: p.nome, tomou: r.tomou });
+
     // o mundo fica sabendo
     jogo._empilharFeed?.([{ tipo: 'sistema', handle: r.tomou ? 'Frente de Batalha' : 'Comando', texto: r.manchete, cor: r.tomou ? '#ffb020' : '#ff3b5c' }]);
     // os aliados do alvo acendem no mapa

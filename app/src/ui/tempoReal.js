@@ -86,11 +86,30 @@ export function criarTempoReal(jogo, hooks = {}) {
       hooks.aposAcao?.(res, it.acao);
     }
 
-    // A batida do mundo.
+    // A batida do mundo. MUNDO ÚNICO: numa sala online, SÓ O HOST bate o relógio do
+    // mundo — os convidados recebem a batida dele pela rede (beatExterno) e aplicam.
+    // Sem isso, cada cliente vivia num mês diferente (o bug do "abril vs outubro").
     ateBeat -= 1;
-    if (ateBeat <= 0) { ateBeat = BEAT_S; const res = jogo.beatMundo(); hooks.aposBeat?.(res); }
+    if (ateBeat <= 0) {
+      ateBeat = BEAT_S;
+      const souAutoridade = hooks.souBeatLocal ? hooks.souBeatLocal() : true;
+      if (souAutoridade) { const res = jogo.beatMundo(); hooks.aposBeat?.(res); }
+    }
 
     renderFila();
+  }
+
+  // A batida VEIO DO HOST (convidado): roda o beat local em sincronia (a seed da sala
+  // garante os mesmos dados), aplica o mundo compartilhado por cima e reseta o trilho.
+  function beatExterno(dadosHost) {
+    if (jogo.fase === 'fim') return null;
+    if (Number.isFinite(dadosHost?.turno)) { jogo.turno = dadosHost.turno - 1; jogo.estado.turno = jogo.turno; }
+    const res = jogo.beatMundo();
+    jogo.aplicarMundoCompartilhado?.(dadosHost);
+    ateBeat = BEAT_S;
+    hooks.aposBeat?.(res);
+    renderFila();
+    return res;
   }
 
   function iniciar() { if (!timer) { timer = setInterval(tick, 1000); } }
@@ -136,7 +155,7 @@ export function criarTempoReal(jogo, hooks = {}) {
     if (bt) bt.style.width = `${Math.max(0, Math.min(100, (1 - ateBeat / BEAT_S) * 100))}%`;
   }
 
-  return { enfileirar, cancelar, podeEnfileirar, iniciar, parar, renderFila, CAP, BEAT_S,
+  return { enfileirar, cancelar, podeEnfileirar, iniciar, parar, renderFila, beatExterno, CAP, BEAT_S,
     get fila() { return fila; }, get segundos() { return jogo.estado.relogio.segundos; }, get ateBeat() { return ateBeat; } };
 }
 

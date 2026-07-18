@@ -495,7 +495,12 @@ export async function montarGlobo(container, jogo, {
         desenharLinha(b, 'foco', vida, a);
       }
     } else desenharLinha(alvoFinal, 'foco', vida, origem);
-    aoChegarFrota.set(fr.id || fr, () => { onFrotaMovida?.(fr); aoChegar?.(); });
+    aoChegarFrota.set(fr.id || fr, () => {
+      onFrotaMovida?.(fr);
+      // MUNDO ÚNICO: a nova posição da frota ecoa pra sala (os outros veem o pino mover)
+      jogo._relayFrota?.({ id: fr.id, lat: fr.lat, lng: fr.lng, unidades: { ...(fr.unidades || {}) }, presenca: fr.presenca });
+      aoChegar?.();
+    });
   }
 
   // VOLTAR PRA CASA COM CERIMÔNIA: a frota NAVEGA de volta à costa do país (rota por
@@ -506,6 +511,7 @@ export async function montarGlobo(container, jogo, {
     const atracar = () => {
       recolherFrota(e, fr.id);
       e.temp_guerra = Math.max(0, (e.temp_guerra || 0) - 4);
+      jogo._relayFrotaSaiu?.(fr.id);   // some do globo dos outros também
       jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: '#22e0a0',
         texto: 'A frota atracou em casa. Tropas de volta ao quartel e um grau a menos de tensão no mar.' }]);
       atualizar();
