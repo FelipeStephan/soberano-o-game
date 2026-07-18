@@ -1,6 +1,6 @@
 # A porta da rua do SOBERANO. Caddy cuida do HTTPS (Let's Encrypt automático)
 # e o WebSocket do lobby passa sem config extra — Caddy faz o upgrade sozinho.
-soberano.loopera.com.br {
+soberano.uxstephan.com {
     encode gzip zstd
     reverse_proxy soberano:8787
 }

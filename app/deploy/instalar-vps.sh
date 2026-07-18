@@ -39,7 +39,7 @@ ADMIN_PASSWORD=
 # Postgres do Neon (postgresql://...?sslmode=require) — sem ela, saves em arquivo
 DATABASE_URL=
 # A URL pública do jogo (Referer do OpenRouter + origem do WebSocket)
-PUBLIC_URL=https://soberano.loopera.com.br
+PUBLIC_URL=https://soberano.uxstephan.com
 # Freios de custo da IA
 AI_LIMITE_POR_MINUTO=12
 AI_TETO_DIARIO=600
@@ -56,9 +56,9 @@ echo "── 5/5 · Verificação ───────────────�
 sleep 4
 docker compose ps
 echo
-echo "Health local:"; curl -fsS http://localhost:80 -H "Host: soberano.loopera.com.br" -o /dev/null -w "HTTP %{http_code}\n" || true
+echo "Health local:"; curl -fsS http://localhost:80 -H "Host: soberano.uxstephan.com" -o /dev/null -w "HTTP %{http_code}\n" || true
 echo
-echo "✔ Pronto. Abra:  https://soberano.loopera.com.br"
-echo "  Health:        https://soberano.loopera.com.br/api/health  (tem de dizer \"backend\":\"postgres\")"
-echo "  Admin:         https://soberano.loopera.com.br/admin"
+echo "✔ Pronto. Abra:  https://soberano.uxstephan.com"
+echo "  Health:        https://soberano.uxstephan.com/api/health  (tem de dizer \"backend\":\"postgres\")"
+echo "  Admin:         https://soberano.uxstephan.com/admin"
 echo "  Logs:          cd $DIR/app && docker compose logs -f soberano"
