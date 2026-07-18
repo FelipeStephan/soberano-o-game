@@ -184,8 +184,9 @@ export function iniciarAudio() {
 // no menu: arrastar o slider ajusta, clicar no X silencia.
 function pintarWidget(raiz) {
   const btn = raiz.querySelector('.aud-btn');
-  const range = raiz.querySelector('.aud-range');
-  const mute = raiz.querySelector('.aud-mute');
+  const pop = raiz._pop || raiz;   // o painel vive num portal no <body> (raiz._pop)
+  const range = pop.querySelector?.('.aud-range');
+  const mute = pop.querySelector?.('.aud-mute');
   const icoNome = estado.mudo || estado.vol === 0 ? 'volume-x' : estado.vol < 0.5 ? 'volume-1' : 'volume-2';
   if (btn) { btn.innerHTML = ico(icoNome, 16); btn.classList.toggle('mudo', estado.mudo); }
   if (mute) { mute.innerHTML = ico(estado.mudo ? 'volume-x' : 'volume-2', 15); mute.classList.toggle('on', estado.mudo); }
@@ -196,46 +197,56 @@ export function montarControleAudio({ semDica = false } = {}) {
   const raiz = document.createElement('div');
   raiz.className = 'aud-ctl';
   const dica = semDica ? 'aria-label="Som"' : 'data-tip="Som do jogo" data-tip-t="ÁUDIO" aria-label="Som"';
-  raiz.innerHTML = `
-    <button class="aud-btn" ${dica}></button>
-    <div class="aud-pop"><div class="aud-pop-in">
-      <span class="aud-rot">VOLUME</span>
-      <input class="aud-range" type="range" min="0" max="100" step="1">
-      <button class="aud-mute" aria-label="Silenciar"></button>
-    </div></div>`;
+  raiz.innerHTML = `<button class="aud-btn" ${dica}></button>`;
 
-  const pop = raiz.querySelector('.aud-pop');
+  // PORTAL: o painel vive no <body>, NÃO dentro do header — o clip-path chanfrado do
+  // topo do jogo CORTA A PINTURA de qualquer descendente (mesmo position:fixed), e era
+  // por isso que in-game o volume "não funcionava": o painel abria invisível.
+  const pop = document.createElement('div');
+  pop.className = 'aud-pop';
+  pop.innerHTML = `<div class="aud-pop-in">
+    <span class="aud-rot">VOLUME</span>
+    <input class="aud-range" type="range" min="0" max="100" step="1">
+    <button class="aud-mute" aria-label="Silenciar"></button>
+  </div>`;
+  document.body.appendChild(pop);
+
   const posicionar = () => {
     const r = raiz.querySelector('.aud-btn').getBoundingClientRect();
     const larguraTela = document.documentElement.clientWidth || 1280;
-    const largPop = pop.offsetWidth || 170;
+    const largPop = pop.offsetWidth || 190;
     const left = Math.max(8, Math.min(r.right - largPop, larguraTela - largPop - 8));
     pop.style.top = `${Math.round(r.bottom)}px`;
     pop.style.left = `${Math.round(left)}px`;
-    pop.style.right = 'auto';
   };
-  // CLIQUE no alto-falante = abre/fecha o painel (não muta mais — o mute mora no painel).
+  const abrir = () => { posicionar(); pop.classList.add('aberto'); posicionar(); };
+  const fechar = () => pop.classList.remove('aberto');
+
+  // CLIQUE alterna; hover abre; clicar fora fecha. O mute mora DENTRO do painel.
   raiz.querySelector('.aud-btn').addEventListener('click', (ev) => {
     ev.stopPropagation();
-    const abrindo = !raiz.classList.contains('aberto');
-    raiz.classList.toggle('aberto', abrindo);
-    if (abrindo) posicionar();
+    pop.classList.contains('aberto') ? fechar() : abrir();
   });
-  raiz.addEventListener('mouseenter', posicionar);
-  raiz.addEventListener('pointerenter', posicionar);
-  // clicar fora fecha o painel aberto por clique
-  document.addEventListener('click', (ev) => { if (!raiz.contains(ev.target)) raiz.classList.remove('aberto'); });
+  raiz.addEventListener('mouseenter', abrir);
+  let tFecha = null;
+  const agendaFechar = () => { clearTimeout(tFecha); tFecha = setTimeout(fechar, 450); };
+  raiz.addEventListener('mouseleave', agendaFechar);
+  pop.addEventListener('mouseenter', () => clearTimeout(tFecha));
+  pop.addEventListener('mouseleave', agendaFechar);
+  document.addEventListener('click', (ev) => { if (!raiz.contains(ev.target) && !pop.contains(ev.target)) fechar(); });
 
-  raiz.querySelector('.aud-range').addEventListener('input', (e) => {
+  pop.querySelector('.aud-range').addEventListener('input', (e) => {
     estado.vol = Number(e.target.value) / 100;
     if (estado.vol > 0 && estado.mudo) estado.mudo = false;
     persistir(); aplicarVolumes();
   });
-  raiz.querySelector('.aud-mute').addEventListener('click', (ev) => {
+  pop.querySelector('.aud-mute').addEventListener('click', (ev) => {
     ev.stopPropagation();
     estado.mudo = !estado.mudo;
     persistir(); aplicarVolumes();
   });
+  // pintarWidget varre .aud-ctl (botão) e .aud-pop (slider/mute) — liga os dois nós
+  raiz._pop = pop;
   pintarWidget(raiz);
   return raiz;
 }

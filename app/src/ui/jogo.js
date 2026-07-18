@@ -1051,7 +1051,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     novos.forEach((o) => { o.novoAviso = false; });
     if (document.querySelector('.carta-wrap .cena') || document.querySelector('.lg-barra')) return;
     const o = novos[0];
-    alertaUrgente({ titulo: 'OPERAÇÃO COMPROMETIDA', texto: `${o.alvoNome} detectou nossa mobilização — espere resistência reforçada quando o ataque chegar.`, tom: 'alerta' });
+    alertaUrgente({ titulo: 'OPERAÇÃO COMPROMETIDA', texto: `${o.alvoNome} detectou nossa mobilização — espere resistência reforçada quando o ataque chegar.`, tom: 'alerta', comSom: false });
   }
 
   // Minhas ofensivas que amadureceram resolvem AGORA (com a feature real do globo), tocam
@@ -1095,7 +1095,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const m = novos[0];
     novos.forEach((x) => { x.novoAviso = false; });
     if (document.querySelector('.carta-wrap .cena') || document.querySelector('.lg-barra')) return;
-    alertaUrgente({ titulo: 'AMEAÇA DETECTADA', texto: `${m.nome} mobiliza forças contra você — ataque em ~${Math.max(1, m.restante)} ${Math.max(1, m.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa enquanto há tempo.`, tom: 'alerta' });
+    alertaUrgente({ titulo: 'AMEAÇA DETECTADA', texto: `${m.nome} mobiliza forças contra você — ataque em ~${Math.max(1, m.restante)} ${Math.max(1, m.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa enquanto há tempo.`, tom: 'alerta', comSom: false });
   }
 
   // VOCÊ FOI INVADIDO, no tempo real: alerta urgente + a mesma página de invasão do turno,

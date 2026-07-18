@@ -33,6 +33,7 @@ import { temIntel } from '../jogo/espionagem.js';
 import { corEstado, linhaEstado, alturaEstado, tipEstado, montarPontos, tipPonto, estadosVisiveis, resumoDominios } from './tatico.js';
 import { chamarIA } from '../maquina/openrouter.js';
 import { tocarEfeito, tocarGuerraFundo, pararGuerraFundo, tocarMissil } from './audio.js';
+import { dispararBreaking } from './breaking.js';
 
 const TEX = 'https://cdn.jsdelivr.net/npm/three-globe/example/img';
 const centro = (f) => ({ lat: Number(f?.properties?.LABEL_Y ?? 0), lng: Number(f?.properties?.LABEL_X ?? 0) });
@@ -1161,6 +1162,9 @@ export async function montarGlobo(container, jogo, {
           for (const fr of chegaram) {
             const cb = aoChegarFrota.get(fr.id || fr);
             if (cb) { aoChegarFrota.delete(fr.id || fr); try { cb(fr); } catch { /* nunca derruba o loop */ } }
+            // NOTÍCIA ADIADA: a manchete da frota-na-costa só sai AGORA, quando a
+            // esquadra de fato CHEGOU e foi vista (metodologia: descoberta rege notícia).
+            if (fr._breakingChegada) { const n = fr._breakingChegada; delete fr._breakingChegada; try { dispararBreaking(jogo, n); } catch { /* sem drama */ } }
           }
           atualizar();
         }

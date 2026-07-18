@@ -5344,7 +5344,7 @@ button[data-tip], .tip-q { cursor: pointer; }
 .aud-pop-in { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
   background: var(--painel-solido); box-shadow: inset 0 0 0 1px var(--borda), 0 10px 30px rgba(0,0,0,.5);
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
-.aud-ctl:hover .aud-pop, .aud-ctl.aberto .aud-pop { display: block; }
+.aud-pop.aberto { display: block; }   /* o painel é um PORTAL no body; abre por classe */
 .aud-rot { font-family: var(--mono); font-size: 8px; letter-spacing: .14em; color: var(--fraco); }
 .aud-range { -webkit-appearance: none; appearance: none; width: 96px; height: 3px;
   background: var(--borda); outline: none; cursor: pointer; }

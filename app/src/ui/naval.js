@@ -421,12 +421,18 @@ export function abrirPosicaoNaval(coord, jogo, { onFim, globoCtrl } = {}) {
           ? `${meuNome} posiciona ${pres >= 12 ? 'um grupo de batalha' : 'uma força naval'} a poucas horas da costa de ${esc(vizinhos[0].nome)}. Nenhum tiro foi dado. Nenhum era necessário.${zarpe}`
           : `${meuNome} desloca frota para o mar aberto. Analistas procuram no mapa o que exatamente está sendo ameaçado.${zarpe}`,
     }]);
-    // REPERCUSSÃO (pedido do dono): frota perto de costa alheia É notícia — plantão no
-    // globo + eco no X (todo breaking vira post). Mar deserto não rende manchete.
-    if (guerras.length) {
-      dispararBreaking(jogo, { assunto: `Frota de ${meuNome} invade águas de ${guerras[0]}`, contexto: `A esquadra cruzou o mar territorial sem ser aliada — tratado como ato de guerra. Presença: ${pres}.`, tom: 'quente', iso: vizinhos.find((v) => v.ataque)?.code });
-    } else if (vizinhos.length && (vizinhos[0].zona?.peso || 0) >= 0.4) {
-      dispararBreaking(jogo, { assunto: `${meuNome} estaciona frota diante da costa de ${vizinhos[0].nome}`, contexto: `${pres >= 12 ? 'Grupo de batalha' : 'Força naval'} com presença ${pres} a ${vizinhos[0].zona.rot.toLowerCase()}. Nenhum tiro — e ninguém dorme.`, tom: 'tenso', iso: vizinhos[0].code });
+    // A DESCOBERTA REGE A NOTÍCIA (metodologia do online): a manchete só existe quando
+    // a frota é VISTA — ou seja, quando CHEGA perto de costa alheia, não no instante da
+    // ordem (a esquadra ainda está navegando; ninguém noticia o que não viu). Mar aberto
+    // não rende manchete nenhuma.
+    const noticia = guerras.length
+      ? { assunto: `Frota de ${meuNome} invade águas de ${guerras[0]}`, contexto: `A esquadra cruzou o mar territorial sem ser aliada — tratado como ato de guerra. Presença: ${pres}.`, tom: 'quente', iso: vizinhos.find((v) => v.ataque)?.code }
+      : (vizinhos.length && (vizinhos[0].zona?.peso || 0) >= 0.4)
+        ? { assunto: `${meuNome} estaciona frota diante da costa de ${vizinhos[0].nome}`, contexto: `${pres >= 12 ? 'Grupo de batalha' : 'Força naval'} com presença ${pres} a ${vizinhos[0].zona.rot.toLowerCase()}. Nenhum tiro — e ninguém dorme.`, tom: 'tenso', iso: vizinhos[0].code }
+        : null;
+    if (noticia) {
+      if (fr.chegaEm && Date.now() < fr.chegaEm) fr._breakingChegada = noticia;   // dispara quando ATRACAR lá
+      else dispararBreaking(jogo, noticia);                                        // já nasceu na posição
     }
     globoCtrl?.atualizar?.();
     await espera(600);

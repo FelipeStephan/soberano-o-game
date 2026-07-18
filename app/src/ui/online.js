@@ -127,7 +127,7 @@ export function ligarOnline(jogo, net, hooks) {
     // 3) se a bomba é COM VOCÊ, alerta urgente — e, se for guerra/ataque, MODO DEFESA
     if (ev.paraVoce || ev.alvo === meuIso) {
       if (ev.tipo === 'guerra' || ev.tipo === 'ataque_estado') {
-        alertaUrgente({ titulo: 'VOCÊ ESTÁ SOB ATAQUE', texto: `${ev.deNome || nomeDe(ev.dePais)} lançou uma ofensiva contra você.`, tom: 'ataque' });
+        alertaUrgente({ titulo: 'VOCÊ ESTÁ SOB ATAQUE', texto: `${ev.deNome || nomeDe(ev.dePais)} lançou uma ofensiva contra você.`, tom: 'ataque', comSom: ev.tipo === 'guerra' });
         abrirDefesa(jogo, {
           agressor: { iso: ev.dePais, nome: ev.deNome || nomeDe(ev.dePais) },
           dados: ev.dados || null,
@@ -136,7 +136,7 @@ export function ligarOnline(jogo, net, hooks) {
       } else if (ev.tipo === 'naval' || ev.tipo === 'nuclear') {
         alertaUrgente({
           titulo: ev.tipo === 'nuclear' ? '☢ ATAQUE NUCLEAR CONTRA VOCÊ' : 'ATAQUE NAVAL CONTRA VOCÊ',
-          texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque',
+          texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: ev.tipo === 'nuclear',
         });
       } else if (ev.tipo === 'alianca' || ev.tipo === 'comercio') {
         propostaRecebida(ev, est);
@@ -242,7 +242,7 @@ export function ligarOnline(jogo, net, hooks) {
     if (dist <= alcanceDeteccao && !frotasAvisadas.has(id)) {
       frotasAvisadas.add(id);
       const nomeDono = ev.deNome ? `${ev.deNome} (${nomeDe(ev.dePais)})` : nomeDe(ev.dePais);
-      alertaUrgente({ titulo: 'ESQUADRA DETECTADA NA SUA COSTA', texto: `A marinha de ${nomeDono} entrou nas suas águas territoriais.`, tom: 'ataque' });
+      alertaUrgente({ titulo: 'ESQUADRA DETECTADA NA SUA COSTA', texto: `A marinha de ${nomeDono} entrou nas suas águas territoriais.`, tom: 'ataque', comSom: false });
       tocarEfeito('radar', { volume: 0.5 });
       g?.ondaRadar?.({ lat: frota.lat, lng: frota.lng }, { cor: 0xff3b5c, max: 45 });
       jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚓ Defesa Costeira', cor: '#ff3b5c',
@@ -268,7 +268,7 @@ export function ligarOnline(jogo, net, hooks) {
         if (d.venceu) {
           if (fr.guarnKey && e.guarnicoes) delete e.guarnicoes[fr.guarnKey];   // a tropa AFUNDOU junto
           e.frotas = e.frotas.filter((f) => f.id !== fr.id);
-          alertaUrgente({ titulo: 'SUA FROTA FOI AFUNDADA', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} destruiu a sua esquadra.`, tom: 'ataque' });
+          alertaUrgente({ titulo: 'SUA FROTA FOI AFUNDADA', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} destruiu a sua esquadra.`, tom: 'ataque', comSom: false });
           jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚓ Marinha', cor: '#ff3b5c', texto: `Perdemos a esquadra em combate contra ${nomeDe(ev.dePais)}. As unidades a bordo afundaram com ela.` }]);
         } else {
           const pct = Math.max(0, Math.min(95, d.perdaPct || 30));
@@ -277,7 +277,7 @@ export function ligarOnline(jogo, net, hooks) {
             if (!fr.unidades[k]) delete fr.unidades[k];
           }
           if (fr.guarnKey && e.guarnicoes) e.guarnicoes[fr.guarnKey] = { ...fr.unidades };
-          alertaUrgente({ titulo: 'SUA FROTA FOI ATACADA', texto: `${ev.deNome || nomeDe(ev.dePais)} atacou sua esquadra — ela resistiu com ${pct}% de baixas.`, tom: 'ataque' });
+          alertaUrgente({ titulo: 'SUA FROTA FOI ATACADA', texto: `${ev.deNome || nomeDe(ev.dePais)} atacou sua esquadra — ela resistiu com ${pct}% de baixas.`, tom: 'ataque', comSom: false });
         }
         hooks.renderFeed?.();
       }
