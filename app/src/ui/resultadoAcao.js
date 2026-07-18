@@ -58,7 +58,9 @@ const COPY = {
 const PARCIAL = ['Colou — mas deixou lascas. Vitória com asterisco também conta.', 'Deu certo no grosso; o troco veio junto. Administre o dano.'];
 
 // Chaves em que DESCER é bom (pra pintar a seta com a cor certa).
-const INVERTIDAS = new Set(['divida', 'temp_guerra']);
+// Exportado: o HUD usa a mesma polaridade pra decidir a COR do flash de indicador
+// (dívida/clima de guerra subindo é vermelho, não verde).
+export const INVERTIDAS = new Set(['divida', 'temp_guerra']);
 
 // Hash determinístico (mesmo id → mesma frase, aqui e no online de amanhã).
 function hashId(s) {

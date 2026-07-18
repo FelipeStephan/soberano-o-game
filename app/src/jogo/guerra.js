@@ -11,6 +11,7 @@ import { coalizaoDefensiva, materializarCoalizao, resumoCoalizao } from './coali
 import { planoDeCampanha, aplicarCampanha, lerCampanha } from './campanha.js';
 import { estadosCarregados, estadosDe, donoDe } from './territorio.js';
 import { garantirOcupacao } from './manutencao.js';
+import { rand } from './rng.js';
 
 const BONUS_OGIVA = 3;
 
@@ -173,13 +174,13 @@ export function resolverGuerra(estado, feature, deploy, opts = {}) {
   // multSurpresa (>1 se o alvo NÃO detectou) e multDefesaAlvo (>1 se detectou e reforçou).
   const moral = (av.moral / 100) * penalCombustivel * (opts.multSurpresa || 1);
   const minhaEfetiva = (poderEnviado + (estado.ogivas || 0) * BONUS_OGIVA) * moral;
-  const defensor = av.inimigo * (0.95 + Math.random() * 0.3) * (opts.multDefesaAlvo || 1);
+  const defensor = av.inimigo * (0.95 + rand() * 0.3) * (opts.multDefesaAlvo || 1);
 
   let meu = minhaEfetiva; let ini = defensor;
   const rounds = [];
   for (let n = 1; n <= 5 && meu > 0 && ini > 0; n += 1) {
-    const dMeu = ini * (0.10 + Math.random() * 0.12);
-    const dIni = meu * (0.12 + Math.random() * 0.14);
+    const dMeu = ini * (0.10 + rand() * 0.12);
+    const dIni = meu * (0.12 + rand() * 0.14);
     meu = Math.max(0, meu - dMeu); ini = Math.max(0, ini - dIni);
     rounds.push({ n, meu: Math.round(meu), ini: Math.round(ini), baixasMinhas: Math.round(dMeu), baixasDele: Math.round(dIni) });
   }
@@ -206,7 +207,7 @@ export function resolverGuerra(estado, feature, deploy, opts = {}) {
   for (const u of UNIDADES) {
     const enviado = deploy?.[u.id] || 0;
     if (!enviado) continue;
-    const perdido = Math.min(enviado, Math.round(enviado * perdaFrac * (0.6 + Math.random() * 0.8)));
+    const perdido = Math.min(enviado, Math.round(enviado * perdaFrac * (0.6 + rand() * 0.8)));
     if (opts.forcaEmTransito) {
       // A força já saiu do inventário no commit (ofensiva com tempo) — devolve os sobreviventes.
       const sobreviventes = enviado - perdido;

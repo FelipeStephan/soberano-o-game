@@ -14,6 +14,7 @@ import { estadosCarregados, estadosDe, donoDe } from './territorio.js';
 import { ordemDeQueda } from './campanha.js';
 import { aplicarEfeitos } from './efeitos.js';
 import { resolverAgressao } from './agressao.js';
+import { rand } from './rng.js';
 
 const BONUS_OGIVA = 3;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -103,7 +104,7 @@ export function resolverPedidoDePaz(estado, iso, termos) {
   const relKey = PAISES[iso]?.rel;
   const nome = PAISES[iso]?.nome || iso;
   const { chance } = chanceAceitarPaz(estado, iso, termos);
-  const aceito = Math.random() < chance;
+  const aceito = rand() < chance;
 
   if (aceito) {
     if (termos.tipo === 'devolver_area') aplicarDevolucaoTerritorio(estado, iso, termos.estados || []);
@@ -128,7 +129,7 @@ export function resolverPedidoDePaz(estado, iso, termos) {
   const mudancas = aplicarEfeitos(estado, { ...(relKey ? { [relKey]: -10 } : {}), temp_guerra: 10, aprovacao: -4 });
   const risco = chanceContraAtaque(estado, iso, { negociado: true });
   let contraAtaque = null;
-  if (Math.random() < risco) {
+  if (rand() < risco) {
     contraAtaque = resolverAgressao(estado, { iso, nome, forca: forcaDe(estado, iso), rel: Number(estado[relKey] ?? 0), motivo: 'recusou seu pedido de paz e pressiona a vantagem' });
   }
   return { aceito: false, iso, nome, mudancas, contraAtaque,
@@ -175,7 +176,7 @@ export function sairDaGuerra(estado, iso) {
 
   const risco = chanceContraAtaque(estado, iso, { negociado: false });
   let contraAtaque = null;
-  if (Math.random() < risco) {
+  if (rand() < risco) {
     contraAtaque = resolverAgressao(estado, { iso, nome, forca: forcaDe(estado, iso), rel: Number(estado[relKey] ?? 0), motivo: 'sentiu a retirada como fraqueza e atacou' });
   }
   return { iso, nome, mudancas, prev, contraAtaque,

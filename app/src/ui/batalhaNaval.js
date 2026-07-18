@@ -37,7 +37,7 @@ export function resolverBaixas(poderAtaque, poderDefesa) {
 export async function animarAtaqueNaval(helpers, origem, alvo, { rounds = 4, revide = true } = {}) {
   helpers.desenharLinha?.(alvo, 'ataque', rounds * 1250 + 800, origem);
   for (let r = 0; r < rounds; r += 1) {
-    helpers.salvaMisseis?.(alvo, 3, origem);                                 // você atira
+    helpers.salvaMisseis?.(alvo, 3, origem);                                 // você atira (o som mora em salvaMisseis)
     await espera(520);
     helpers.impacto?.(alvo);
     if (revide && r < rounds - 1) {

@@ -23,6 +23,7 @@ import { forcaDe } from '../jogo/forcasMundo.js';
 import { resolverBaixas, animarAtaqueNaval, mostrarRelatorioBaixas, encenarIntimacao } from './batalhaNaval.js';
 import { dispararBreaking } from './breaking.js';
 import { ico } from './icones.js';
+import { tocarEfeito } from './audio.js';
 
 const COMPO_ORDEM = ['porta_avioes', 'navios', 'submarinos', 'cacas', 'bombardeiros', 'drones'];
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -82,16 +83,18 @@ function gridCompo(unidades, isoDono, baixas = null) {
   return COMPO_ORDEM.filter((k) => (unidades[k] || 0) > 0).map((k) => {
     const eqk = equip?.[k]; const fk = eqk?.foto || FOTO_UNIDADE[k];
     const nome = eqk?.nome || UNIDADE_POR_ID[k]?.nome || k;
-    const perdeu = baixas?.[k] || 0;   // −N no canto: o que já caiu deste tipo
+    const perdeu = baixas?.[k] || 0;   // as perdas moram no TIP, não em badge sobre o chip
     return `<div class="nva-cu" data-tip="${esc(nome)}${perdeu ? ` · já perdi ${perdeu.toLocaleString('pt-BR')}` : ''}">
-      ${perdeu ? `<i class="nva-cu-perda">−${perdeu.toLocaleString('pt-BR')}</i>` : ''}
-      <span class="nva-cu-foto">${fk ? `<img src="${fk}" alt="" loading="lazy" onerror="this.parentElement.textContent='${UNIDADE_POR_ID[k]?.icone || '•'}'">` : (UNIDADE_POR_ID[k]?.icone || '•')}</span>
+      <span class="nva-cu-foto"><i class="nva-cu-ico">${UNIDADE_POR_ID[k]?.icone || '•'}</i>${fk ? `<img src="${fk}" alt="" loading="lazy" onerror="this.remove()">` : ''}</span>
       <b>${unidades[k].toLocaleString('pt-BR')}</b><small>${esc(nome)}</small></div>`;
   }).join('');
 }
 
-// ── TELA DE ATAQUE (seleção de força) — usada nos dois painéis ─────────
-// Compacta por natureza: alvo, atalhos Tudo/50%/Limpar, sliders, balanço, atacar/voltar.
+// ── TELA DE ATAQUE — a FROTA INTEIRA vai junto ─────────────────────────
+// O dono voltou atrás nos sliders (com razão): uma força-tarefa no mar não deixa
+// metade da esquadra "de fora" — quem ataca é o grupo de batalha completo. A tela
+// agora só APRESENTA a força (veículos + quantidades) e o confronto, e o botão
+// ATACAR compromete tudo. Menos decisão burocrática, mais peso na decisão real.
 function renderSeletorForca(corpo, { minhaU, isoMeu, alvoNome, defesa, tipoAlvo, onVoltar, onAtacar }) {
   const equip = equipamentosDoPais(isoMeu);
   const combatentes = COMPO_ORDEM.filter((k) => (minhaU[k] || 0) > 0);
@@ -100,56 +103,36 @@ function renderSeletorForca(corpo, { minhaU, isoMeu, alvoNome, defesa, tipoAlvo,
 
   const linhaU = (k) => {
     const eqk = equip?.[k]; const fk = eqk?.foto || FOTO_UNIDADE[k];
-    return `<div class="nvu-item" data-u="${k}">
-      <span class="nvu-foto">${fk ? `<img src="${fk}" alt="" onerror="this.parentElement.textContent='${UNIDADE_POR_ID[k]?.icone || '•'}'">` : (UNIDADE_POR_ID[k]?.icone || '•')}</span>
-      <span class="nvu-nome">${esc(eqk?.nome || UNIDADE_POR_ID[k]?.nome || k)}<small>${minhaU[k].toLocaleString('pt-BR')} a bordo</small></span>
-      <input type="range" class="nvu-slider" min="0" max="${minhaU[k]}" step="${UNIDADE_POR_ID[k]?.passo || 1}" value="${minhaU[k]}">
-      <b class="nvu-q">${minhaU[k].toLocaleString('pt-BR')}</b>
+    return `<div class="nvu-item so-mostra" data-u="${k}">
+      <span class="nvu-foto"><i class="nva-cu-ico">${UNIDADE_POR_ID[k]?.icone || '•'}</i>${fk ? `<img src="${fk}" alt="" onerror="this.remove()">` : ''}</span>
+      <span class="nvu-nome">${esc(eqk?.nome || UNIDADE_POR_ID[k]?.nome || k)}</span>
+      <b class="nvu-q">×${minhaU[k].toLocaleString('pt-BR')}</b>
     </div>`;
   };
 
+  const poder = poderAtaqueDe(sel, tipoAlvo);
+  const prev = resolverBaixas(poder, defesa);
+  const cls = prev.venceu ? (prev.perdaAtacantePct < 25 ? 'esmaga' : 'vence') : 'perde';
+  const veredito = prev.venceu ? (prev.perdaAtacantePct < 25 ? 'VITÓRIA FOLGADA' : 'VITÓRIA, MAS CUSTA') : 'ARRISCADO';
+
   corpo.innerHTML = `<div class="nvu-sel">
-    <div class="nvu-alvo">${ico('crosshair', 12)} <b>${esc(alvoNome)}</b><em>defesa ${Math.round(defesa)}</em></div>
-    <div class="nvu-quick">
-      <button class="nvu-qk" data-q="tudo">${ico('check-check', 12)} Tudo</button>
-      <button class="nvu-qk" data-q="metade">${ico('divide', 12)} 50%</button>
-      <button class="nvu-qk" data-q="zero">${ico('x', 12)} Limpar</button>
-    </div>
+    <div class="nvu-alvo">${ico('crosshair', 12)} <b>${esc(alvoNome)}</b></div>
+    <div class="nvu-rot">${ico('anchor', 10)} FORÇA-TAREFA COMPLETA</div>
     <div class="nvu-lista">${combatentes.map(linhaU).join('')}</div>
-    <div class="nvu-balanco" id="nvu-bal"></div>
+    <div class="nvu-confronto ${cls}">
+      <div class="nvu-lado"><small>SEU ATAQUE</small><b>${Math.round(poder)}</b></div>
+      <div class="nvu-vs">${ico('swords', 14)}</div>
+      <div class="nvu-lado"><small>DEFESA</small><b>${Math.round(defesa)}</b></div>
+    </div>
+    <div class="nvu-veredito ${cls}">${ico(prev.venceu ? 'trending-up' : 'trending-down', 12)} ${veredito} <em>· baixas previstas ~${prev.perdaAtacantePct}%</em></div>
     <div class="nvu-acoes">
       <button class="nvu-voltar" id="nvu-voltar">${ico('arrow-left', 13)} voltar</button>
-      <button class="nvu-atacar" id="nvu-atacar">${ico('rocket', 14)} ATACAR</button>
+      <button class="nvu-atacar" id="nvu-atacar" ${combatentes.length ? '' : 'disabled'}>${ico('rocket', 14)} ATACAR</button>
     </div>
   </div>`;
 
-  const bal = corpo.querySelector('#nvu-bal');
-  const recalc = () => {
-    let n = 0;
-    for (const it of corpo.querySelectorAll('.nvu-item')) {
-      const k = it.dataset.u; const v = Number(it.querySelector('.nvu-slider').value) || 0;
-      sel[k] = v; it.querySelector('.nvu-q').textContent = v.toLocaleString('pt-BR'); n += v;
-    }
-    const poder = poderAtaqueDe(sel, tipoAlvo);
-    const prev = resolverBaixas(poder, defesa);
-    const cls = prev.venceu ? (prev.perdaAtacantePct < 25 ? 'esmaga' : 'vence') : 'perde';
-    bal.className = `nvu-balanco ${cls}`;
-    bal.innerHTML = n <= 0
-      ? `${ico('info', 12)} Selecione ao menos uma unidade.`
-      : `${ico(prev.venceu ? 'trending-up' : 'trending-down', 12)} Ataque <b>${Math.round(poder)}</b> vs defesa <b>${Math.round(defesa)}</b> — <b>${prev.venceu ? (prev.perdaAtacantePct < 25 ? 'vitória folgada' : 'vitória, mas custa') : 'arriscado'}</b> · baixas previstas ~${prev.perdaAtacantePct}%`;
-    corpo.querySelector('#nvu-atacar').disabled = n <= 0;
-  };
-  corpo.querySelectorAll('.nvu-slider').forEach((s) => s.addEventListener('input', recalc));
-  corpo.querySelectorAll('.nvu-qk').forEach((b) => b.addEventListener('click', () => {
-    for (const it of corpo.querySelectorAll('.nvu-item')) {
-      const k = it.dataset.u; const s = it.querySelector('.nvu-slider');
-      s.value = b.dataset.q === 'tudo' ? minhaU[k] : b.dataset.q === 'metade' ? Math.floor(minhaU[k] / 2) : 0;
-    }
-    recalc();
-  }));
   corpo.querySelector('#nvu-voltar').addEventListener('click', onVoltar);
   corpo.querySelector('#nvu-atacar').addEventListener('click', () => onAtacar({ ...sel }));
-  recalc();
 }
 
 // ── NÚCLEO DO ATAQUE — mísseis no globo, baixas, relatório ancorado ────
@@ -166,7 +149,7 @@ async function executarAtaqueNucleo({ fr, a, selecao, defesa, jogo, helpers, pal
   const eu = e.iso || 'USA';
   const meuNome = PAISES[eu]?.nome || 'Sua Marinha';
   const iniNome = a.tipo === 'frota' ? `Esquadra de ${PAISES[a.frota.code]?.nome || a.frota.code}`
-    : a.tipo === 'estado' ? `${a.estado.nome} · ${PAISES[a.estado.pais]?.nome || a.estado.pais}` : `${PAISES[a.code]?.nome || a.code}`;
+    : a.tipo === 'estado' ? `${a.estado.nome} · ${PAISES[a.estado.pais]?.nome || a.estado.pais}` : `${a.nome || PAISES[a.code]?.nome || a.code}`;
   const codigoAlvo = a.tipo === 'frota' ? a.frota.code : a.tipo === 'estado' ? a.estado.pais : a.code;
 
   // todo ataque a não-parceiro é ato de guerra
@@ -200,7 +183,18 @@ async function executarAtaqueNucleo({ fr, a, selecao, defesa, jogo, helpers, pal
   if (esvaziou) { e.frotas = (e.frotas || []).filter((f) => f.id !== fr.id); if (fr.guarnKey) delete e.guarnicoes?.[fr.guarnKey]; }
   else if (fr.guarnKey && e.guarnicoes) e.guarnicoes[fr.guarnKey] = { ...fr.unidades };
 
-  // efeito no alvo
+  // efeito no alvo — o bombardeio DEIXA MARCA no território, no MESMO registro da
+  // ofensiva terrestre (conflitosEstado + guarnição dizimada). É o que integra os dois
+  // caminhos: o mapa de estados mostra o estrago venha ele do mar ou da campanha.
+  if (a.tipo === 'estado' && res.venceu) {
+    const id = a.estado.id;
+    e.conflitosEstado = e.conflitosEstado || {};
+    const c = e.conflitosEstado[id] || { por: eu, intensidade: 0, turnos: 0 };
+    c.por = eu; c.intensidade = Math.min(100, (c.intensidade || 0) + 30);
+    e.conflitosEstado[id] = c;
+    const g = e.guarnicoes?.[id];
+    if (g) for (const k of Object.keys(g)) { g[k] = Math.max(0, Math.floor((g[k] || 0) * (1 - res.perdaDefensorPct / 100))); if (!g[k]) delete g[k]; }
+  }
   if (a.tipo === 'frota') {
     if (res.venceu) {
       e.frotasInimigas = (e.frotasInimigas || []).filter((f) => f.id !== a.frota.id);
@@ -261,8 +255,8 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
       <div class="nva-forca-hero">
         <div class="nva-fh-cel"><small>PODER NAVAL</small><b>${poderNaval(fr)}</b></div>
         <div class="nva-fh-cel"><small>PRESENÇA</small><b>${fr.presenca}</b></div>
-        ${abates.length ? `<div class="nva-fh-cel abate"><small>ABATES</small><b>${abates.length}</b></div>` : ''}
-        ${temBaixas ? `<div class="nva-fh-cel baixa"><small>BAIXAS</small><b>${Object.values(baixasTotais).reduce((s, q) => s + q, 0).toLocaleString('pt-BR')}</b></div>` : ''}
+        <div class="nva-fh-cel abate" data-tip="${abates.length ? esc(`Esquadras afundadas: ${abates.map((a) => a.nome).join(', ')}`) : 'Nenhuma esquadra afundada ainda'}" data-tip-t="ABATES"><small>ABATES</small><b>${abates.length}</b></div>
+        <div class="nva-fh-cel baixa" data-tip="${temBaixas ? esc(`Já perdi: ${Object.entries(baixasTotais).map(([k, q]) => `${UNIDADE_POR_ID[k]?.nome || k} −${q.toLocaleString('pt-BR')}`).join(' · ')}`) : 'Nenhuma baixa nesta frota'}" data-tip-t="BAIXAS"><small>BAIXAS</small><b>${temBaixas ? Object.values(baixasTotais).reduce((s, q) => s + q, 0).toLocaleString('pt-BR') : 0}</b></div>
       </div>
       <div class="nva-barras">
         ${barra('Alcance', pctDe(tech.alcance, 40), classeAlcance(tech.alcance))}
@@ -271,8 +265,6 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
       </div>
       <div class="nva-compo-rot">${ico('layout-grid', 10)} A BORDO</div>
       <div class="nva-compo">${gridCompo(u, e.iso || 'USA', baixasTotais) || `<span class="nva-vazio">frota vazia</span>`}</div>
-      ${temBaixas ? `<div class="nva-baixas">${ico('heart-crack', 11)} <span>Já perdi: ${Object.entries(baixasTotais).map(([k, q]) => `${UNIDADE_POR_ID[k]?.icone || '•'} −${q.toLocaleString('pt-BR')}`).join(' · ')}</span></div>` : ''}
-      ${abates.length ? `<div class="nva-abates" data-tip="Esquadras que esta frota afundou">${ico('skull', 11)} <span>${abates.length} abate${abates.length > 1 ? 's' : ''}: ${abates.map((a) => esc(a.nome)).join(', ')}</span></div>` : ''}
       ${alvo ? `<div class="nva-alvo ${alvo.hostil ? 'hostil' : alvo.parceiro ? 'amigo' : 'neutro'}">
         ${ico(alvo.hostil ? 'swords' : alvo.parceiro ? 'handshake' : 'radar', 14)}
         <span><b>${esc(alvo.nome)}</b> a ${alvo.d.toFixed(0)}° · relação ${alvo.rel} — ${alvo.hostil ? 'HOSTIL, um estopim' : alvo.parceiro ? 'parceiro, presença amistosa' : 'neutro, observando'}</span>
@@ -280,9 +272,9 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
     </div>
     <div id="nva-corpo">
       <div class="nva-acoes">
-        <button class="nva-btn mover" id="nva-mover">${ico('move', 15)} <span>Reposicionar<small>arraste o pino no globo</small></span></button>
-        <button class="nva-btn atacar" id="nva-atacar">${ico('crosshair', 15)} <span>Iniciar ataque<small>varredura de radar: revela o que a frota enxerga</small></span></button>
-        <button class="nva-btn casa" id="nva-casa">${ico('home', 15)} <span>Mandar de volta pra casa<small>libera as tropas e esfria o clima</small></span></button>
+        <button class="nva-btn atacar" id="nva-atacar">${ico('crosshair', 15)} <span>Iniciar ataque<small>varredura: países e esquadras no alcance</small></span></button>
+        <button class="nva-btn sonar" id="nva-sonar">${ico('radar', 15)} <span>Sonar<small>só embarcações — navios, submarinos, esquadras</small></span></button>
+        <button class="nva-btn casa" id="nva-casa">${ico('home', 15)} <span>Mandar de volta pra casa<small>a frota navega até o porto e só então recolhe</small></span></button>
       </div>
     </div>
   </div>`;
@@ -293,41 +285,39 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
   const compacta = (liga) => painel.classList.toggle('compacta', liga);
 
   modal.querySelector('.nva-x').addEventListener('click', fechar);
-  modal.querySelector('#nva-mover').addEventListener('click', fechar);
   if (helpers.alvoIso) setTimeout(() => modal.querySelector('#nva-atacar')?.click(), 120);
 
-  modal.querySelector('#nva-casa').addEventListener('click', () => {
-    recolherFrota(e, fr.id);
-    e.temp_guerra = Math.max(0, (e.temp_guerra || 0) - 4);
-    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', texto: `Frota recolhida ao porto. Tropas de volta ao quartel e um grau a menos de tensão no mar.`, cor: '#22e0a0' }]);
-    helpers.atualizar?.();
+  // CASA: nada de sumir no clique — a frota NAVEGA até o porto (globo anima a rota)
+  // e é recolhida quando ATRACA. Fallback: sem helper, recolhe direto como antes.
+  const mandarPraCasa = () => {
+    if (helpers.voltarPraCasa) helpers.voltarPraCasa(fr);
+    else {
+      recolherFrota(e, fr.id);
+      e.temp_guerra = Math.max(0, (e.temp_guerra || 0) - 4);
+      helpers.atualizar?.();
+    }
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', texto: `Ordem dada: a frota levantou âncora rumo ao porto de origem.`, cor: '#35e0ff' }]);
     fechar();
-  });
+  };
+  modal.querySelector('#nva-casa').addEventListener('click', mandarPraCasa);
 
   modal.querySelector('#nva-atacar')?.addEventListener('click', () => varrer());
+  modal.querySelector('#nva-sonar')?.addEventListener('click', () => varrer('sonar'));
 
+  // O RADAR DETECTA PAÍSES, não listas de cidades. A varredura mostra frotas e as
+  // NAÇÕES no alcance (por proximidade REAL — a costa de Cuba a 3° aparece; as cidades
+  // do Brasil a 20° não vazam mais na lista). Clicar no país é que abre as cidades
+  // dele — carregando o território sob demanda, como o globo faz.
   function colherAlvos() {
     const eu = e.iso || 'USA';
     const alvos = [];
     for (const v of frotasDetectadas([fr], e.frotasInimigas || [])) alvos.push({ tipo: 'frota', d: v.distancia, frota: v.frota });
-    // estados costeiros no alcance (não-parceiros) agrupados por PAÍS
-    const estados = todosEstados()
-      .map((s) => ({ s, d: distGraus(s, fr) }))
-      .filter((x) => x.d <= tech.alcance && x.s.pais !== eu && x.s.lat != null)
-      .filter((x) => { const info = PAISES[x.s.pais]; return info && Number(e[info.rel] ?? 0) < 30; })
-      .sort((a, b) => a.d - b.d);
-    const porPais = new Map();
-    for (const x of estados) { if (!porPais.has(x.s.pais)) porPais.set(x.s.pais, []); porPais.get(x.s.pais).push(x); }
-    // Pra cada país alcançável: SEMPRE oferece "atacar o país inteiro (distribuído)" E as
-    // cidades. Antes só aparecia um OU outro — o dono pediu os dois juntos.
-    for (const [iso, lista] of porPais) {
-      const dMin = Math.min(...lista.map((x) => x.d));
-      const hostilPais = Number(e[PAISES[iso]?.rel] ?? 0) <= -20;
-      alvos.push({ tipo: 'pais', d: dMin, code: iso, nEstados: lista.length, hostil: hostilPais });
-      for (const x of lista.slice(0, 5)) alvos.push({ tipo: 'estado', d: x.d, estado: x.s, hostil: Number(e[PAISES[x.s.pais].rel] ?? 0) <= -20 });
+    // países no alcance por proximidade geográfica de verdade (litoral/capital),
+    // independente do catálogo de estados já ter sido carregado ou não
+    for (const p of (helpers.paisesProximos?.(fr) || [])) {
+      if (p.d > tech.alcance || p.parceiro) continue;
+      alvos.push({ tipo: 'pais', d: p.d, code: p.code, nome: p.nome, hostil: p.hostil });
     }
-    // país hostil próximo SEM estado costeiro detectado (ilha, sem território carregado)
-    if (alvo && alvo.hostil && !porPais.has(alvo.code)) alvos.push({ tipo: 'pais', d: alvo.d, code: alvo.code, nEstados: 0, hostil: true });
     return alvos.sort((a, b) => a.d - b.d);
   }
 
@@ -336,42 +326,79 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
     if (a.tipo === 'frota') {
       const nomeF = PAISES[a.frota.code]?.nome || a.frota.nome || a.frota.code;
       return `<button class="nvr-item frota" data-i="${i}" ${delay}>${ico('ship', 15)}
-        <span><b>Esquadra de ${esc(nomeF)}</b><small>poder naval ${poderNaval(a.frota)} · escolha as unidades e ataque</small></span>
+        <span><b>Esquadra de ${esc(nomeF)}</b><small>poder naval ${poderNaval(a.frota)} · engajar</small></span>
         <em class="nvr-d">${a.d.toFixed(0)}°</em></button>`;
     }
-    if (a.tipo === 'pais') {
-      const nome = PAISES[a.code]?.nome || a.code;
-      return `<button class="nvr-item pais ${a.hostil ? 'hostil' : 'neutro'}" data-i="${i}" ${delay}>${ico('swords', 15)}
-        <span><b>Atacar ${esc(nome)} inteiro</b><small>${a.nEstados ? `bombardeio distribuído pelos ${a.nEstados} estados costeiros` : 'assalto ao litoral'}</small></span>
-        <em class="nvr-d">${a.d.toFixed(0)}°</em></button>`;
-    }
-    const nomeP = PAISES[a.estado.pais]?.nome || a.estado.pais;
-    return `<button class="nvr-item cidade ${a.hostil ? 'hostil' : 'neutro'}" data-i="${i}" ${delay}>${ico('crosshair', 15)}
-      <span><b>${esc(a.estado.nome)}</b><small>alvo pontual · ${esc(nomeP)}${a.hostil ? ' · hostil' : ''}</small></span>
+    const nome = a.nome || PAISES[a.code]?.nome || a.code;
+    return `<button class="nvr-item pais ${a.hostil ? 'hostil' : 'neutro'}" data-i="${i}" ${delay}>${ico(a.hostil ? 'swords' : 'radar', 15)}
+      <span><b>${esc(nome)}</b><small>${a.hostil ? 'hostil · ' : ''}clique para abrir o país inteiro ou as cidades</small></span>
       <em class="nvr-d">${a.d.toFixed(0)}°</em></button>`;
+  }
+
+  // Sub-lista de um país detectado: PAÍS INTEIRO no topo + as cidades costeiras no
+  // alcance. O território carrega aqui, na hora — a Venezuela não precisa ter sido
+  // "visitada" antes pra virar alvo.
+  async function telaCidades(a) {
+    const corpo = modal.querySelector('#nva-corpo');
+    const nome = a.nome || PAISES[a.code]?.nome || a.code;
+    corpo.innerHTML = `<div class="nvr-scan"><div class="nvr-status">${ico('loader', 12)} ABRINDO CARTAS DE ${esc(nome).toUpperCase()}…</div></div>`;
+    await helpers.carregarPais?.(a.code);
+    if (!modal.isConnected) return;
+    const cidades = todosEstados()
+      .filter((s) => s.pais === a.code && s.lat != null)
+      .map((s) => ({ s, d: distGraus(s, fr) }))
+      .filter((x) => x.d <= tech.alcance)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 8);
+    const subAlvos = [
+      { tipo: 'pais', d: a.d, code: a.code, nome: a.nome, hostil: a.hostil },
+      ...cidades.map((x) => ({ tipo: 'estado', d: x.d, estado: x.s, hostil: a.hostil })),
+    ];
+    corpo.innerHTML = `<div class="nvr-scan">
+      <div class="nvr-status">${esc(nome).toUpperCase()} — PAÍS INTEIRO OU ALVO PONTUAL</div>
+      <div class="nvr-lista">
+        <button class="nvr-item pais ${a.hostil ? 'hostil' : 'neutro'}" data-i="0">${ico('swords', 15)}
+          <span><b>Atacar ${esc(nome)} inteiro</b><small>bombardeio distribuído pelo litoral</small></span>
+          <em class="nvr-d">${a.d.toFixed(0)}°</em></button>
+        ${cidades.map((x, i) => `<button class="nvr-item cidade ${a.hostil ? 'hostil' : 'neutro'}" data-i="${i + 1}">${ico('crosshair', 15)}
+          <span><b>${esc(x.s.nome)}</b><small>alvo pontual</small></span>
+          <em class="nvr-d">${x.d.toFixed(0)}°</em></button>`).join('')}
+        ${!cidades.length ? `<div class="nvr-vazio">Nenhuma cidade costeira no alcance — só o assalto ao litoral.</div>` : ''}
+      </div>
+      <button class="nvu-voltar nvr-voltar" id="nvr-volta-paises">${ico('arrow-left', 12)} voltar aos contatos</button>
+    </div>`;
+    corpo.querySelectorAll('.nvr-item').forEach((btn) => btn.addEventListener('click', () => {
+      const s = subAlvos[Number(btn.dataset.i)];
+      if (s) telaAtaque(s);
+    }));
+    corpo.querySelector('#nvr-volta-paises').addEventListener('click', () => varrer());
   }
 
   function menuPrincipal() {
     compacta(false);
     const corpo = modal.querySelector('#nva-corpo');
     corpo.innerHTML = `<div class="nva-acoes">
-      <button class="nva-btn mover" id="nva-mover2">${ico('move', 15)} <span>Reposicionar<small>arraste o pino no globo</small></span></button>
-      <button class="nva-btn atacar" id="nva-atacar2">${ico('crosshair', 15)} <span>Iniciar ataque<small>varredura de radar</small></span></button>
-      <button class="nva-btn casa" id="nva-casa2">${ico('home', 15)} <span>Voltar pra casa<small>libera as tropas</small></span></button>
+      <button class="nva-btn atacar" id="nva-atacar2">${ico('crosshair', 15)} <span>Iniciar ataque<small>varredura: países e esquadras</small></span></button>
+      <button class="nva-btn sonar" id="nva-sonar2">${ico('radar', 15)} <span>Sonar<small>só embarcações</small></span></button>
+      <button class="nva-btn casa" id="nva-casa2">${ico('home', 15)} <span>Voltar pra casa<small>navega até o porto</small></span></button>
     </div>`;
-    corpo.querySelector('#nva-mover2').addEventListener('click', fechar);
     corpo.querySelector('#nva-atacar2').addEventListener('click', () => varrer());
-    corpo.querySelector('#nva-casa2').addEventListener('click', () => { recolherFrota(e, fr.id); helpers.atualizar?.(); fechar(); });
+    corpo.querySelector('#nva-sonar2').addEventListener('click', () => varrer('sonar'));
+    corpo.querySelector('#nva-casa2').addEventListener('click', mandarPraCasa);
   }
 
-  function varrer() {
+  // modo 'ataque' (default): países + esquadras no alcance. modo 'sonar': SÓ embarcações
+  // — a escuta do mar. Submarino furtivo é a condição especial: só aparece se a sua
+  // detecção vencer a furtividade dele (regra de frotasDetectadas); senão, nem no sonar.
+  function varrer(modo = 'ataque') {
     compacta(true);
-    helpers.ondaRadar?.({ lat: fr.lat, lng: fr.lng }, { cor: 0x35e0ff, max: 40 });
+    tocarEfeito('radar');   // o som da varredura — o radar girando sobre o mar
+    helpers.ondaRadar?.({ lat: fr.lat, lng: fr.lng }, { cor: modo === 'sonar' ? 0x22e0a0 : 0x35e0ff, max: 40 });
     const corpo = modal.querySelector('#nva-corpo');
-    const alvos = colherAlvos();
+    const alvos = modo === 'sonar' ? colherAlvos().filter((a) => a.tipo === 'frota') : colherAlvos();
     corpo.innerHTML = `<div class="nvr-scan">
       <div class="nvr-radar"><i class="nvr-anel"></i><i class="nvr-anel a2"></i><i class="nvr-sweep"></i></div>
-      <div class="nvr-status" id="nvr-status">VARRENDO O MAR…</div>
+      <div class="nvr-status" id="nvr-status">${modo === 'sonar' ? 'SONAR ATIVO — ESCUTANDO O MAR…' : 'VARRENDO O MAR…'}</div>
       <div class="nvr-lista">${alvos.map((a, i) => linhaAlvo(a, i)).join('')}</div>
       <button class="nvu-voltar nvr-voltar" id="nvr-menu">${ico('arrow-left', 12)} voltar</button>
     </div>`;
@@ -382,16 +409,20 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
       radar?.classList.add('fim');
       if (alvos.length) { if (st) st.textContent = `${alvos.length} CONTATO${alvos.length > 1 ? 'S' : ''} — ESCOLHA O ALVO`; }
       else {
-        if (st) st.textContent = 'VARREDURA CONCLUÍDA';
+        if (st) st.textContent = modo === 'sonar' ? 'SONAR LIMPO' : 'VARREDURA CONCLUÍDA';
         modal.querySelector('.nvr-scan')?.insertAdjacentHTML('beforeend',
-          `<div class="nvr-vazio">Mar vazio no alcance. Aproxime a frota e varra de novo.</div>
+          `<div class="nvr-vazio">${modo === 'sonar'
+            ? `Nenhuma embarcação no alcance de escuta (detecção ${tech.deteccao}). Submarinos furtivos podem estar aí — sem detecção forte, o sonar não os pega.`
+            : 'Mar vazio no alcance. Aproxime a frota e varra de novo.'}</div>
            <button class="nvr-acao" id="nvr-refazer">${ico('radar', 13)} VARRER DE NOVO</button>`);
-        modal.querySelector('#nvr-refazer')?.addEventListener('click', () => varrer());
+        modal.querySelector('#nvr-refazer')?.addEventListener('click', () => varrer(modo));
       }
     }, 1500);
     corpo.querySelectorAll('.nvr-item').forEach((btn) => btn.addEventListener('click', () => {
       const a = alvos[Number(btn.dataset.i)];
-      if (a) telaAtaque(a);
+      if (!a) return;
+      if (a.tipo === 'pais') telaCidades(a);   // país detectado → abre país inteiro OU cidades
+      else telaAtaque(a);                       // frota → engaja direto
     }));
   }
 
@@ -404,7 +435,7 @@ export function abrirAcoesNaval(fr, jogo, helpers = {}) {
   function nomeAlvo(a) {
     if (a.tipo === 'frota') return `Esquadra de ${PAISES[a.frota.code]?.nome || a.frota.code}`;
     if (a.tipo === 'estado') return `${a.estado.nome} · ${PAISES[a.estado.pais]?.nome || a.estado.pais}`;
-    return `${PAISES[a.code]?.nome || a.code} (país inteiro)`;
+    return `${a.nome || PAISES[a.code]?.nome || a.code} (país inteiro)`;
   }
 
   function telaAtaque(a) {

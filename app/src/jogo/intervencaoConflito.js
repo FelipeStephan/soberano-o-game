@@ -8,6 +8,7 @@
 // chance honestas (a MESMA fórmula no preview e no dado). Puro, sem DOM.
 import { PAISES } from '../dados/paises.js';
 import { aplicarEfeitos } from './efeitos.js';
+import { rand } from './rng.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -54,13 +55,13 @@ export function tentarIntervencao(estado, conflitoId, frente) {
   c.mediacao.tentativas += 1;
 
   const chance = chanceTentativa(estado, c, frente);
-  const sucesso = Math.random() < chance;
+  const sucesso = rand() < chance;
   aplicarEfeitos(estado, { soft_power: -(frente === 'forcar' ? 6 : 4) });  // toda tentativa gasta prestígio
 
   if (sucesso) {
-    c.mediacao.pontos += Math.round(f.ganhoBase * (0.8 + Math.random() * 0.4));
+    c.mediacao.pontos += Math.round(f.ganhoBase * (0.8 + rand() * 0.4));
     c.intensidade = clamp((c.intensidade || 50) - 10, 5, 100);
-  } else if (Math.random() < f.riscoFalha) {
+  } else if (rand() < f.riscoFalha) {
     c.intensidade = clamp((c.intensidade || 50) + 8, 5, 100);   // fracasso feio: esquenta
   }
 
@@ -74,5 +75,5 @@ export function tentarIntervencao(estado, conflitoId, frente) {
   }
   return { terminou: false, sucesso, pontos: c.mediacao.pontos, meta: c.mediacao.meta, nomeA, nomeB,
     texto: sucesso ? `Diplomacia avança na guerra ${nomeA}×${nomeB}: ${c.mediacao.pontos}/${c.mediacao.meta} rumo ao cessar-fogo.`
-      : `Tentativa de paz entre ${nomeA} e ${nomeB} emperra${Math.random() < f.riscoFalha ? ' — e a tensão sobe.' : '.'}` };
+      : `Tentativa de paz entre ${nomeA} e ${nomeB} emperra${rand() < f.riscoFalha ? ' — e a tensão sobe.' : '.'}` };
 }

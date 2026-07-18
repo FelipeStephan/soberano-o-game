@@ -32,6 +32,7 @@ import { tickTransito, emTransito, iniciarTransito, comprimentoRota, frotasDetec
 import { temIntel } from '../jogo/espionagem.js';
 import { corEstado, linhaEstado, alturaEstado, tipEstado, montarPontos, tipPonto, estadosVisiveis, resumoDominios } from './tatico.js';
 import { chamarIA } from '../maquina/openrouter.js';
+import { tocarEfeito, tocarGuerraFundo, pararGuerraFundo, tocarMissil } from './audio.js';
 
 const TEX = 'https://cdn.jsdelivr.net/npm/three-globe/example/img';
 const centro = (f) => ({ lat: Number(f?.properties?.LABEL_Y ?? 0), lng: Number(f?.properties?.LABEL_X ?? 0) });
@@ -224,6 +225,7 @@ export async function montarGlobo(container, jogo, {
   // país é que abre as ações. Selecionar deixou de custar um modal.
   let selecionado = null;   // ISO do país em foco
   let cliqueNaEsfera = false;  // o último clique acertou o globo (país/estado/mar)? senão foi no vazio
+  let ultimoCliquePoligono = 0; // quando o onPolygonClick tratou o último clique (evita o onGlobeClick duplicar em terra)
 
   const globe = Globe({ extraRenderers: [new CSS2DRenderer()] })(container)
     .backgroundColor('rgba(0,0,0,0)')
@@ -241,6 +243,8 @@ export async function montarGlobo(container, jogo, {
     //   País    → 1º clique SELECIONA e o abre em estados; 2º clique agrega ações.
     .onPolygonClick(async (f) => {
       cliqueNaEsfera = true;                 // o raio acertou um país/estado — não é clique no vazio
+      ultimoCliquePoligono = Date.now();     // avisa o onGlobeClick: este clique JÁ foi tratado como terra
+      tocarEfeito('click', { volume: 0.8 }); // o canvas WebGL não passa pelo listener global de som
       if (ehEstado(f)) {
         const meu = f.properties.pais === (jogo.estado.iso || 'USA');
         if (teatro && !meu) onAlvoEstado?.(f);   // mapa armado + solo alheio = alvo
@@ -248,6 +252,10 @@ export async function montarGlobo(container, jogo, {
         return;
       }
       const code = iso(f);
+      // país EM GUERRA: ecoa o som de guerra (instância única que PARA ao trocar/deselecionar);
+      // país em paz: silencia o eco anterior.
+      if ((jogo.estado.emGuerra || []).includes(code)) tocarGuerraFundo();
+      else pararGuerraFundo();
       if (selecionado !== code) {
         selecionado = code;
         desenharLinha(f, 'foco');
@@ -280,7 +288,23 @@ export async function montarGlobo(container, jogo, {
       cliqueNaEsfera = true;                 // avisa o handler de fundo que o raio ACERTOU o globo
       // BOTÃO DIREITO no mar NÃO posiciona frota — ele fecha janelas (ver fecharTopo abaixo).
       if (ev && ev.button === 2) return;
-      if (teatro) { onAlvoMar?.(c); return; }
+      if (teatro) {
+        // POSIÇÃO NAVAL É SÓ NO MAR. O globe.gl dispara onGlobeClick mesmo quando o
+        // clique acertou um país por cima — sem este teste, clicar na Venezuela abria
+        // o modal de frota em pleno continente. Terra: deixa o onPolygonClick cuidar
+        // (selecionar/abrir estados); se ele não disparou neste clique, seleciona aqui.
+        const solo = paisDoPonto(c.lat, c.lng);
+        if (solo === null) { tocarEfeito('click', { volume: 0.8 }); onAlvoMar?.(c); return; }
+        setTimeout(() => {
+          if (Date.now() - ultimoCliquePoligono < 300) return;   // o polígono já tratou
+          const f = features.find((x) => iso(x) === solo);
+          if (f && selecionado !== solo) {
+            selecionado = solo; desenharLinha(f, 'foco'); focar(f); atualizar(); onPaisSelecionado?.(f);
+            carregarPais(solo).then(() => { if (selecionado === solo) pintarCamada(); });
+          }
+        }, 0);
+        return;
+      }
       if (selecionado) limparSelecao();
     })
     // RADAR DE CONFLITO — anéis que se propagam do país e ficam enquanto durar a
@@ -474,6 +498,30 @@ export async function montarGlobo(container, jogo, {
     aoChegarFrota.set(fr.id || fr, () => { onFrotaMovida?.(fr); aoChegar?.(); });
   }
 
+  // VOLTAR PRA CASA COM CERIMÔNIA: a frota NAVEGA de volta à costa do país (rota por
+  // água, esteira desenhada) e SÓ ao atracar é recolhida — nada de sumir no clique.
+  // Sem limite de alcance: voltar pra casa nunca deixa a esquadra à deriva.
+  function voltarFrotaPraCasa(fr) {
+    const e = jogo.estado;
+    const atracar = () => {
+      recolherFrota(e, fr.id);
+      e.temp_guerra = Math.max(0, (e.temp_guerra || 0) - 4);
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: '#22e0a0',
+        texto: 'A frota atracou em casa. Tropas de volta ao quartel e um grau a menos de tensão no mar.' }]);
+      atualizar();
+    };
+    const casa = ondeEsta(e.iso || 'USA');
+    if (!casa) { atracar(); return; }
+    const origem = { lat: fr.lat, lng: fr.lng };
+    const destino = empurrarParaCosta({ lat: casa.lat, lng: casa.lng }, origem);
+    const marinha = rotaMaritima(origem, destino);
+    const rota = (marinha && marinha.length >= 2) ? marinha : [origem, destino];
+    iniciarTransito(fr, rota[rota.length - 1], Date.now(), rota);
+    desenharLinha(rota[rota.length - 1], 'foco', 9000, origem);
+    aoChegarFrota.set(fr.id || fr, atracar);
+    atualizar();
+  }
+
   // Liga o arrasto num pino de frota. CLIQUE abre as ações; ARRASTAR DESENHA A ROTA:
   // a trilha do cursor vira waypoints (só sobre ÁGUA), mostrada ao vivo em cyan; ao
   // SOLTAR, o navio navega por ela. Arrasto reto (sem waypoints) cai na rota automática.
@@ -579,13 +627,22 @@ export async function montarGlobo(container, jogo, {
   function paisesProximos(fr) {
     const eu = jogo.estado.iso || 'USA';
     const out = [];
-    for (const [code, info] of Object.entries(PAISES)) {
-      if (code === eu) continue;
-      const c = ondeEsta(code); if (!c) continue;
+    const vistos = new Set();
+    // O MUNDO INTEIRO, não o catálogo: antes iterávamos só as 24 nações de PAISES e
+    // Cuba/Jamaica/Trinidad ficavam INVISÍVEIS pro radar mesmo coladas na frota. As
+    // features do geojson têm todos os países com LABEL_X/Y — a relação de quem não
+    // está no catálogo é neutra (0), como chaveRelacao já assume.
+    for (const f of features) {
+      const code = iso(f);
+      if (!code || code === eu || vistos.has(code)) continue;
+      vistos.add(code);
+      const c = centro(f); if (c?.lat == null) continue;
       const d = Math.hypot(c.lat - fr.lat, (c.lng - fr.lng) * 0.7);
       if (d > 26) continue;
-      const rel = Number(jogo.estado[info.rel] ?? 0);
-      out.push({ code, nome: info.nome, d, rel, hostil: rel <= -20, parceiro: rel >= 30 });
+      const info = PAISES[code];
+      const rel = info ? Number(jogo.estado[info.rel] ?? 0) : Number(jogo.estado[`rel_${code.toLowerCase()}`] ?? 0);
+      // nomePais recebe a FEATURE (não o código) — é ela que tem NAME_PT/NAME do geojson
+      out.push({ code, nome: info?.nome || nomePais(f), d, rel, hostil: rel <= -20, parceiro: rel >= 30 });
     }
     return out.sort((a, b) => a.d - b.d);
   }
@@ -610,7 +667,7 @@ export async function montarGlobo(container, jogo, {
   // mirando aquele país (contexto de ação direta, sem o jogador ter que procurar o alvo).
   function onFrotaClick(fr, ctx = {}) {
     abrirAcoesNaval(fr, jogo, {
-      paisesProximos, ondaRadar, atualizar, ondeEsta, alvoIso: ctx.alvoIso || null,
+      paisesProximos, ondaRadar, atualizar, ondeEsta, carregarPais, voltarPraCasa: voltarFrotaPraCasa, alvoIso: ctx.alvoIso || null,
       // ancoragem no globo + animação de mísseis pro ataque sem popup
       telaDe, salvaMisseis, impacto, balao, desenharLinha,
       // engajar uma frota inimiga a partir do painel usa o MESMO fluxo do clique no pino
@@ -777,10 +834,13 @@ export async function montarGlobo(container, jogo, {
   // ── SALVA DE MÍSSEIS ───────────────────────────────────────────────
   // Traçantes finos e rápidos com cauda que se apaga. É o "tiro" que faltava:
   // o jogador precisa VER a violência saindo do ponto de lançamento.
-  function salvaMisseis(alvo, n = 6, origem = null) {
+  function salvaMisseis(alvo, n = 6, origem = null, { som = true } = {}) {
     const eu = origem || ondeEsta(jogadorIso());
     const c = alvo?.properties ? centro(alvo) : alvo;
     if (!eu || !c) return;
+    // Som SÓ quando o disparo envolve o jogador (sai do meu país ou vem contra mim).
+    // Combate NPC×NPC anima no mapa mas fica MUDO — o dono não quer ouvir guerra alheia.
+    if (som) tocarMissil(0.42);
     for (let i = 0; i < n; i += 1) {
       // dispersão: cada míssil sai com um desvio próprio, não é um trem de brinquedo
       const desvio = (Math.random() - 0.5) * 6;
@@ -1098,7 +1158,10 @@ export async function montarGlobo(container, jogo, {
 
   const ctrl = globe.controls();
   ctrl.autoRotate = true; ctrl.autoRotateSpeed = 0.22;
-  ctrl.enableZoom = true; ctrl.minDistance = 170; ctrl.maxDistance = 520;
+  // minDistance 170→112: o dono não conseguia chegar perto de país pequeno pra ver as
+  // cidades. 112 aproxima bem sem atravessar o globo nem quebrar os marcadores HTML.
+  ctrl.enableZoom = true; ctrl.minDistance = 112; ctrl.maxDistance = 520;
+  ctrl.zoomSpeed = 1.4;
   // ROTAÇÃO como TOGGLE: antes o globo girava sozinho e não dava pra TRAVAR parado.
   // Agora um botão liga/desliga. Em modo "girar", pausa enquanto o mouse está em cima
   // (pra não brigar com quem está mirando); em modo "parado", fica travado de vez.
@@ -1968,6 +2031,7 @@ export async function montarGlobo(container, jogo, {
   }
   function limparSelecao() {
     selecionado = null;
+    pararGuerraFundo();   // deselecionou → o eco de guerra silencia
     atualizar();
   }
 
@@ -1996,7 +2060,8 @@ export async function montarGlobo(container, jogo, {
     let alt = 1.6;
     if (f?.geometry) {
       const span = extensaoGraus(f);
-      if (span != null) alt = Math.max(0.5, Math.min(2.2, 0.46 + span * 0.029));
+      // piso 0.5→0.26: país pequeno (Israel, Cuba) agora enche a tela ao focar.
+      if (span != null) alt = Math.max(0.26, Math.min(2.2, 0.32 + span * 0.031));
     }
     globe.pointOfView({ lat: c.lat, lng: c.lng, altitude: alt }, 900);
   }

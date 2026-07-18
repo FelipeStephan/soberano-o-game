@@ -46,9 +46,50 @@ const PA_GUERRA = 2;
 // os despachos chegam com intervalo de noticiário, e a tensão acumula.
 const DUR_VOO = 58000;
 
+// ── SUSPENSE DA OFENSIVA (roda DURANTE o preparo de N meses) ───────────
+// O dono: "inicio o ataque, espero 3 meses na fila e não vejo animação nenhuma — só
+// o resultado". Agora, ao lançar, o front ganha vida: ondas de mísseis/esquadrilhas
+// no globo + boletins subindo no feed, esticados pelo tempo real da operação. Termina
+// pouco antes de a operação amadurecer (o resultado tem a própria cena). É autolimpante.
+const BEAT_MS_SUSPENSE = 30000;   // uma batida do mundo = 30s (BEAT_S em tempoReal.js)
+const FASES_OFENSIVA = [
+  'Colunas blindadas rompem a fronteira e avançam em cunha.',
+  'A aviação estabelece superioridade aérea sobre o teatro.',
+  'Artilharia e mísseis de cruzeiro amolecem as defesas.',
+  'Fuzileiros desembarcam e firmam a cabeça de praia.',
+  'Inteligência confirma os alvos prioritários no interior.',
+  'Logística sustenta o avanço — combustível e munição na linha.',
+];
+function iniciarSuspenseOfensiva(jogo, feature, origem, deploy, totalBeats, alvoNome) {
+  const g = window.__globo;
+  if (!g || !feature) return;
+  const durMs = Math.max(12000, (totalBeats || 2) * BEAT_MS_SUSPENSE - 4000);
+  g.focar?.(feature);
+  const disparar = () => {
+    if (!window.__globo) return;
+    g.desenharLinha?.(feature, 'ataque', 9000, origem);
+    const nMis = deploy?.misseis ? Math.min(6, Math.ceil(deploy.misseis / 60)) : 3;
+    g.salvaMisseis?.(feature, nMis, origem);   // som toca (ofensiva DO jogador)
+    if (deploy?.cacas || deploy?.bombardeiros) g.lancarEsquadrilha?.(feature, 'ataque', origem);
+    if (deploy?.navios) g.lancarEsquadrilha?.(feature, 'naval', origem);
+    if (deploy?.submarinos) g.lancarEsquadrilha?.(feature, 'submarino', origem);
+  };
+  disparar();
+  jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Estado-Maior', cor: '#ff8c42',
+    texto: `Ofensiva contra ${alvoNome || 'o alvo'} EM CURSO — preparo estimado de ${totalBeats} ${totalBeats > 1 ? 'meses' : 'mês'}. O front reporta a cada avanço.` }]);
+  let i = 0;
+  const t = setInterval(() => {
+    if (!window.__globo) { clearInterval(t); return; }
+    disparar();
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Front', cor: '#ffb020', texto: FASES_OFENSIVA[i % FASES_OFENSIVA.length] }]);
+    i += 1;
+  }, 8000);
+  setTimeout(() => clearInterval(t), durMs);
+}
+
 export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {}) {
   const av = avaliarGuerra(jogo.estado, feature);
-  const semPA = jogo.estado.pontos_acao < PA_GUERRA;
+  const semPA = false;   // PA aposentado — nunca bloqueia a ofensiva
   let deploy = { ...av.sugestao };
 
   const disponiveis = UNIDADES.filter((u) => (jogo.estado.forcas?.[u.id] || 0) > 0);
@@ -387,9 +428,6 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
   });
 
   modal.querySelector('#gp-lancar')?.addEventListener('click', () => {
-    if ((jogo.estado.pontos_acao || 0) < PA_GUERRA) {
-      const e = modal.querySelector('#gp-erro'); e.style.display = ''; e.innerHTML = `${ico('ban', 14)} Sem pontos de ação.`; return;
-    }
     const custoFinal = round2(custoDeploy(deploy) * (1 - ponto.desconto));
     // OFENSIVA COM TEMPO: não resolve na hora — vira uma OPERAÇÃO que se monta em N batidas.
     // O alvo pode detectar e reforçar; a batalha resolve quando o preparo amadurece (motor).
@@ -403,10 +441,13 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
     if (r.falha) {
       const e = modal.querySelector('#gp-erro'); e.style.display = ''; e.innerHTML = `${ico('ban', 14)} ${esc(r.falha)}`; return;
     }
-    jogo.estado.pontos_acao -= PA_GUERRA;
     onLancar?.({ op: r.op, alvoEstado: null, duracaoTotal: r.op.total });
     onFim?.();   // atualiza HUD (caixa/forças debitados)
     fechar();
+    // SUSPENSE: a ofensiva não é mais um número silencioso na fila. Assim que lança,
+    // o front ganha vida — mísseis, esquadrilhas e boletins subindo ao longo dos
+    // "meses" de preparo, até o resultado chegar quando a operação amadurece (motor).
+    iniciarSuspenseOfensiva(jogo, feature, ponto.coord || origemCasa || null, deploy, r.op.total, av.nome);
   });
 
   // ── A CINEMÁTICA ────────────────────────────────────────────────────

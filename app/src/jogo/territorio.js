@@ -360,7 +360,9 @@ export function semearGuarnicoes(estado, { fracao = 0.55 } = {}) {
 //   • capital   → concentra na capital e no coração do país
 //   • fronteira → mais tropa perto de quem você está em guerra (defesa de verdade)
 // Retorna quanto moveu e pra quantos estados — pra UI mostrar o resultado.
-export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null, frotasInimigas = null, conflitos = null } = {}) {
+// `fracao` (0..1): quanto da reserva sai do quartel. A postura de ATAQUE usa 0.5 —
+// cobre a fronteira mas SEGURA metade para a invasão e as posições navais.
+export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null, frotasInimigas = null, conflitos = null, fracao = 1 } = {}) {
   const eu = estado.iso || 'USA';
   const meus = estadosDe(eu);
   if (!meus.length) return { ok: false, motivo: 'Este país não tem estados mapeados.' };
@@ -404,8 +406,9 @@ export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null, fr
   estado.guarnicoes = estado.guarnicoes || {};
   const movido = {};
   let alcancou = new Set();
-  for (const [u, q] of Object.entries(livre)) {
-    if (u === 'ogivas' || (q || 0) <= 0) continue;
+  for (const [u, qTot] of Object.entries(livre)) {
+    const q = Math.floor((qTot || 0) * Math.max(0, Math.min(1, fracao)));
+    if (u === 'ogivas' || q <= 0) continue;
     let resto = q;
     for (const { e, w } of pesos) {
       const n = Math.floor(q * (w / somaW));

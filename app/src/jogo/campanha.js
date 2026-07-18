@@ -25,6 +25,7 @@ import { PAISES } from '../dados/paises.js';
 import { UNIDADES, poderDeploy, custoDeploy } from '../dados/forcas.js';
 import { reacaoDeBloco } from '../dados/blocos.js';
 import { aplicarEfeitos } from './efeitos.js';
+import { combustivelDaGuerra } from './guerra.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -151,13 +152,17 @@ export function aplicarCampanha(estado, plano, isoAtacante) {
 // local resolve o combate (defensor vale 1,6× — ver territorio.js), o território
 // muda de dono se cair, a relação despenca, o bloco do alvo reage, o povo opina, e
 // a força enviada volta menor do que foi.
-export function resolverEnvio(estado, idEstado, isoAlvo, deploy) {
+export function resolverEnvio(estado, idEstado, isoAlvo, deploy, { resgate = false } = {}) {
   const poder = poderDeploy(deploy);
   if (poder <= 0) return { falha: 'Nenhuma força designada.' };
 
-  const custo = custoDeploy(deploy);
+  // CUSTO = transporte (logística) + COMBUSTÍVEL (petróleo escalado pelo Brent). Financiar
+  // guerra é caro; retomar também. O componente de petróleo é o mesmo motor da ofensiva.
+  const custoLog = custoDeploy(deploy);
+  const comb = combustivelDaGuerra(estado, deploy, custoLog);
+  const custo = round2(custoLog + (comb.custoExtra || 0));
   if (custo > estado.tesouro) {
-    return { falha: `Sem caixa: o transporte custa ${custo} tri e você tem ${round2(estado.tesouro)} tri.` };
+    return { falha: `Sem caixa: a operação custa ${custo} tri (transporte + combustível) e você tem ${round2(estado.tesouro)} tri.` };
   }
   estado.tesouro = round2(estado.tesouro - custo);
 
@@ -169,6 +174,12 @@ export function resolverEnvio(estado, idEstado, isoAlvo, deploy) {
   const res = resolverAtaqueAoEstado(estado, idEstado, poder);
   aplicarAtaqueAoEstado(estado, res, eu);
   const tomou = !res.segurou;
+  // RESGATE: retomei território que já era meu por nascimento → volta à posse IMPLÍCITA
+  // (apaga a exceção em donoEstado) e limpa o conflito, em vez de gravar "dono = eu".
+  if (resgate && tomou && (idEstado.split('-')[0] === eu)) {
+    if (estado.donoEstado) delete estado.donoEstado[idEstado];
+    if (estado.conflitosEstado) delete estado.conflitosEstado[idEstado];
+  }
 
   // 2. AS BAIXAS — só na força enviada, proporcional ao que o defensor cobrou
   const perdas = [];
@@ -206,21 +217,34 @@ export function resolverEnvio(estado, idEstado, isoAlvo, deploy) {
     estado[k] = clamp(antes + (jaEmGuerra ? -6 : -14), -100, 100);
     reacaoBloco.push({ chave: k, delta: estado[k] - antes });
   }
-  const efeitos = {
-    [relKey]: jaEmGuerra ? -18 : -40,
-    temp_guerra: jaEmGuerra ? 8 : 20,
-    soft_power: jaEmGuerra ? -4 : -11,
-    // a opinião pública premia a vitória e pune a aventura fracassada
-    aprovacao: tomou ? 5 : -9,
-    poder_militar: tomou ? 0 : -4,
-  };
+  // RESGATE do próprio território não é "aventura imperial": a opinião pública APOIA
+  // quem recupera o que é seu, e o custo diplomático é bem menor (você já está em guerra
+  // com o ocupante). Retomar com êxito é vitória popular; falhar dói mas não humilha.
+  const efeitos = resgate
+    ? {
+      [relKey]: -6,
+      temp_guerra: tomou ? -6 : 6,
+      aprovacao: tomou ? 10 : -6,
+      estabilidade: tomou ? 4 : -3,
+    }
+    : {
+      [relKey]: jaEmGuerra ? -18 : -40,
+      temp_guerra: jaEmGuerra ? 8 : 20,
+      soft_power: jaEmGuerra ? -4 : -11,
+      // a opinião pública premia a vitória e pune a aventura fracassada
+      aprovacao: tomou ? 5 : -9,
+      poder_militar: tomou ? 0 : -4,
+    };
   const mudancas = aplicarEfeitos(estado, efeitos);
 
   return {
-    res, tomou, custo, poder, perdas, mudancas, reacaoBloco, bloco,
-    jaEmGuerra, idEstado, isoAlvo,
+    res, tomou, custo, custoLog, custoComb: comb.custoExtra || 0, poder, perdas, mudancas, reacaoBloco, bloco,
+    jaEmGuerra, resgate, idEstado, isoAlvo,
     nomeEstado: alvo?.nome || idEstado,
-    manchete: mancheteEnvio(estado, alvo?.nome || idEstado, isoAlvo, tomou, jaEmGuerra),
+    manchete: resgate
+      ? (tomou ? `Forças de ${PAISES[eu]?.nome || eu} RETOMAM ${alvo?.nome || idEstado} das mãos de ${PAISES[isoAlvo]?.nome || isoAlvo}.`
+        : `A tentativa de retomar ${alvo?.nome || idEstado} foi repelida — ${PAISES[isoAlvo]?.nome || isoAlvo} segura o território.`)
+      : mancheteEnvio(estado, alvo?.nome || idEstado, isoAlvo, tomou, jaEmGuerra),
   };
 }
 

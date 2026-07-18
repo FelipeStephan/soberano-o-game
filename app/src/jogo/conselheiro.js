@@ -107,7 +107,7 @@ Uma frase sua pesa. Português brasileiro. Público 16+: pode ser cru, nunca inf
   const user = `SITUAÇÃO DO GOVERNO — turno ${estado.turno ?? '?'}
 Medidores: ${linha(MEDIDORES)}
 Capacidades: ${linha(CAPACIDADES)}
-Caixa (Tesouro, US$ tri): ${(estado.tesouro || 0).toFixed(2)} · PIB: ${(estado.pib || 0).toFixed(1)} · Pontos de Ação disponíveis: ${estado.pontos_acao ?? 0}
+Caixa (Tesouro, US$ tri): ${(estado.tesouro || 0).toFixed(2)} · PIB: ${(estado.pib || 0).toFixed(1)}
 Guerras abertas: ${emGuerra}
 Ogivas: ${estado.ogivas ?? 0} · Territórios: ${estado.territorio ?? 1}
 Pior relação: ${rival ? `${rival.nome} (${pct(rival.valor)})` : '—'} · Melhor relação: ${parceiro ? `${parceiro.nome} (${pct(parceiro.valor)})` : '—'}
@@ -183,7 +183,7 @@ export function conselhoLocal(estado = {}) {
 
   // 4) DIPLOMACIA — se há um rival perigoso, avise; se há parceiro maduro, aproveite.
   if (rival && rival.valor <= -25) {
-    const a = primeiraViavel(['cupula', 'sancoes', 'espionar'], estado);
+    const a = primeiraViavel(['cupula', 'sancoes', 'vigilancia'], estado);
     s.push({
       peso: 50, urgencia: 'media',
       titulo: `Administrar a tensão ${comPais(rival.nome)}`,

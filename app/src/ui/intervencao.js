@@ -79,8 +79,10 @@ export function abrirIntervencao(dados, jogo, { onFim, globoCtrl, tr } = {}) {
         icone: '🕊️', categoria: 'Diplomacia', custo: op.custo, custoPA: op.custoPA || 1, tempo: op.tempo, prob: 1,
         _conflitoId: c.id, _frente: op.frente,
       };
-      const r = tr?.enfileirar(acao);
-      if (r && !r.ok) return;
+      // Sem fila não há ordem: falhar VISÍVEL em vez de fingir sucesso (o falso
+      // "ORDEM ENFILEIRADA" com tr ausente foi um bug real).
+      const r = tr ? tr.enfileirar(acao) : { ok: false, motivo: 'fila de comando indisponível' };
+      if (!r.ok) return;
       modal.querySelector('.intv-painel').innerHTML = `<div class="intv-feito">
         <div class="intv-ok">${ico('clock', 30)}</div>
         <h2>ORDEM ENFILEIRADA</h2>

@@ -17,6 +17,7 @@ import { reservasControladas } from '../jogo/petroleo.js';
 import { abrirBases } from './bases.js';
 import { abrirNuclear } from './nuclear.js';
 import { abrirAjuda } from './ajuda.js';
+import { montarControleAudio } from './audio.js';
 import { abrirCriseFiscal } from './fiscal.js';
 import { abrirReforco } from './reforco.js';
 import { abrirDistribuir } from './distribuir.js';
@@ -25,6 +26,7 @@ import { abrirPandemia } from './pandemia.js';
 import { abrirPaz } from './paz.js';
 import { nivelEsp } from '../jogo/espionagem.js';
 import { abrirEnvio } from './envio.js';
+import { donoDe as donoDeEstado } from '../jogo/territorio.js';
 import { abrirPosicaoNaval } from './naval.js';
 import { alvosDeAjuda } from '../jogo/ajuda.js';
 import { abrirGuerra, desfechoCarrossel } from './guerra.js';
@@ -59,7 +61,7 @@ import { montarGlobo, tensaoGlobal } from './globo.js';
 import { ligarOnline } from './online.js';
 import { escaramucaAleatoria, pulsoAoVivo } from '../jogo/mundoVivo.js';
 import { criarTempoReal } from './tempoReal.js';
-import { anunciarResultado } from './resultadoAcao.js';
+import { anunciarResultado, INVERTIDAS } from './resultadoAcao.js';
 import { reacoesSociais } from '../dados/opiniao.js';
 import { temChave } from '../config.js';
 import { agregarDeltas, mancheteDoTurno, despachosDoTurno, epicoDoTurno, fraseImpacto, veredito } from '../dados/dramaturgia.js';
@@ -129,7 +131,6 @@ export function iniciarJogo(container, jogo, opts = {}) {
         <div class="topo-sep"></div>
         <div class="stat" data-tip="O mês do seu mandato. O mundo corre em tempo real — o calendário anda mês a mês; a cada 12 meses o ano vira. Seu reinado termina quando o tempo (ou o povo) acabar." data-tip-t="Tempo no poder" data-tip-k="TEMPO REAL"><span class="rot">Período</span><span class="val"><span id="t-turno">${mesAnoDoJogo(1).label}</span></span></div>
         <div class="stat destaque"><span class="rot">Tesouro Nacional</span><span class="val" id="t-tesouro">–</span></div>
-        <div class="stat"><span class="rot">Pontos de Ação</span><span class="val" id="t-pa">–</span></div>
         <div class="topo-sep"></div>
         <div class="stat" ${tipAttr('Para onde o seu governo está indo, somando tudo o que você fez até aqui. É a sentença que a História vai escrever se você continuar neste caminho.', { t: 'Destino', k: 'TRAJETÓRIA DO REINADO' })}><span class="rot">Destino${q('Para onde o seu governo está indo, somando tudo o que você fez até aqui. É a sentença que a História vai escrever se você continuar neste caminho.', { t: 'Destino', k: 'TRAJETÓRIA DO REINADO' })}</span><span class="val" id="t-destino">–</span></div>
         <button class="stat stat-btn brent-stat" id="t-brent-stat"><span class="rot">${ico('fuel', 11)} Brent</span><span class="val"><span id="t-brent">–</span> <span class="brent-mov" id="t-brent-mov"></span> <span class="stat-seta">${ico('chevron-down', 13)}</span></span></button>
@@ -197,10 +198,12 @@ export function iniciarJogo(container, jogo, opts = {}) {
     </div>
   `;
 
+  // Controle de som no topo, junto das ações — o mesmo widget do menu.
+  container.querySelector('.topo-acoes').appendChild(montarControleAudio({ semDica: true }));
+
   const el = {
     turno: container.querySelector('#t-turno'),
     tesouro: container.querySelector('#t-tesouro'),
-    pa: container.querySelector('#t-pa'),
     badge: container.querySelector('#badge-modo'),
     hud: container.querySelector('#hud'),
     feed: container.querySelector('#feed-lista'),
@@ -219,6 +222,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // (ex.: o planejador de guerra NÃO mostra prognóstico determinístico — mata a emoção
   // e entrega informação demais contra humanos; ver AUDITORIA-ONLINE).
   jogo.ehOnline = !!(online && net);
+  // MUNDO ÚNICO (Etapa 1): o código da sala vira a SEED compartilhada — todo cliente
+  // rola os mesmos dados na mesma batida (ver motor.beatMundo + jogo/rng.js).
+  jogo._seedSala = (online && sala?.codigo) ? sala.codigo : null;
   let telefonia = null;   // linha direta entre presidentes (chamada de voz + DM)
   if (online && net) {
     onlineCtrl = ligarOnline(jogo, net, {
@@ -317,7 +323,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
       // 1) ANIMA o mapa quando é escaramuça/petróleo.
       if (p.tipo === 'escaramuca') {
         const de = ctrl.ondeEsta?.(p.de); const para = ctrl.ondeEsta?.(p.para);
-        if (de && para) { ctrl.desenharLinha?.(para, 'ataque', 7000, de); ctrl.salvaMisseis?.(para, 2, de); ctrl.balao?.(para, p.texto, 'aviso'); }
+        if (de && para) { ctrl.desenharLinha?.(para, 'ataque', 7000, de); ctrl.salvaMisseis?.(para, 2, de, { som: false }); ctrl.balao?.(para, p.texto, 'aviso'); }
       } else if (p.tipo === 'petroleo' && p.iso) {
         const c = ctrl.ondeEsta?.(p.iso); if (c) { ctrl.ondaRadar?.(c, { cor: 0xffb020, max: 55 }); ctrl.balao?.(c, p.texto, 'ruim'); }
       }
@@ -419,10 +425,19 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // monta o globo 3D
   montarGlobo(container.querySelector('#globo'), jogo, {
     onPaisClick: abrirPainelPais,
-    onEstadoClick: (f) => abrirReforco(f, jogo, {
-      globoCtrl,
-      onFim: () => { renderHud(); renderTopo(); },
-    }),
+    onEstadoClick: (f) => {
+      // TERRITÓRIO PERDIDO (era meu, o inimigo tomou): não é beco sem saída — abre o
+      // fluxo de RESGATE (enviar tropas pra retomar), com custo de petróleo+dinheiro.
+      const id = f.properties?.id;
+      const eu = jogo.estado.iso || 'USA';
+      const natural = (id || '').split('-')[0];
+      const dono = donoDeEstado(jogo.estado, id);
+      if (id && natural === eu && dono !== eu) {
+        abrirEnvio(f, jogo, { globoCtrl, resgate: true, onFim: () => { renderHud(); renderTopo(); renderFeed(); } });
+        return;
+      }
+      abrirReforco(f, jogo, { globoCtrl, onFim: () => { renderHud(); renderTopo(); } });
+    },
     // No Teatro, clicar em solo alheio designa alvo: abre o envio de tropas —
     // que é, na prática, o ato de guerra.
     onAlvoEstado: (f) => abrirEnvio(f, jogo, {
@@ -439,7 +454,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // Insígnia da SUA nação → distribuição automática de tropas pelos estados.
     onDistribuir: () => abrirDistribuir(jogo, { globoCtrl, onFim: () => { renderHud(); renderTopo(); } }),
     // Clicar num conflito/pandemia do Mundo Vivo → intervir (ajuda, mediação, pesquisa).
-    onIntervir: (dados) => abrirIntervencao(dados, jogo, { globoCtrl, onFim: () => { renderHud(); renderFeed(); renderTopo(); } }),
+    // BUG QUE ISTO CONSERTA: sem o `tr`, a mediação clicada PELO GLOBO nunca entrava
+    // na fila — a UI dizia "ORDEM ENFILEIRADA" e nada acontecia (falso positivo).
+    onIntervir: (dados) => abrirIntervencao(dados, jogo, { globoCtrl, tr, onFim: () => { renderHud(); renderFeed(); renderTopo(); } }),
     // ONLINE: país jogado por humano ganha ENTRAR EM CONTATO no dock (embaixo de DECIDIR).
     ehHumano: (iso) => !!onlineCtrl?.ehHumano(iso),
     onContato: (iso) => telefonia?.abrirContato(iso),
@@ -485,7 +502,6 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const turnoExibido = (jogo.ehOnline && Number.isFinite(jogo._periodoSala)) ? jogo._periodoSala : jogo.turno;
     el.turno.textContent = mesAnoDoJogo(turnoExibido).label;
     el.tesouro.textContent = dinheiro(jogo.estado.tesouro);
-    el.pa.textContent = jogo.estado.pontos_acao;
     // O cabeçalho estava com espaço ocioso — agora carrega o pulso do mundo:
     const dst = container.querySelector('#t-destino');
     if (dst) { dst.textContent = `${jogo.destino}`; dst.style.color = jogo.banda?.cor || 'var(--texto)'; }
@@ -544,6 +560,16 @@ export function iniciarJogo(container, jogo, opts = {}) {
       const val = VARS[chave]?.dinheiro ? (m.delta > 0 ? '+' : '') + m.delta.toFixed(2) : (m.delta > 0 ? '+' : '') + Math.round(m.delta);
       return `<span class="delta ${m.delta > 0 ? 'pos' : 'neg'}">${val}</span>`;
     };
+    // FLASH DE IMPACTO: quando a ação mexeu neste indicador, a linha inteira pulsa —
+    // verde se a mudança foi BOA, vermelho se foi RUIM (polaridade de INVERTIDAS:
+    // dívida/clima de guerra subindo é ruim). O renderHud recria os nós, então a
+    // animação CSS dispara sozinha a cada render que carrega a mudança.
+    const fl = (chave) => {
+      const m = mudancas.find((x) => x.chave === chave);
+      if (!m || !m.delta) return '';
+      const bom = INVERTIDAS.has(chave) ? m.delta < 0 : m.delta > 0;
+      return bom ? ' flash-bom' : ' flash-ruim';
+    };
 
     const b = jogo.banda;
     // O herói da HUD: número gigante, banda à direita, régua com os degraus das
@@ -583,7 +609,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
       <div class="bloco eco">
         <h3><i class="hx">03</i> Economia <i class="fio"></i><span class="tri">US$ trilhões</span></h3>
         <div class="grade eco-grade">
-          ${ECONOMIA.map((k) => `<div class="cel" ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'ECONOMIA', cor: 'ambar' })}><span class="rot">${VARS[k].rotulo}${q(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'ECONOMIA', cor: 'ambar' })}</span><span class="v">${valorFmt(k)}${dl(k)}</span></div>`).join('')}
+          ${ECONOMIA.map((k) => `<div class="cel${fl(k)}" ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'ECONOMIA', cor: 'ambar' })}><span class="rot">${VARS[k].rotulo}${q(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'ECONOMIA', cor: 'ambar' })}</span><span class="v">${valorFmt(k)}${dl(k)}</span></div>`).join('')}
         </div>
         <div class="fluxo">
           <span>Receita <b class="pos">${dinheiro(fx.receita)}</b></span>
@@ -633,7 +659,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
         <h3><i class="hx">05</i> Indicadores <i class="fio"></i></h3>
         ${MEDIDORES.map((k) => {
           const risco = riscoDe(k, jogo.estado[k]);
-          return `<div class="medidor ${risco ? 'perigo' : ''}">
+          return `<div class="medidor ${risco ? 'perigo' : ''}${fl(k)}">
             <div class="linha"><span ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'INDICADOR', cor: risco ? 'perigo' : '' })}><i class="med-chip" style="background:${VARS[k].cor};color:${VARS[k].cor}"></i>${VARS[k].rotulo}${VARS[k].dica ? q(VARS[k].dica, { t: VARS[k].rotulo, k: 'INDICADOR', cor: risco ? 'perigo' : '' }) : ''}${risco ? `<span class="med-alerta" data-risco="${k}" ${tipAttr(`${VARS[k].rotulo} está em zona de risco. Clique para ver o que isso ameaça — e o que ainda dá pra fazer.`, { t: 'Zona de risco', k: 'ALERTA', cor: 'perigo' })}>⚠️</span>` : ''} ${dl(k)}</span><span class="mono">${Math.round(jogo.estado[k])}</span></div>
             ${barra(jogo.estado[k], 0, 100, VARS[k].cor)}
           </div>`;
@@ -649,7 +675,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
             // mini-barra do progresso. É o que faz Indústria/Inteligência/Urânio "aparecerem"
             // como algo que se acompanha, e não texto perdido na grade.
             const cor = VARS[k].cor || '#8fb4ff';
-            return `<div class="cel cap-med" ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}>
+            return `<div class="cel cap-med${fl(k)}" ${tipAttr(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}>
               <span class="rot"><i class="med-chip" style="background:${cor};color:${cor}"></i>${VARS[k].rotulo}${q(VARS[k].dica || '', { t: VARS[k].rotulo, k: 'CAPACIDADE' })}</span>
               <span class="v" style="color:${cor}">${valorFmt(k)}${dl(k)}</span>
               ${barra(jogo.estado[k], 0, 100, cor)}
@@ -886,7 +912,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
       return `<button class="acao-chip investir" data-inv="${a.id}" ${ok ? '' : 'disabled'} data-tip="${esc(a.descricao)}">
         <div class="ac-top">${a.icone} <span class="ac-nome">${esc(a.nome)}</span></div>
         <div class="ac-desc">${esc(a.descricao)}</div>
-        <div class="ac-info"><span class="custo">você define o valor 💵</span><span data-tip="Esta ordem consome ${a.custoPA || 1} ponto(s) de ação. Você tem um número limitado por turno — gastou tudo, só resta executar o turno." data-tip-t="Custo em ações" data-tip-k="PONTOS DE AÇÃO">⚡${a.custoPA || 1}</span></div>
+        <div class="ac-info"><span class="custo">você define o valor 💵</span></div>
       </button>`;
     }
     const pode = jogo.podeEnfileirar(a.id);
@@ -1077,11 +1103,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
 
   // ── Painel de país (globo) ───────────────────────────────────────────
   function cardAcaoPais(a) {
-    const bloqueado = jogo.estado.pontos_acao < a.custoPA || jogo.estado.tesouro < a.custo || !cumpre(a.requer);
+    const bloqueado = jogo.estado.tesouro < a.custo || !cumpre(a.requer);
     return `<button class="pais-acao ${a.recomendada ? 'rec' : ''}" data-id="${a.id}" ${bloqueado ? 'disabled' : ''}>
       <div class="pa-top">${a.icone} <b>${esc(a.nome)}</b> ${a.recomendada ? '<span class="rec-selo">RECOMENDADO</span>' : ''}</div>
       <div class="pa-desc">${esc(a.descricao)}</div>
-      <div class="pa-info"><span>${a.custo > 0 ? dinheiro(a.custo) : 'grátis'}</span><span data-tip="Esta ordem consome ${a.custoPA} ponto(s) de ação. Você tem um número limitado por turno — gastou tudo, só resta executar o turno." data-tip-t="Custo em ações" data-tip-k="PONTOS DE AÇÃO">⚡${a.custoPA}</span><span class="prob ${a.prob < 0.7 ? 'risco' : ''}">${prob(a.prob)}</span></div>
+      <div class="pa-info"><span>${a.custo > 0 ? dinheiro(a.custo) : 'grátis'}</span><span class="prob ${a.prob < 0.7 ? 'risco' : ''}">${prob(a.prob)}</span></div>
     </button>`;
   }
 
@@ -1216,7 +1242,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
         ${onlineCtrl?.ehHumano(code) ? `<button class="pp-contato" id="pp-contato">${ico('phone', 15)} <span>ENTRAR EM CONTATO</span><i>msg ou ligação</i></button>` : ''}
         <button class="pp-guerra" id="pp-guerra">${ico('swords', 15)} <span>PLANEJAR OFENSIVA MILITAR</span></button>
         ${emGuerra ? `<button class="pp-paz" id="pp-paz">${ico('handshake', 16)} <span>NEGOCIAR SAÍDA DA GUERRA</span><i>em guerra</i></button>` : ''}
-        ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 15)} <span>ESPIONAR ESTE PAÍS</span><i>rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
+        ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 15)} <span>ESPIONAR ESTE PAÍS</span><i>US$ 40 bi · rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
         ${botaoBase}
         ${alvosDeAjuda(jogo.estado).some((a) => a.iso === code) ? `<button class="pp-ajuda" id="pp-ajuda">${ico('heart-handshake', 16)} <span>APOIAR NESTA GUERRA</span><i>em conflito</i></button>` : ''}
         ${(jogo.estado.ogivas > 0 && !souEu(code)) ? `<button class="pp-nuke" id="pp-nuke">${ico('radiation', 16)} <span>LANÇAMENTO NUCLEAR</span><i>${jogo.estado.ogivas} ogiva(s)</i></button>` : ''}
@@ -1561,7 +1587,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     try {
       const res = await jogo.passarTurno();
       ultimaRes = res;
-      renderHud(); renderFeed(); renderBadge(res.origem);
+      renderHud(res.mudancas || []); renderFeed(); renderBadge(res.origem);
       consumirBreakingDoTurno(res);
       cenaResultados(res);
     } catch (err) {
@@ -1650,7 +1676,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
           const de = g.ondeEsta?.(v.a); const para = g.ondeEsta?.(v.b);
           if (de && para) {
             g.desenharLinha?.(para, 'ataque', 8000, de);
-            if (v.novo) g.salvaMisseis?.(para, 3, de);
+            if (v.novo) g.salvaMisseis?.(para, 3, de, { som: false });   // conflito NPC×NPC: mudo
             g.balao?.(para, e.texto, 'ruim');
           }
         } else if (v.tipo === 'pacto') {

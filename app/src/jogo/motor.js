@@ -46,6 +46,7 @@ import { mancheteDaInvasao } from './agressao.js';
 import { VEICULO_POR_NOME, tomDaCobertura } from '../dados/veiculos.js';
 import { decairSimpatiaLista } from '../dados/imprensa.js';
 import { VARS } from './vars.js';
+import { rand, semear, seedDaSala } from './rng.js';
 
 const ERA_TURNO_MAX = 120; // agora cada batida é 1 MÊS → 120 meses = uma DÉCADA no poder
 function round2(n) { return Math.round(n * 100) / 100; }
@@ -141,7 +142,7 @@ export class Jogo {
   podeEnfileirar(acaoId) {
     const a = ACAO_POR_ID[acaoId];
     if (!a) return { ok: false, motivo: 'ação inexistente' };
-    if (this.estado.pontos_acao < a.custoPA) return { ok: false, motivo: 'sem pontos de ação' };
+    // PA aposentado: não bloqueia mais (a fila + o caixa governam o ritmo).
     if (this.estado.tesouro < this.custoDe(a)) return { ok: false, motivo: 'tesouro insuficiente' };
     if (!cumpreRequisito(a.requer, this.estado)) return { ok: false, motivo: 'requisito não atendido' };
     if ((a.recruta?.infantaria || a.forcas?.infantaria) && espacoSoldados(this.estado) <= 0) {
@@ -379,6 +380,10 @@ export class Jogo {
   // conta como um "turno" pro resto do sistema (fios, ids, era). Devolve o que mudou pra
   // a UI reagir (toasts, feed, fim de jogo).
   beatMundo() {
+    // MUNDO ÚNICO (Etapa 1): numa sala online, TODOS os clientes semeiam o dado igual
+    // por batida — hash(sala, turno). Quem re-simular o mesmo evento no mesmo mês chega
+    // ao MESMO resultado. Offline `_seedSala` é null e o fluxo segue imprevisível.
+    if (this._seedSala) semear(seedDaSala(this._seedSala, this.turno + 1));
     const petro = this._fecharPetroleo();
     for (const r of resolverPedidos(this.estado)) this._empilharFeed([{ tipo: 'sistema', handle: 'Aquisições', texto: r.texto, cor: r.ok ? '#22e0a0' : '#ff3b5c' }]);
     const economia = aplicarFluxo(this.estado);
@@ -408,6 +413,7 @@ export class Jogo {
     const ofensivas = processarOperacoes(this.estado);   // MINHAS ofensivas que amadureceram (a UI resolve)
     this.turno += 1;                 // uma batida = um "turno" pro resto do sistema
     this.estado.turno = this.turno;  // mantém estado.turno em sincronia (espionagem, frotas, pedidos leem daqui)
+    this.estado.pontos_acao = PA_POR_TURNO;   // PA aposentado: reabastece o pool infinito p/ telas que ainda decrementam
     // ESPIONAGEM: tenta vazar segredos dos países que você espiona (intel esfria sozinha).
     for (const vz of tickEspionagem(this.estado)) {
       this._empilharFeed([{ tipo: 'sistema', handle: '🕵️ Inteligência', cor: '#b98cff', texto: mancheteVazamento(this.estado, vz.alvo, vz.tipo) }]);
@@ -507,7 +513,7 @@ export class Jogo {
     //    contagem zera, o ataque acontece de verdade.
     for (const mob of est.mobilizacoes) {
       mob.restante -= 1;
-      if (!mob.detectado && Math.random() < chanceDeteccao(est, mob)) {
+      if (!mob.detectado && rand() < chanceDeteccao(est, mob)) {
         mob.detectado = true; mob.novoAviso = true;
         const alvoTxt = this._revelarAlvo(mob);
         est._toastsGlobo = est._toastsGlobo || [];
@@ -535,7 +541,7 @@ export class Jogo {
       // agressor. Fica gravado no mob (JSON puro) — a inteligência decide QUANDO revelar.
       const alvo = alvoProvavel(est, agressor.iso);
       if (alvo) { mob.alvoEstadoId = alvo.id; mob.alvoEstadoNome = alvo.nome; }
-      if (Math.random() < chanceDeteccao(est, mob)) {
+      if (rand() < chanceDeteccao(est, mob)) {
         mob.detectado = true; mob.novoAviso = true;
         const alvoTxt = this._revelarAlvo(mob);
         est._toastsGlobo = est._toastsGlobo || [];

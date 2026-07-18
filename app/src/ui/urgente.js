@@ -3,7 +3,8 @@
 import { sortearFlash } from '../dados/urgentes.js';
 import { aplicarEfeitos } from '../jogo/efeitos.js';
 import { aplicarPolitico } from '../jogo/politico.js';
-import { sirene, flashTela } from './efeitos.js';
+import { flashTela } from './efeitos.js';
+import { tocarEfeito } from './audio.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -15,16 +16,22 @@ let timerAgendado = null;
 // que devia ser uma interrupção rara e assustadora virou spam ignorável. Urgência
 // que acontece o tempo todo deixa de ser urgência.
 //
-// Agora 75–170s, e no MÁXIMO um por turno: o flash volta a ser um susto.
-const ATRASO_MIN = 75000;
-const ATRASO_VAR = 95000;
+// Agora 150–320s, no MÁXIMO um por turno E com 40% dos turnos SEM flash nenhum
+// (o dono pediu MENOS urgência ainda: susto raro é susto de verdade).
+const ATRASO_MIN = 150000;
+const ATRASO_VAR = 170000;
+const CHANCE_TURNO_QUIETO = 0.4;
 let flashNesteTurno = 0;
 let turnoDoFlash = -1;
 
 export function agendarFlash(jogo, aoResolver) {
   cancelarFlash();
   // Um por turno. Dois seguidos no mesmo turno é o que fazia parecer metralhadora.
-  if (turnoDoFlash !== jogo.turno) { turnoDoFlash = jogo.turno; flashNesteTurno = 0; }
+  if (turnoDoFlash !== jogo.turno) {
+    turnoDoFlash = jogo.turno;
+    // sorteia já na virada: turno quieto fica quieto até o fim (não re-sorteia a cada agendamento)
+    flashNesteTurno = Math.random() < CHANCE_TURNO_QUIETO ? 1 : 0;
+  }
   if (flashNesteTurno >= 1) return;
 
   const atraso = ATRASO_MIN + Math.random() * ATRASO_VAR;
@@ -46,7 +53,10 @@ export function cancelarFlash() {
 }
 
 function mostrarFlash(flash, jogo, aoResolver) {
-  sirene({ ruim: true });
+  // guarda a instância pra PARAR quando a ação for resolvida (o alarme não pode
+  // continuar tocando depois que o jogador decide).
+  const somAlarme = tocarEfeito('alarme', { volume: 0.5 });
+  const pararAlarme = () => { if (somAlarme) { try { somAlarme.pause(); somAlarme.currentTime = 0; } catch {} } };
   flashTela(true);
 
   const modal = document.createElement('div');
@@ -87,6 +97,7 @@ function mostrarFlash(flash, jogo, aoResolver) {
   function escolher(i) {
     if (acabou) return;
     acabou = true;
+    pararAlarme();   // decidiu (ou o tempo esgotou) → o alarme cala
     let efeitos; let politico = null; let nota;
     if (i === null) {
       efeitos = flash.efeitosPadrao || flash.opcoes[flash.padrao]?.efeitos || {};

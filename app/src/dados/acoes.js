@@ -73,8 +73,9 @@ export const ACOES = [
     efeitos: { seguranca: 16, poder_militar: 6 }, efeitos_falha: { seguranca: 2 }, politico: { autoridade: 3 } },
 
   // ── INTELIGÊNCIA / CIBERNÉTICA ──────────────────────────────────────
-  { id: 'espionar', categoria: 'Inteligência', icone: '🕵️', nome: 'Operação de Espionagem', custo: 0.02, custoPA: 1, prob: 0.8,
-    descricao: 'Roubar segredos de um rival.', efeitos: { inteligencia: 4, seguranca: 4 }, efeitos_falha: { seguranca: -2, risco_exposicao: 'medio' } },
+  // 'espionar' genérico REMOVIDO do catálogo (decisão de padronização): espionagem agora
+  // é UM fluxo só — o botão "ESPIONAR ESTE PAÍS" na carta do país (DECIDIR), direcionado,
+  // pago (US$ 40 bi) e que constrói a REDE naquele alvo. Dois botões confundiam.
   { id: 'sabotar', categoria: 'Inteligência', icone: '💥', nome: 'Sabotagem de Infraestrutura', custo: 0.05, custoPA: 1, prob: 0.6,
     descricao: 'Golpe cirúrgico — ou escândalo.', efeitos: { seguranca: 8, rel_china: -10 }, efeitos_falha: { soft_power: -10, rel_china: -15, risco_exposicao: 'alto' }, politico: { autoridade: 3 } },
   { id: 'aviao_espiao', categoria: 'Inteligência', icone: '🛩️', nome: 'Avião-espião (U-2/Global Hawk)', custo: 0.09, custoPA: 1, prob: 0.9,

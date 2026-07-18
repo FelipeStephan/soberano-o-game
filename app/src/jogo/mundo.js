@@ -4,8 +4,9 @@
 import { meusConquistados, guarnicao, forcaGuarnicao, estadoPorId } from './territorio.js';
 import { PAISES } from '../dados/paises.js';
 import { upkeepDe, garantirOcupacao } from './manutencao.js';
+import { rand } from './rng.js';
 
-const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const sorteioDe = (arr) => arr[Math.floor(rand() * arr.length)];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const nomePais = (iso) => PAISES[iso]?.nome || iso;
 
@@ -34,7 +35,7 @@ export function tickReconquista(estado) {
     // Guarnição forte: segura. Se havia revolta, ela recua e some.
     if (forca >= LIMIAR_SEGURA) {
       if (conf) {
-        conf.intensidade -= 25 + Math.round(Math.random() * 18);
+        conf.intensidade -= 25 + Math.round(rand() * 18);
         if (conf.intensidade <= 0) {
           delete estado.conflitosEstado[e.id];
           eventos.push({ tom: 'bom', texto: `Sua guarnição sufocou a revolta em ${e.nome}. O território está firme.` });
@@ -46,8 +47,8 @@ export function tickReconquista(estado) {
     // Guarnição fraca/zero: a milícia avança.
     if (!conf) {
       const chance = forca <= 0 ? 0.6 : 0.35;
-      if (Math.random() < chance) {
-        estado.conflitosEstado[e.id] = { por: natural, intensidade: 22 + Math.round(Math.random() * 20), turnos: 1 };
+      if (rand() < chance) {
+        estado.conflitosEstado[e.id] = { por: natural, intensidade: 22 + Math.round(rand() * 20), turnos: 1 };
         eventos.push({
           tom: 'aviso', novoConflito: true, estadoId: e.id, estadoNome: e.nome, por: natural, porNome: nomePais(natural),
           texto: `⚔ ${nomePais(natural)} tenta retomar ${e.nome}. Sem reforço, o território vai cair.`,
@@ -55,7 +56,7 @@ export function tickReconquista(estado) {
       }
     } else {
       conf.turnos = (conf.turnos || 0) + 1;
-      conf.intensidade += (forca <= 0 ? 22 : 12) + Math.round(Math.random() * 12);
+      conf.intensidade += (forca <= 0 ? 22 : 12) + Math.round(rand() * 12);
       if (conf.intensidade >= 100) {
         if (natural === e.id.split('-')[0]) delete estado.donoEstado[e.id];  // volta a ser implícito do dono
         else estado.donoEstado[e.id] = natural;
@@ -97,7 +98,7 @@ export function tickMundo(estado) {
       eventos.push({ tom: 'ruim', texto: `Sem caixa para manter ${c.nome}: a guarnição não foi paga e a insurgência acelera.` });
     }
     const antes = c.insurgencia;
-    c.insurgencia = Math.min(100, c.insurgencia + (pagou ? 4 : 10) + Math.round(Math.random() * 5));
+    c.insurgencia = Math.min(100, c.insurgencia + (pagou ? 4 : 10) + Math.round(rand() * 5));
     // GATILHO DE ANEXAÇÃO: só conta batida estável se pagou E a insurgência está baixa.
     oc.turnosEstavel = (c.insurgencia < 25 && oc.turnosSemPagar === 0) ? (oc.turnosEstavel || 0) + 1 : 0;
     const sobe = c.insurgencia - antes;
@@ -131,7 +132,7 @@ export function tickMundo(estado) {
   let mexeu = 0;
   for (const k of Object.keys(estado)) {
     if (!k.startsWith('rel_')) continue;
-    const d = Math.round(pressao + (Math.random() * 1.6 - 0.8));
+    const d = Math.round(pressao + (rand() * 1.6 - 0.8));
     if (!d) continue;
     estado[k] = clamp(estado[k] + d, -100, 100);
     mexeu += d;
@@ -141,8 +142,8 @@ export function tickMundo(estado) {
   else eventos.push({ tom: 'neutro', texto: '🌍 As chancelarias seguem mornas. Ninguém se aproxima, ninguém se afasta.' });
 
   // 4) Sopro ocasional de acontecimento global
-  if (Math.random() < 0.45) {
-    eventos.push({ tom: 'neutro', texto: rand([
+  if (rand() < 0.45) {
+    eventos.push({ tom: 'neutro', texto: sorteioDe([
       '📉 Commodities oscilam: petróleo e grãos sacodem os mercados globais.',
       '🌐 Cúpula internacional redesenha rotas comerciais sem nos consultar.',
       '🛢️ Um estreito estratégico volta a ser ponto de tensão naval.',

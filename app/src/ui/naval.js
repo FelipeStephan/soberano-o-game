@@ -264,7 +264,7 @@ export function abrirPosicaoNaval(coord, jogo, { onFim, globoCtrl } = {}) {
         const disp = it.querySelector('.env-disp');
         if (disp) disp.textContent = lib
           ? `${dmax.toLocaleString('pt-BR')} disponíveis · cabem ${capAvioes.toLocaleString('pt-BR')} (${carriers} × ${capPorCarrier})`
-          : (semCatapulta && carriers > 0 ? 'este porta-aviões só opera drones e helicópteros' : dmax > 0 ? 'requer porta-aviões na frota' : 'nenhum disponível');
+          : (semCatapulta && carriers > 0 ? '🔒 este porta-aviões só opera drones e helicópteros' : dmax > 0 ? '🔒 requer porta-aviões na frota — some um carrier à composição' : '🔒 nenhum disponível no quartel — compre no Mercado ou recolha tropas');
       });
       // FUZILEIROS: destravam com TRANSPORTE na frota (navios/carriers) até o teto de praças
       const capFuzileiros = naviosSel * FUZILEIROS_POR_NAVIO + carriers * FUZILEIROS_POR_CARRIER;
@@ -281,7 +281,7 @@ export function abrirPosicaoNaval(coord, jogo, { onFim, globoCtrl } = {}) {
         const disp = it.querySelector('.env-disp');
         if (disp) disp.textContent = lib
           ? `${dmax.toLocaleString('pt-BR')} disponíveis · transporte p/ ${capFuzileiros.toLocaleString('pt-BR')} fuzileiros`
-          : (dmax > 0 ? 'requer navios na frota (transporte)' : 'nenhum disponível');
+          : (dmax > 0 ? '🔒 requer navios ou porta-aviões na composição (transporte)' : '🔒 nenhum disponível no quartel — tropas espalhadas? recolha no Estado-Maior');
       });
       let n = 0;
       for (const s of modal.querySelectorAll('.nv-slider')) {

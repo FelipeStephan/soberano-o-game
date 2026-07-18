@@ -10,6 +10,7 @@
 // Guerra por petróleo tem um custo embutido que a maioria dos jogos esquece.
 import { PRECO_BASE, PETROLEO, ehPetroestado, ESTREITOS } from '../dados/petroleo.js';
 import { EMPRESAS_POR_PAIS } from '../dados/empresas.js';
+import { rand } from './rng.js';
 
 // Produção ORIGINAL de uma empresa (do catálogo, imutável). Serve de régua pra
 // medir o quanto ela cresceu por investimento — o objeto em jogo é uma cópia mutável.
@@ -129,7 +130,7 @@ export function tickPreco(estado) {
   }
 
   // 6) Ruído de mercado — o barril nunca fica parado
-  alvo += (Math.random() * 10 - 5);
+  alvo += (rand() * 10 - 5);
 
   // O preço não teleporta: converge ~35% ao alvo por turno (mercado tem inércia)
   const novo = clamp(round2(antes + (alvo - antes) * 0.35), 18, 240);

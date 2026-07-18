@@ -16,6 +16,7 @@
 //     névoa volta. Se você investe pesado e o alvo não se defende, vaza tudo até não sobrar
 //     segredo. Contra-espionagem é a defesa — blinda os SEUS segredos (crucial no online).
 import { PAISES } from '../dados/paises.js';
+import { rand } from './rng.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
@@ -90,7 +91,7 @@ export function tickEspionagem(estado) {
   for (const [alvo, f] of Object.entries(estado.espionagem || {})) {
     if ((f.nivel || 0) <= 0) continue;
     f.nivel = Math.max(0, f.nivel - 0.6);                       // a intel esfria sem sustento
-    if (Math.random() > chanceVazamento(estado, alvo)) continue;
+    if (rand() > chanceVazamento(estado, alvo)) continue;
     const disp = proximoVazamento(estado, alvo);
     if (!disp) continue;
     f.vazamentos[disp.tipo] = turno + disp.dur;                 // expira em `dur` batidas

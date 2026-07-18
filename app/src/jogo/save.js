@@ -1,3 +1,4 @@
+import { rand } from './rng.js';
 // ═══════════════════════════════════════════════════════════════════════
 // SAVE — persistência local, com a espinha dorsal do multiplayer já pronta
 // ═══════════════════════════════════════════════════════════════════════
@@ -27,7 +28,7 @@ export function carregarPerfil() {
   } catch { /* corrompido: recria */ }
   // Um id estável, gerado uma vez. Vira a chave do jogador no servidor um dia.
   const perfil = {
-    id: `sob_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    id: `sob_${Date.now().toString(36)}_${rand().toString(36).slice(2, 8)}`,
     nome: localStorage.getItem('soberano_nome') || '',
     criadoEm: new Date().toISOString(),
   };

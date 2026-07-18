@@ -20,6 +20,7 @@
 //
 // Formato de saída (contrato com o gerador): { carta, feed, fios_update }.
 import { nomeDeRelacao, dePais, comPais } from '../dados/paises.js';
+import { rand } from '../jogo/rng.js';
 
 // ── Lendo o mundo a partir do estado ──────────────────────────────────
 // O rival não é uma constante: é quem está pior comigo AGORA. Se eu jogo de Brasil e
@@ -295,7 +296,7 @@ export function puxarFallback(fioTema, ctx = {}) {
     if (casados.length) pool = casados;
   }
   const semRepetir = pool.filter((c) => c.carta.titulo !== ultimoTitulo);
-  const escolha = (semRepetir.length ? semRepetir : pool)[Math.floor(Math.random() * (semRepetir.length ? semRepetir.length : pool.length))];
+  const escolha = (semRepetir.length ? semRepetir : pool)[Math.floor(rand() * (semRepetir.length ? semRepetir.length : pool.length))];
   ultimoTitulo = escolha.carta.titulo;
 
   return {

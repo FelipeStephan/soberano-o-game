@@ -18,6 +18,7 @@ import { PAISES } from '../dados/paises.js';
 import { tetoSoldados } from '../dados/efetivoMilitar.js';
 import { UNIDADE_POR_ID } from '../dados/forcas.js';
 import { filaRegistrada, enfileirarNaFila } from './filaComando.js';
+import { rand } from './rng.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const round4 = (n) => Math.round(n * 1e4) / 1e4;
@@ -217,7 +218,7 @@ export function resolverPedidos(estado) {
       continue;
     }
 
-    const aprovado = Math.random() < av.chance;
+    const aprovado = rand() < av.chance;
     if (aprovado) {
       estado.forcas[p.unidade] = (estado.forcas[p.unidade] || 0) + p.qtd;
       registrarNoHistorico(estado, {

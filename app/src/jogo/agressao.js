@@ -24,6 +24,7 @@ import { aplicarEfeitos } from './efeitos.js';
 import { estadosCarregados, estadosDe, estadoPorId, ehMeu, resolverAtaqueAoEstado, aplicarAtaqueAoEstado } from './territorio.js';
 import { planoDeCampanha, aplicarCampanha } from './campanha.js';
 import { portoDe } from '../dados/portosNavais.js';
+import { rand } from './rng.js';
 
 const BONUS_OGIVA = 3;
 
@@ -138,7 +139,7 @@ export function sortearAgressao(estado) {
   // Teto duro: mesmo no pior cenário, ~14% por turno. Ser invadido todo turno não é
   // tensão, é castigo — e castigo previsível o jogador só aprende a evitar desligando o jogo.
   const p = Math.min(0.14, (top.risco / 100) * 0.16);
-  if (Math.random() > p) return null;
+  if (rand() > p) return null;
   return top;
 }
 
@@ -163,14 +164,14 @@ export function resolverAgressao(estado, agressor) {
 
   // Defender em casa vale ouro: terreno conhecido, linhas curtas, população mobilizada.
   const vantagemCasa = 1.25;
-  const meuPoder = minhaDefesa * vantagemCasa * (0.9 + Math.random() * 0.2);
-  const poderDele = agressor.forca * (0.9 + Math.random() * 0.3);
+  const meuPoder = minhaDefesa * vantagemCasa * (0.9 + rand() * 0.2);
+  const poderDele = agressor.forca * (0.9 + rand() * 0.3);
 
   const rounds = [];
   let meu = meuPoder; let ini = poderDele;
   for (let n = 1; n <= 5 && meu > 0 && ini > 0; n += 1) {
-    const dMeu = ini * (0.10 + Math.random() * 0.12);
-    const dIni = meu * (0.12 + Math.random() * 0.14);
+    const dMeu = ini * (0.10 + rand() * 0.12);
+    const dIni = meu * (0.12 + rand() * 0.14);
     meu = Math.max(0, meu - dMeu); ini = Math.max(0, ini - dIni);
     rounds.push({ n, meu: Math.round(meu), ini: Math.round(ini) });
   }
@@ -182,7 +183,7 @@ export function resolverAgressao(estado, agressor) {
   for (const u of UNIDADES) {
     const tenho = estado.forcas?.[u.id] || 0;
     if (!tenho) continue;
-    const perdido = Math.round(tenho * perdaFrac * (0.5 + Math.random() * 0.7));
+    const perdido = Math.round(tenho * perdaFrac * (0.5 + rand() * 0.7));
     if (perdido > 0) {
       estado.forcas[u.id] = Math.max(0, tenho - perdido);
       perdas.push({ id: u.id, nome: u.nome, icone: u.icone, perdido });

@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════════════════════
+# SOBERANO em produção — o deploy inteiro num arquivo (VPS Hostinger)
+# ═══════════════════════════════════════════════════════════════════════
+# Dois serviços, um comando:
+#   soberano  → o jogo (Node: HTTP + WebSocket na 8787, só na rede interna)
+#   caddy     → a porta da rua: TLS automático (Let's Encrypt) + proxy do WS
+#               sem NENHUMA configuração extra — Caddy faz o upgrade sozinho.
+#
+# Subir:      docker compose up -d --build
+# Atualizar:  git pull && docker compose up -d --build
+# Logs:       docker compose logs -f soberano
+services:
+  soberano:
+    build: .
+    restart: unless-stopped
+    env_file: .env            # OPENROUTER_API_KEY, ADMIN_PASSWORD, DATABASE_URL, PUBLIC_URL
+    environment:
+      - NODE_ENV=production
+      - PORT=8787
+    expose:
+      - "8787"                # só a rede interna do compose — a rua fala com o Caddy
+    volumes:
+      # fallback de persistência SEM DATABASE_URL (arquivo JSON). Com Neon é
+      # redundante, mas inofensivo — e salva a pele se a env sumir num redeploy.
+      - soberano-data:/app/server/data
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data      # certificados TLS sobrevivem a restart
+      - caddy-config:/config
+    depends_on:
+      - soberano
+
+volumes:
+  soberano-data:
+  caddy-data:
+  caddy-config:

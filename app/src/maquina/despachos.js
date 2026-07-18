@@ -18,8 +18,9 @@ import { chamarIA } from './openrouter.js';
 import { extrairJSON } from './contrato.js';
 import { PETROLEO } from '../dados/petroleo.js';
 import { UNIDADE_POR_ID } from '../dados/forcas.js';
+import { rand } from '../jogo/rng.js';
 
-const rand = (a) => a[Math.floor(Math.random() * a.length)];
+const sorteioDe = (a) => a[Math.floor(rand() * a.length)];
 
 // ── ALVOS REAIS ───────────────────────────────────────────────────────
 // Um despacho que diz "a capital foi atingida" é genérico. Um que diz "Zhongnanhai
@@ -80,7 +81,7 @@ const REACOES_POOL = {
 };
 
 export function reacoesLocais(reagentes) {
-  const rand2 = (a) => a[Math.floor(Math.random() * a.length)];
+  const rand2 = (a) => a[Math.floor(rand() * a.length)];
   return (reagentes || []).map((r) => ({
     iso: r.iso,
     tom: r.postura === 'condena' ? 'ruim' : r.postura === 'aproveita' ? 'neutro' : 'aviso',
@@ -169,26 +170,26 @@ export function despachosLocais({ alvoIso, alvoNome, deploy, venceu, petro }) {
   d.push({ tom: 'aviso', txt: `Radares de ${alvoNome} detectaram a formação. As sirenes começaram.` });
 
   if (tem('misseis')) {
-    d.push({ tom: 'ruim', txt: rand([
+    d.push({ tom: 'ruim', txt: sorteioDe([
       `${q('misseis')} mísseis cruzam a fronteira. A defesa antiaérea abre fogo.`,
       `Primeira salva atinge ${A.sede}. A transmissão estatal saiu do ar no meio da frase.`,
       `Os mísseis passaram sob o radar. ${A.capital} descobriu quando as janelas explodiram.`,
     ]) });
   }
   if (tem('bombardeiros')) {
-    d.push({ tom: 'ruim', txt: rand([
+    d.push({ tom: 'ruim', txt: sorteioDe([
       `Bombardeiros sobre ${A.capital}. O que está embaixo deixa de existir em ondas.`,
       `${q('bombardeiros')} bombardeiros despejam carga sobre a infraestrutura de ${A.cidade}.`,
     ]) });
   }
   if (tem('cacas')) {
-    d.push({ tom: 'aviso', txt: rand([
+    d.push({ tom: 'aviso', txt: sorteioDe([
       `${q('cacas')} caças em combate aéreo sobre ${A.cidade}. Eles decolaram o que tinham.`,
       `Superioridade aérea contestada. Caem aviões dos dois lados sobre ${A.capital}.`,
     ]) });
   }
   if (tem('navios') || tem('porta_avioes')) {
-    d.push({ tom: 'aviso', txt: rand([
+    d.push({ tom: 'aviso', txt: sorteioDe([
       `Nossa frota bloqueia ${A.porto}. Nenhum cargueiro entra ou sai.`,
       `Grupo de batalha ao largo de ${A.porto}. Os cruzeiro começaram a sair dos tubos.`,
     ]) });
@@ -197,7 +198,7 @@ export function despachosLocais({ alvoIso, alvoNome, deploy, venceu, petro }) {
     d.push({ tom: 'neutro', txt: 'Submarinos em posição. Ninguém sabe onde estão — inclusive nós, oficialmente.' });
   }
   if (tem('blindados') || tem('infantaria')) {
-    d.push({ tom: 'ruim', txt: rand([
+    d.push({ tom: 'ruim', txt: sorteioDe([
       `${q('blindados')} blindados cruzaram a fronteira. Acabou a conversa de operação limitada.`,
       `${q('infantaria')} soldados em solo estrangeiro. A partir daqui, cada dia custa caixões.`,
       `Coluna blindada a 40 km de ${A.capital}. A resistência é maior do que previmos.`,
@@ -209,7 +210,7 @@ export function despachosLocais({ alvoIso, alvoNome, deploy, venceu, petro }) {
   if (petro) {
     d.push({ tom: 'aviso', txt: `O Brent disparou. ${alvoNome} bombeia ${petro.producao} Mb/d e o mercado precificou o risco.` });
   }
-  d.push({ tom: 'neutro', txt: rand([
+  d.push({ tom: 'neutro', txt: sorteioDe([
     `${A.simbolo} está cercado de gente tentando sair da cidade.`,
     `A ONU convocou sessão de emergência. Vai durar seis horas e não decidir nada.`,
     `As redes de ${alvoNome} viraram um mural de gente procurando parente.`,

@@ -152,6 +152,19 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
         <button class="pp-fechar pen-x">${ico('x', 16)}</button>
       </div>
 
+      <div class="pen-posturas">
+        <span class="pen-post-rot">${ico('gauge', 11)} POSTURA</span>
+        <button class="pen-post normal ${posic === 0 ? 'on' : ''}" data-post="normal"
+          data-tip="Tropas de volta ao quartel. País operando normal: custo mínimo, e TODA a força fica disponível para posições navais e ofensivas." data-tip-t="Postura Normal">
+          ${ico('home', 13)} <b>NORMAL</b><small>tudo na reserva</small></button>
+        <button class="pen-post defesa" data-post="defesa"
+          data-tip="Contra-ataque: a tropa vai exatamente para onde a ameaça está — guerra, revolta, frota hostil na costa." data-tip-t="Postura de Defesa">
+          ${ico('shield', 13)} <b>DEFESA</b><small>cobre as ameaças</small></button>
+        <button class="pen-post ataque" data-post="ataque"
+          data-tip="Preparação ofensiva: concentra na fronteira do inimigo, mas SEGURA metade na reserva para a invasão e as frotas." data-tip-t="Postura de Ataque">
+          ${ico('swords', 13)} <b>ATAQUE</b><small>fronteira + reserva de assalto</small></button>
+      </div>
+
       <div class="pen-reserva">
         <div class="pen-res-nums">
           <span class="pen-res-a">${ico('warehouse', 12)} RESERVA <b>${fmt(reserva)}</b></span>
@@ -226,6 +239,29 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
 
     // ligações
     modal.querySelector('.pen-x').addEventListener('click', fechar);
+    // POSTURAS — o comando de um clique: normal (quartel), defesa (counter), ataque
+    // (fronteira com metade segurada pra ofensiva). O jogador VÊ a reserva subir/descer
+    // na barra logo abaixo, no mesmo render.
+    modal.querySelectorAll('.pen-post').forEach((b) => b.addEventListener('click', () => {
+      const post = b.dataset.post;
+      if (post === 'normal') {
+        const r = recolherTudo(estado);
+        estado.temp_guerra = Math.max(0, (estado.temp_guerra || 0) - 2);
+        if (r.ok) jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: '#22e0a0', texto: `Postura NORMAL: ${fmt(r.total)} unidades de volta ao quartel. Custo mínimo — e força total disponível para o mar e a ofensiva.` }]);
+      } else {
+        recolherTudo(estado);   // zera antes: a postura é um retrato, não uma soma
+        const r = distribuirAuto(estado, {
+          modo: post === 'defesa' ? 'counter' : 'fronteira',
+          fracao: post === 'ataque' ? 0.5 : 1,
+          ondeEsta, frotasInimigas: estado.frotasInimigas || [], conflitos: estado.conflitosEstado || {},
+        });
+        if (r.ok) jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: post === 'ataque' ? '#ff3b5c' : '#35e0ff', texto: post === 'ataque'
+          ? `Postura de ATAQUE: fronteira reforçada em ${r.estados} estado(s) — metade da força segue na reserva, pronta pra invasão.`
+          : `Postura de DEFESA: contra-ataque armado em ${r.estados} estado(s), tropa em cima de cada vetor de ameaça.` }]);
+      }
+      globoCtrl?.atualizar?.();
+      render();
+    }));
     modal.querySelectorAll('.pen-dop').forEach((b) => b.addEventListener('click', () => { modo = b.dataset.modo; render(); }));
     modal.querySelectorAll('.pen-aba').forEach((b) => b.addEventListener('click', () => { aba = b.dataset.aba; render(); }));
     modal.querySelectorAll('.pen-ord button').forEach((b) => b.addEventListener('click', () => { ordenar = b.dataset.ord; render(); }));

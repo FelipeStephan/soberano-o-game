@@ -19,6 +19,7 @@
 import { PAISES, jogadorIso } from '../dados/paises.js';
 import { forcaDe } from './forcasMundo.js';
 import { registrarAliancas } from '../dados/blocos.js';
+import { rand } from './rng.js';
 
 // ── REGRAS: cada uma soma intensidade e define o caráter ───────────────
 // `intens` = quanto de compromisso a regra injeta no bloco (a mesma escala 0–100
@@ -219,7 +220,7 @@ export function convidar(estado, alId, iso) {
   if (!al) return { erro: 'aliança não encontrada' };
   if (al.membros.includes(iso)) return { erro: 'já é membro' };
   const prev = chanceAceite(estado, iso, al);
-  const aceito = Math.random() < prev.chance;
+  const aceito = rand() < prev.chance;
   al.convites = (al.convites || []).filter((c) => c.iso !== iso);
   al.convites.push({ iso, status: aceito ? 'aceitou' : 'recusou', motivo: prev.motivo, quando: estado.turno || 0 });
   let bonus = null;

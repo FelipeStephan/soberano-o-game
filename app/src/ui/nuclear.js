@@ -10,6 +10,7 @@ import { bandeira, ISO2_DE } from '../dados/imagens.js';
 import { PAISES } from '../dados/paises.js';
 import { sirene, flashTela } from './efeitos.js';
 import { ico } from './icones.js';
+import { tocarNuclear, tocarEfeito } from './audio.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -71,6 +72,7 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
   // ── ARMAR → DISPARAR (a trava de duas etapas) ─────────────────────────
   modal.querySelector('#nk-armar')?.addEventListener('click', () => {
     armado = true;
+    tocarEfeito('alerta-nuclear', { volume: 0.6 });   // a chave girou — o aviso soa
     const acoes = modal.querySelector('#nk-acoes');
     acoes.innerHTML = `
       <div class="nk-armado">${ico('radiation', 13)} SISTEMA ARMADO — a chave girou. Não há desfazer depois disto.</div>
@@ -82,7 +84,9 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
 
   // ── A EXECUÇÃO ────────────────────────────────────────────────────────
   async function executar() {
-    // fecha o painel: a partir daqui o palco é o globo
+    // fecha o painel: a partir daqui o palco é o globo — com trilha própria
+    // (a música de fundo abaixa sozinha enquanto a da bomba toca).
+    tocarNuclear();
     modal.classList.add('lancando');
     modal.querySelector('.nuke-painel').style.display = 'none';
 

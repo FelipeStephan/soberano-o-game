@@ -4315,7 +4315,7 @@ button[data-tip], .tip-q { cursor: pointer; }
 .nva-btn small { font-family: var(--mono); font-size: 8.5px; color: var(--fraco); margin-top: 1px; }
 .nva-btn.atacar { box-shadow: inset 2px 0 0 var(--perigo); } .nva-btn.atacar .ico { color: var(--perigo); }
 .nva-btn.casa { box-shadow: inset 2px 0 0 var(--verde); } .nva-btn.casa .ico { color: var(--verde); }
-.nva-btn.mover .ico { color: #8fb4ff; }
+.nva-btn.sonar { box-shadow: inset 2px 0 0 var(--cyan); } .nva-btn.sonar .ico { color: var(--cyan); }
 
 /* ── VARREDURA DE RADAR (popup da frota, modo ataque) — prefixo .nvr- ── */
 .nvr-scan { padding: 12px 15px 15px; display: flex; flex-direction: column; gap: 10px; }
@@ -5325,3 +5325,157 @@ button[data-tip], .tip-q { cursor: pointer; }
 .ref-base-det summary:hover { color: var(--cyan); }
 .ref-base-det .ref-base-nota { padding: 0 11px 8px; }
 .ref-base-det .ref-base-tipos { padding: 0 11px 11px; }
+
+/* ═══ ÁUDIO — alto-falante + volume (menu e in-game, mesmo widget) ═══ */
+.hm-audio { position: absolute; top: 22px; right: 26px; z-index: 6; }
+.aud-ctl { position: relative; display: flex; align-items: center; }
+.aud-btn { display: flex; align-items: center; justify-content: center; width: 34px; height: 30px;
+  border: none; border-radius: 0; cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 0 100%);
+  background: rgba(5,7,13,.6); backdrop-filter: blur(8px); color: var(--fraco);
+  box-shadow: inset 0 0 0 1px rgba(150,190,240,.18); }
+.aud-btn:hover { color: var(--cyan); background: rgba(53,224,255,.1);
+  box-shadow: inset 0 0 0 1px rgba(53,224,255,.45); }
+.aud-btn.mudo { color: var(--perigo); }
+/* O vão visual entre botão e popover é PREENCHIDO (padding-top transparente):
+   o mouse nunca "sai" do widget ao descer pro slider — senão o hover morre no caminho. */
+.aud-pop { position: fixed; z-index: 700;
+  display: none; padding-top: 6px; }
+.aud-pop-in { display: flex; align-items: center; gap: 8px; padding: 9px 12px;
+  background: var(--painel-solido); box-shadow: inset 0 0 0 1px var(--borda), 0 10px 30px rgba(0,0,0,.5);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+.aud-ctl:hover .aud-pop, .aud-ctl.aberto .aud-pop { display: block; }
+.aud-rot { font-family: var(--mono); font-size: 8px; letter-spacing: .14em; color: var(--fraco); }
+.aud-range { -webkit-appearance: none; appearance: none; width: 96px; height: 3px;
+  background: var(--borda); outline: none; cursor: pointer; }
+.aud-range::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+  width: 11px; height: 11px; background: var(--cyan);
+  clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%); }
+.aud-range::-moz-range-thumb { width: 11px; height: 11px; border: none; border-radius: 0;
+  background: var(--cyan); }
+/* botão de mute DENTRO do painel (o X vermelho do print) */
+.aud-mute { display: flex; align-items: center; justify-content: center; width: 26px; height: 22px;
+  border: none; cursor: pointer; background: rgba(255,59,92,.12); color: var(--perigo);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%); }
+.aud-mute:hover { background: rgba(255,59,92,.22); }
+.aud-mute:not(.on) { background: rgba(150,190,240,.1); color: var(--fraco); }
+.aud-mute:not(.on):hover { color: var(--cyan); background: rgba(53,224,255,.14); }
+/* in-game: o widget vive no trilho de ações do topo */
+.topo-acoes .aud-ctl { margin-left: 2px; }
+
+/* ═══ FLASH DE IMPACTO NOS INDICADORES — a ação ecoa no HUD em tempo real ═══ */
+@keyframes hudFlashBom { 0% { background: rgba(34,224,160,.22); box-shadow: inset 3px 0 0 var(--verde); }
+  100% { background: transparent; box-shadow: inset 0 0 0 transparent; } }
+@keyframes hudFlashRuim { 0% { background: rgba(255,59,92,.22); box-shadow: inset 3px 0 0 var(--perigo); }
+  100% { background: transparent; box-shadow: inset 0 0 0 transparent; } }
+.medidor.flash-bom, .cel.flash-bom { animation: hudFlashBom 1.8s ease-out; }
+.medidor.flash-ruim, .cel.flash-ruim { animation: hudFlashRuim 1.8s ease-out; }
+.medidor.flash-bom .mono { color: var(--verde); transition: color 2s 1s; }
+.medidor.flash-ruim .mono { color: var(--perigo); transition: color 2s 1s; }
+.medidor.flash-bom .preench, .cel.flash-bom .preench { filter: brightness(1.6); transition: filter 1.6s .4s; }
+.medidor.flash-ruim .preench, .cel.flash-ruim .preench { filter: brightness(1.6) saturate(1.4); transition: filter 1.6s .4s; }
+
+/* ═══ CHIP "A BORDO" — foto por cima, ícone por baixo (nunca imagem quebrada) ═══ */
+.nva-cu-foto { position: relative; overflow: hidden; }
+.nva-cu-foto .nva-cu-ico { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.nva-cu-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; }
+
+/* ═══ TELA DE ATAQUE — força-tarefa completa (sem sliders) ═══ */
+.nvu-rot { font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--fraco);
+  margin: 8px 0 4px; display: flex; align-items: center; gap: 5px; }
+.nvu-item.so-mostra { display: flex; align-items: center; gap: 8px; padding: 5px 6px; }
+.nvu-item.so-mostra .nvu-nome { flex: 1; font-size: 11px; }
+.nvu-item.so-mostra .nvu-q { font-family: var(--mono); font-size: 12px; color: var(--cyan); }
+.nvu-confronto { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  margin: 10px 0 4px; padding: 9px 10px; background: rgba(5,7,13,.55);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  box-shadow: inset 0 0 0 1px var(--borda); }
+.nvu-confronto .nvu-lado { text-align: center; }
+.nvu-confronto .nvu-lado small { display: block; font-family: var(--mono); font-size: 7.5px;
+  letter-spacing: .14em; color: var(--fraco); margin-bottom: 2px; }
+.nvu-confronto .nvu-lado b { font-family: var(--mono); font-size: 21px; line-height: 1; }
+.nvu-confronto .nvu-lado:first-child b { color: var(--cyan); }
+.nvu-confronto .nvu-lado:last-child b { color: var(--ambar); }
+.nvu-confronto .nvu-vs { color: var(--fraco); opacity: .7; }
+.nvu-confronto.esmaga { box-shadow: inset 0 0 0 1px rgba(34,224,160,.4); }
+.nvu-confronto.perde { box-shadow: inset 0 0 0 1px rgba(255,59,92,.45); }
+.nvu-veredito { display: flex; align-items: center; gap: 6px; font-family: var(--mono);
+  font-size: 10px; letter-spacing: .1em; padding: 5px 2px 8px; }
+.nvu-veredito em { font-style: normal; color: var(--fraco); letter-spacing: .04em; }
+.nvu-veredito.esmaga { color: var(--verde); }
+.nvu-veredito.vence { color: var(--ambar); }
+.nvu-veredito.perde { color: var(--perigo); }
+
+/* ═══ POSIÇÃO NAVAL — motivo de bloqueio VISÍVEL ═══ */
+.env-item.bloqueado .env-disp { color: var(--ambar); opacity: 1; font-weight: 600; }
+
+/* ═══ ESTADO-MAIOR — barra de POSTURA ═══ */
+.pen-posturas { display: flex; align-items: stretch; gap: 6px; padding: 10px 14px 0; }
+.pen-post-rot { display: flex; align-items: center; gap: 4px; font-family: var(--mono);
+  font-size: 8px; letter-spacing: .16em; color: var(--fraco); padding-right: 4px; }
+.pen-post { flex: 1; display: flex; align-items: center; gap: 7px; padding: 7px 10px;
+  border: none; cursor: pointer; text-align: left; color: var(--texto);
+  background: rgba(5,7,13,.55); box-shadow: inset 0 0 0 1px var(--borda);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+.pen-post b { font-family: var(--mono); font-size: 10px; letter-spacing: .1em; display: block; }
+.pen-post small { display: block; font-size: 9px; color: var(--fraco); }
+.pen-post.normal:hover, .pen-post.normal.on { box-shadow: inset 0 0 0 1px rgba(34,224,160,.5); color: var(--verde); }
+.pen-post.defesa:hover { box-shadow: inset 0 0 0 1px rgba(53,224,255,.5); color: var(--cyan); }
+.pen-post.ataque:hover { box-shadow: inset 0 0 0 1px rgba(255,59,92,.5); color: var(--perigo); }
+.pen-post small { color: var(--fraco) !important; }
+
+/* ═══ GOVERNANÇA v2 — abas + extrato + donut ═══ */
+.gov-abas { display: flex; gap: 4px; padding: 10px 16px 0; }
+.gov-aba { display: flex; align-items: center; gap: 6px; padding: 8px 14px; border: none; cursor: pointer;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em; color: var(--fraco);
+  background: rgba(5,7,13,.5); box-shadow: inset 0 0 0 1px var(--borda);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+.gov-aba:hover { color: var(--texto); }
+.gov-aba.on { color: var(--cyan); background: rgba(53,224,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(53,224,255,.45), inset 0 2px 0 var(--cyan); }
+.gov-fluxo.compacto { margin-bottom: 4px; }
+.gov-origem { display: grid; grid-template-columns: 128px 1fr; gap: 14px; align-items: center; margin-bottom: 6px; }
+.gov-origem-donut { position: relative; width: 128px; height: 128px; }
+.gov-donut { width: 100%; height: 100%; transform: none; }
+.gov-donut circle { transition: stroke-dasharray .5s ease; }
+.gov-donut-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.gov-donut-c b { font-family: var(--mono); font-size: 13px; color: var(--texto); }
+.gov-donut-c small { font-size: 9px; color: var(--fraco); }
+.gov-origem-lista { display: flex; flex-direction: column; gap: 2px; }
+.gov-xl { display: grid; grid-template-columns: 10px 1fr auto 34px; gap: 8px; align-items: center;
+  padding: 5px 8px; background: rgba(5,7,13,.35); }
+.gov-xl-dot { width: 7px; height: 7px; transform: rotate(45deg); box-shadow: 0 0 8px currentColor; }
+.gov-xl-rot { font-size: 11.5px; color: var(--texto); }
+.gov-xl-rot small { display: block; font-size: 9.5px; color: var(--fraco); }
+.gov-xl-val { font-family: var(--mono); font-size: 11.5px; }
+.gov-xl-val.bom { color: var(--verde); } .gov-xl-val.ruim { color: var(--perigo); }
+.gov-xl-pct { font-family: var(--mono); font-size: 9.5px; color: var(--fraco); text-align: right; }
+.gov-origem-lista.despesas { margin-bottom: 6px; }
+.gov-espolio { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.gov-esp { display: flex; align-items: baseline; gap: 8px; padding: 6px 9px; background: rgba(255,176,32,.06);
+  box-shadow: inset 2px 0 0 var(--ambar); font-size: 11.5px; }
+.gov-esp b { color: var(--ambar); }
+.gov-esp small { color: var(--fraco); }
+.gov-esp-reservas { font-size: 10.5px; color: var(--fraco); padding: 4px 2px; }
+.gov-esp-reservas b { color: var(--texto); }
+.gov-esp-vazio { font-size: 11px; color: var(--fraco); padding: 8px 10px; border: 1px dashed var(--borda); margin-bottom: 8px; }
+
+/* botão SONAR do painel naval — verde de escuta, irmão do atacar/casa */
+.nva-btn.sonar:hover { box-shadow: inset 0 0 0 1px rgba(34,224,160,.5); }
+.nva-btn.sonar:hover .ico { color: var(--verde); }
+
+/* ═══ RELATÓRIO DE GUERRA (espólio+baixas) — menos vertical, botão sempre alcançável ═══ */
+/* O dono: a tela crescia quase 100% na vertical e empurrava "A RESPOSTA DE X" pra fora
+   do clique. Agora o painel é mais LARGO, tem teto de altura com rolagem interna, e o
+   botão fica FIXO no rodapé — as baixas fluem em mais colunas em vez de empilhar. */
+.cena.jrn.gdw { width: min(96%, 900px); max-height: 92vh; display: flex; flex-direction: column; }
+.cena.jrn.gdw .gdw-corpo { overflow-y: auto; overflow-x: hidden; flex: 1; min-height: 0; padding-right: 4px; }
+.cena.jrn.gdw .gdw-go { position: sticky; bottom: 0; margin-top: 10px; }
+.gdw-baixas { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 7px; }
+.gdw-baixa { width: auto; }
+@media (max-width: 560px) { .gdw-baixas { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
+
+/* ═══ RESGATE de território ocupado (reusa o painel de envio) ═══ */
+.env-simbolo.resgate { color: var(--verde); }
+.env-jaguerra.resgate { background: rgba(34,224,160,.08); box-shadow: inset 2px 0 0 var(--verde); color: var(--texto); }
+.env-jaguerra.resgate .ico { color: var(--verde); }

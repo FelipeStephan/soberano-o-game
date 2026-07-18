@@ -19,6 +19,7 @@ import { PAISES, chaveRelacao } from '../dados/paises.js';
 import { reacaoDeBloco } from '../dados/blocos.js';
 import { NACOES } from '../dados/registro.js';
 import { aplicarEfeitos } from './efeitos.js';
+import { rand } from './rng.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -89,7 +90,7 @@ export function dispararOgiva(estado, isoAlvo) {
   // ── 0. INTERCEPTAÇÃO ────────────────────────────────────────────────
   // O escudo do alvo pode abater a ogiva no ar. Ela ainda é gasta, mas não há
   // devastação — só a marca indelével de que VOCÊ tentou o impensável e falhou.
-  if (Math.random() < av.chanceIntercept) {
+  if (rand() < av.chanceIntercept) {
     return dispararInterceptado(estado, av, isoAlvo);
   }
 
@@ -144,7 +145,7 @@ export function dispararOgiva(estado, isoAlvo) {
     // chance sobe com o arsenal do vingador e a intensidade do bloco
     const arsenalVingador = ogivasDoAlvo(vingador);
     const chance = Math.min(0.9, 0.35 + arsenalVingador / 400 + av.bloco.intensidade / 300);
-    if (Math.random() < chance) {
+    if (rand() < chance) {
       // VOCÊ leva uma de volta. Não apaga o país (é 1 ogiva), mas é catastrófico.
       const danoRet = aplicarEfeitos(estado, {
         aprovacao: -25, estabilidade: -20, poder_militar: -18, pib: -round2((estado.pib || 28) * 0.15),

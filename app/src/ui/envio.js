@@ -17,6 +17,7 @@ import { guarnicaoDefensivaDetalhe, tropaLivre, donoDe, recolherTudo } from '../
 import { temIntel } from '../jogo/espionagem.js';
 import { resolverEnvio } from '../jogo/campanha.js';
 import { UNIDADES, UNIDADE_POR_ID, DOMINIOS, poderDeploy, custoDeploy } from '../dados/forcas.js';
+import { combustivelDaGuerra } from '../jogo/guerra.js';
 import { equipamentosDoPais } from '../dados/registro.js';
 import { FOTO_UNIDADE, bandeira, ISO2_DE } from '../dados/imagens.js';
 import { PAISES } from '../dados/paises.js';
@@ -29,7 +30,7 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const nomeDe = (i) => PAISES[i]?.nome || i;
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
+export function abrirEnvio(feature, jogo, { onFim, globoCtrl, resgate = false } = {}) {
   const p = feature.properties;
   const e = jogo.estado;
   const alvoIso = donoDe(e, p.id);
@@ -63,16 +64,17 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
 
     modal.innerHTML = `<div class="env-painel">
       <div class="env-cab">
-        <span class="env-simbolo">${ico('crosshair', 24)}</span>
+        <span class="env-simbolo ${resgate ? 'resgate' : ''}">${ico(resgate ? 'flag' : 'crosshair', 24)}</span>
         <div class="env-tit">
-          <h2>DESIGNAR ALVO · ${esc(p.nome.toUpperCase())}</h2>
-          <div class="env-sub">Teatro de Operações · ${esc(nomeDe(alvoIso))}</div>
+          <h2>${resgate ? 'RESGATAR' : 'DESIGNAR ALVO'} · ${esc(p.nome.toUpperCase())}</h2>
+          <div class="env-sub">${resgate ? `Território sob ocupação de ${esc(nomeDe(alvoIso))}` : `Teatro de Operações · ${esc(nomeDe(alvoIso))}`}</div>
         </div>
         ${ISO2_DE[alvoIso] ? `<img class="env-flag" src="${bandeira(ISO2_DE[alvoIso], 80)}" alt="">` : ''}
         <button class="pp-fechar" id="env-x">${ico('x', 16)}</button>
       </div>
 
-      ${!jaEmGuerra ? `<div class="env-guerra">${ico('triangle-alert', 18)}
+      ${resgate ? `<div class="env-jaguerra resgate">${ico('flag', 16)} <span><b>Este território é seu — ${esc(nomeDe(alvoIso))} o tomou.</b> Envie tropas para retomá-lo. Recuperar o que é seu tem o apoio do povo, mas a logística e o combustível cobram caro.</span></div>`
+        : !jaEmGuerra ? `<div class="env-guerra">${ico('triangle-alert', 18)}
         <div><b>Isto declara guerra a ${esc(nomeDe(alvoIso))}.</b>
         Não existe meia-invasão: no instante em que a sua bota toca o solo deles, vocês estão em guerra —
         e o mundo vai assistir você começar.</div></div>`
@@ -125,7 +127,7 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
 
       <div class="env-prog" id="env-prog"></div>
       <div class="env-acoes">
-        <button class="env-lancar" id="env-ok" disabled>${ico('swords', 15)} <span>${jaEmGuerra ? 'LANÇAR OFENSIVA' : 'DECLARAR GUERRA E INVADIR'}</span></button>
+        <button class="env-lancar" id="env-ok" disabled>${ico(resgate ? 'flag' : 'swords', 15)} <span>${resgate ? 'RESGATAR TERRITÓRIO' : jaEmGuerra ? 'LANÇAR OFENSIVA' : 'DECLARAR GUERRA E INVADIR'}</span></button>
         <button class="env-abortar" id="env-no">Recuar</button>
       </div>
     </div>`;
@@ -152,22 +154,26 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
         modal.querySelector(`#q-${s.dataset.u}`).textContent = Number(s.value).toLocaleString('pt-BR');
       }
       const poder = poderDeploy(deploy);
-      const custo = custoDeploy(deploy);
+      const custoLog = custoDeploy(deploy);
+      const comb = combustivelDaGuerra(e, deploy, custoLog);
+      const custo = Math.round((custoLog + (comb.custoExtra || 0)) * 100) / 100;
       const total = Object.values(deploy).reduce((a, b) => a + b, 0);
       btn.disabled = total <= 0 || custo > e.tesouro;
 
       if (!total) {
         prog.className = 'env-prog';
-        prog.innerHTML = `${ico('info', 13)} <span>Escolha o que vai. O defensor luta entrincheirado — o desfecho só se conhece no terreno.</span>`;
+        prog.innerHTML = `${ico('info', 13)} <span>${resgate ? 'Escolha a força de resgate. Recuperar território ocupado exige mais do que reforçar.' : 'Escolha o que vai. O defensor luta entrincheirado — o desfecho só se conhece no terreno.'}</span>`;
         return;
       }
       // SEM PROGNÓSTICO: o jogo não prevê "cai / não cai / perde X%". O jogador vê a
-      // força que ELE manda, o custo e as consequências diplomáticas — o resto é guerra.
+      // força que ELE manda, o custo (transporte + combustível) e as consequências.
       prog.className = 'env-prog';
-      prog.innerHTML = `${ico('swords', 13)}
-        <span>Força enviada: <b>${poder}</b>.${defesa != null && defesa > 0 ? ` Guarnição conhecida: <b>${defesa}</b>.` : ''}
-        ${custo > e.tesouro ? `<br><b class="ruim">Sem caixa:</b> o transporte custa ${dinheiro(custo)} e você tem ${dinheiro(e.tesouro)}.` : `<br>Transporte: <b>${dinheiro(custo)}</b>.`}
-        ${!jaEmGuerra ? `<br>Consequência diplomática: relação com ${esc(nomeDe(alvoIso))} despenca${bloco.isos.length ? `, e ${bloco.isos.length} aliado(s) do bloco reagem` : ''}.` : ''}
+      prog.innerHTML = `${ico(resgate ? 'flag' : 'swords', 13)}
+        <span>Força enviada: <b>${poder}</b>.${defesa != null && defesa > 0 ? ` Guarnição ocupante: <b>${defesa}</b>.` : ''}
+        ${custo > e.tesouro
+          ? `<br><b class="ruim">Sem caixa:</b> a operação custa ${dinheiro(custo)} (transporte + ⛽ combustível) e você tem ${dinheiro(e.tesouro)}.`
+          : `<br>Custo: <b>${dinheiro(custo)}</b> <small>(transporte ${dinheiro(custoLog)} + ⛽ ${dinheiro(comb.custoExtra || 0)})</small>.`}
+        ${resgate ? `<br>Retomar o que é seu tem apoio popular — pouca fricção diplomática.` : !jaEmGuerra ? `<br>Consequência diplomática: relação com ${esc(nomeDe(alvoIso))} despenca${bloco.isos.length ? `, e ${bloco.isos.length} aliado(s) do bloco reagem` : ''}.` : ''}
         </span>`;
     };
 
@@ -184,7 +190,7 @@ export function abrirEnvio(feature, jogo, { onFim, globoCtrl } = {}) {
   // um objeto que ninguém consumia — o envio não declarava guerra, não mudava
   // relação, não tomava território. Era teatro no pior sentido. Agora resolve.
   async function onConfirmar(dep) {
-    const r = resolverEnvio(jogo.estado, p.id, alvoIso, dep);
+    const r = resolverEnvio(jogo.estado, p.id, alvoIso, dep, { resgate });
     if (r.falha) {
       modal.querySelector('#env-prog').innerHTML = `<b class="ruim">${esc(r.falha)}</b>`;
       return;

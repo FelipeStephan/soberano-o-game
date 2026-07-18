@@ -1,5 +1,6 @@
 // Efeitos audiovisuais: sirene (Web Audio, sem arquivos) e flash de tela.
 // A sirene só toca depois de uma interação do usuário (política de autoplay).
+import { tocarEfeito } from './audio.js';
 
 let ctx = null;
 function audio() {
@@ -48,7 +49,12 @@ export function flashTela(ruim = false) {
 // imediato acontece — sobretudo "você está sob ataque". Toca sirene, pisca a moldura da
 // tela e some sozinha. É o aviso que o jogador não pode perder.
 export function alertaUrgente({ titulo = 'ALERTA', texto = '', tom = 'ataque' } = {}) {
-  sirene({ ruim: true });
+  // O dono pediu: todo alarme de ataque usa o MP3 novo, em volume BAIXO (não a
+  // sirene sintética estridente). Respeita mudo/volume do motor de áudio.
+  // GUARDA a instância pra PARAR o som quando a faixa some (o mp3 pode durar mais
+  // que os 5,2s do banner — antes ficava tocando sozinho depois do aviso sumir).
+  const som = tocarEfeito('alarme', { volume: 0.3 });
+  const pararSom = () => { if (som) { try { som.pause(); som.currentTime = 0; } catch {} } };
   flashTela(true);
   const el = document.createElement('div');
   el.className = `alerta-urgente ${tom}`;
@@ -56,5 +62,5 @@ export function alertaUrgente({ titulo = 'ALERTA', texto = '', tom = 'ataque' } 
     <div class="au-txt"><b>${String(titulo).replace(/[<>&]/g, '')}</b><span>${String(texto).replace(/[<>&]/g, '')}</span></div>
     <span class="au-farol"></span>`;
   document.body.appendChild(el);
-  setTimeout(() => { el.classList.add('sai'); setTimeout(() => el.remove(), 500); }, 5200);
+  setTimeout(() => { el.classList.add('sai'); pararSom(); setTimeout(() => el.remove(), 500); }, 5200);
 }

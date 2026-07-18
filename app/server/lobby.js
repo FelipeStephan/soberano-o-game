@@ -191,7 +191,10 @@ export function montarLobby(server) {
 
         case 'ping':
           c.vivo = true;
-          enviar(ws, { t: 'pong' });
+          // RELÓGIO DO MUNDO ÚNICO: devolve o tCliente (pro cliente medir a viagem)
+          // e o tServidor (a hora oficial). O cliente calcula o offset e TODO timestamp
+          // que viaja na rede (frotas, eventos) passa a ser tempo do SERVIDOR.
+          enviar(ws, { t: 'pong', tc: msg.tc ?? null, ts: Date.now() });
           break;
 
         default: break;

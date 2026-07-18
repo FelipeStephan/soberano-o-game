@@ -121,7 +121,7 @@ export function abrirConselheiro(jogo, { tr, onAplicar, onFim } = {}) {
       <p class="cs-c-porque">${esc(sug.porque)}</p>
       ${acao ? `<button class="cs-aplicar" data-acao="${esc(sug.acaoId)}">
           ${ico('plus', 14)} <span>Enfileirar: ${esc(acao.nome)}</span>
-          <i class="cs-custo">${acao.custoPA || 1} PA${custoTxt}</i>
+          ${custoTxt ? `<i class="cs-custo">${custoTxt.replace(/^ · /, '')}</i>` : ''}
         </button>` : `<div class="cs-livre">${ico('compass', 13)} Conselho estratégico — sua chamada</div>`}
     </div>`;
   }

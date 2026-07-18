@@ -4,7 +4,11 @@ import { VARS } from './vars.js';
 import { PETROLEO, PRECO_BASE } from '../dados/petroleo.js';
 import { reservaInicial } from '../dados/efetivoMilitar.js';
 
-export const PA_POR_TURNO = 3;
+// PONTOS DE AÇÃO — APOSENTADO. No tempo real o ritmo é governado pela FILA DE COMANDO
+// (capacidade + tamanho) e pelo CAIXA; o PA nunca recarregava e travava telas de vez.
+// Mantido como pool "infinito" só pra não quebrar telas que ainda decrementam — não
+// bloqueia nada e não aparece mais na UI. (Ver decisão em soberano-tempo-real.)
+export const PA_POR_TURNO = 9999;
 
 export function criarEstado(ficha) {
   const estado = {};

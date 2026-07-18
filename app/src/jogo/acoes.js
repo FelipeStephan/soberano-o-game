@@ -9,6 +9,7 @@ import { tetoSoldados } from '../dados/efetivoMilitar.js';
 import { aplicarOcupacao } from './ocupacao.js';
 import { VEICULOS, investirNaMidia } from '../dados/veiculos.js';
 import { PAISES } from '../dados/paises.js';
+import { rand } from './rng.js';
 
 // AÇÕES "MAJOR" POR ID: além do flag explícito `a.major`, certos ids acendem um fio de
 // tensão narrativa (motor._reagirAcoes). `guerra_cambial` fica de FORA na mão: é ação
@@ -45,7 +46,7 @@ export function resolverFila(estado, fila, veiculos = null) {
   const resultados = [];
   for (const item of fila) {
     const a = item.acao;
-    const sucesso = Math.random() < (a.prob ?? 1);   // sem prob declarada = ação garantida
+    const sucesso = rand() < (a.prob ?? 1);   // sem prob declarada = ação garantida
     const efeitos = corrigirRelProprio(estado, sucesso ? (a.efeitos || {}) : (a.efeitos_falha || {}));
     const mudancas = aplicarEfeitos(estado, efeitos);
     aplicarPolitico(estado, a.politico);
@@ -56,7 +57,7 @@ export function resolverFila(estado, fila, veiculos = null) {
     if (sucesso && a.categoria === 'Mídia') {
       const forca = a.id === 'propaganda' ? 16 : a.id === 'influen' ? 10 : 12;
       for (const v of (veiculos?.length ? veiculos : VEICULOS)) {
-        investirNaMidia(v, estado, forca * (0.6 + Math.random() * 0.8));
+        investirNaMidia(v, estado, forca * (0.6 + rand() * 0.8));
       }
     }
     let ganhoForcas = [];

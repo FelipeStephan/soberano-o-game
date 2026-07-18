@@ -16,6 +16,27 @@ import { BASE } from './api.js';
 
 const URL_WS = (BASE || location.origin).replace(/^http/, 'ws') + '/ws';
 
+// ── RELÓGIO DO SERVIDOR (Etapa 1 do MUNDO ÚNICO) ──────────────────────
+// Clientes têm relógios com skew de segundos — uma frota "chega" na tela de um e
+// ainda navega na do outro. A cura: medir o offset local↔servidor via ping/pong
+// (média das 3 melhores amostras, ponderada pela viagem) e converter TODO timestamp
+// de rede pra tempo do SERVIDOR. `agoraServidor()` é o Date.now() oficial da sala.
+let _offsetServidor = 0;          // ts_servidor − ts_cliente (ms)
+const _amostras = [];
+function registrarPong(tc, ts) {
+  if (tc == null || ts == null) return;
+  const agora = Date.now();
+  const viagem = (agora - tc) / 2;                    // metade do round-trip
+  const offset = ts + viagem - agora;                 // estimativa deste pong
+  _amostras.push({ offset, viagem });
+  if (_amostras.length > 8) _amostras.shift();
+  // as 3 amostras de MENOR viagem são as mais confiáveis (menos fila na rede)
+  const boas = [..._amostras].sort((a, b) => a.viagem - b.viagem).slice(0, 3);
+  _offsetServidor = Math.round(boas.reduce((s, x) => s + x.offset, 0) / boas.length);
+}
+export function agoraServidor() { return Date.now() + _offsetServidor; }
+export function offsetServidor() { return _offsetServidor; }
+
 export function conectarLobby({ nome = 'Anônimo', perfilId = null, onSala, onSalas, onEvento, onErro, onConexao } = {}) {
   // Handlers mutáveis: a HOME cria a conexão com os seus callbacks; quando o jogo
   // começa, ele REASSUME a mesma conexão (net.setHandlers) sem reconectar — a sala e
@@ -43,13 +64,18 @@ export function conectarLobby({ nome = 'Anônimo', perfilId = null, onSala, onSa
       ws.send(JSON.stringify({ t: 'ola', perfilId, nome }));
       while (fila.length) ws.send(JSON.stringify(fila.shift()));
       clearInterval(pingTimer);
-      pingTimer = setInterval(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: 'ping' })); }, 25000);
+      pingTimer = setInterval(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: 'ping', tc: Date.now() })); }, 25000);
+      // rajada inicial de 3 pings pra calibrar o relógio da sala logo na entrada
+      for (const atraso of [200, 900, 2200]) {
+        setTimeout(() => { if (ws?.readyState === 1) ws.send(JSON.stringify({ t: 'ping', tc: Date.now() })); }, atraso);
+      }
     };
 
     ws.onmessage = (ev) => {
       let msg; try { msg = JSON.parse(ev.data); } catch { return; }
       switch (msg.t) {
         case 'bemvindo': estado.id = msg.id; break;
+        case 'pong': registrarPong(msg.tc, msg.ts); break;
         case 'entrou':
           estado.sala = msg.codigo; estado.host = !!msg.host; entrou = true;
           break;

@@ -10,6 +10,7 @@ import { PAISES } from '../dados/paises.js';
 import { NACOES } from '../dados/registro.js';
 import { avaliarGuerra, combustivelDaGuerra } from './guerra.js';
 import { poderDeploy, custoDeploy } from '../dados/forcas.js';
+import { rand } from './rng.js';
 
 export const MAX_OPERACOES = 3;   // capacidade de comando — não empilha cinemáticas
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -82,7 +83,7 @@ export function processarOperacoes(estado) {
   const prontas = [];
   for (const op of estado.operacoes) {
     op.restante -= 1;
-    if (!op.detectado && Math.random() < chanceDeteccaoAlvo(estado, op)) {
+    if (!op.detectado && rand() < chanceDeteccaoAlvo(estado, op)) {
       op.detectado = true; op.novoAviso = true; op.restanteNaDeteccao = op.restante;
     }
     if (op.restante <= 0) prontas.push(op);

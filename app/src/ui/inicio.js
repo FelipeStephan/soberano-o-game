@@ -15,6 +15,7 @@ import { bandeira, ISO2_DE } from '../dados/imagens.js';
 import { resumoSave, apagarSave } from '../jogo/save.js';
 import { conectarLobby } from '../net/lobby.js';
 import { ico } from './icones.js';
+import { montarControleAudio, tocarEfeito } from './audio.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TEX = 'https://cdn.jsdelivr.net/npm/three-globe/example/img';
@@ -43,6 +44,7 @@ export function mostrarInicio(container, onStart) {
         <h1 class="marca hm-marca">SOBERANO</h1>
         <div class="hm-sub">O GRANDE JOGO — A MÁQUINA OBSERVA</div>
       </header>
+      <div class="hm-audio" id="hm-audio"></div>
 
       <div class="hm-continuar" id="hm-continuar"></div>
       <nav class="hm-nav" id="hm-nav" aria-label="Nações"></nav>
@@ -220,6 +222,7 @@ export function mostrarInicio(container, onStart) {
   function partir(args) {
     if (saindo) return;
     saindo = true;
+    tocarEfeito('swoosh');   // o zoom do globo pro país tem trilha própria
     container.querySelector('#hm').classList.add('saindo');
     const alvo = args.continuar ? resumoSave()?.iso : (args.pais || sel);
     const pino = alvo ? fichaDe(alvo)?.pino : null;
@@ -342,5 +345,6 @@ export function mostrarInicio(container, onStart) {
   }
 
   montarGloboHome();
+  container.querySelector('#hm-audio').appendChild(montarControleAudio());
   render();
 }

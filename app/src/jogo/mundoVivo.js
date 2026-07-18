@@ -19,10 +19,11 @@ import { PAISES } from '../dados/paises.js';
 import { ehPetroestado } from '../dados/petroleo.js';
 import { populacaoDe } from '../dados/populacaoMundo.js';
 import { sinaisPrecocesPandemia } from '../dados/opiniao.js';
+import { rand } from './rng.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const rand = (a) => a[Math.floor(Math.random() * a.length)];
-const chance = (p) => Math.random() < p;
+const sorteioDe = (a) => a[Math.floor(rand() * a.length)];
+const chance = (p) => rand() < p;
 
 // ── O GRAFO DE RIVALIDADES (tensão de base, dos dois lados reais) ─────
 // Cada par tem uma tensão 0-100 que é a PROBABILIDADE ESTRUTURAL de virar guerra.
@@ -88,7 +89,7 @@ const PATOGENOS = [
   { nome: 'MERS-CoV · Linhagem Camelo-7', tipo: 'coronavírus zoonótico', r0: [1.3, 1.9], letal: [20, 34],
     historia: 'A síndrome respiratória do Oriente Médio ganhou eficiência humana sem perder a letalidade que a tornava temida. Saltou de novo dos camelos, dessa vez com fôlego para cadeias de transmissão urbanas.' },
 ];
-const rrange = ([a, b]) => a + Math.random() * (b - a);
+const rrange = ([a, b]) => a + rand() * (b - a);
 
 // Países que participam do mundo vivo mas não são jogáveis (não estão em PAISES).
 // Sem isto o feed imprime "EGY abre fogo contra ETH" — sigla crua quebra a ficção.
@@ -129,13 +130,13 @@ export function tickMundoVivo(estado) {
   // 1) CONFLITOS ATIVOS evoluem: escalam, sangram ou terminam
   for (const c of [...estado.conflitosNPC]) {
     c.turnos += 1;
-    c.intensidade = clamp(c.intensidade + (Math.random() * 24 - 10), 5, 100);
+    c.intensidade = clamp(c.intensidade + (rand() * 24 - 10), 5, 100);
 
     if (c.intensidade < 14 || (c.turnos > 5 && chance(0.3))) {
       estado.conflitosNPC = estado.conflitosNPC.filter((x) => x.id !== c.id);
       eventos.push({
         tom: 'bom', visual: { tipo: 'fimConflito', a: c.a, b: c.b },
-        texto: rand([
+        texto: sorteioDe([
           `${nomeDe(c.a)} e ${nomeDe(c.b)} assinam cessar-fogo. A disputa (${c.tema}) segue sem solução — ninguém venceu, os dois anunciam vitória.`,
           `Trégua entre ${nomeDe(c.a)} e ${nomeDe(c.b)} — exaustão dos dois lados vestida de diplomacia.`,
         ]),
@@ -145,7 +146,7 @@ export function tickMundoVivo(estado) {
     if (c.intensidade > 70 && chance(0.55)) {
       eventos.push({
         tom: 'ruim', visual: { tipo: 'conflito', a: c.a, b: c.b },
-        texto: rand([
+        texto: sorteioDe([
           `${nomeDe(c.a)} lança a maior ofensiva do ano contra ${nomeDe(c.b)}. A linha de frente moveu — e o cemitério também.`,
           `Bombardeio pesado de ${nomeDe(c.a)} sobre ${nomeDe(c.b)}. As imagens de satélite amanheceram diferentes.`,
           `${nomeDe(c.b)} contra-ataca ${nomeDe(c.a)} de surpresa. A guerra que parecia congelada acordou.`,
@@ -165,7 +166,7 @@ export function tickMundoVivo(estado) {
       if (r.a === eu || r.b === eu) continue;                       // guerra SUA é outra mecânica
       if (estado.conflitosNPC.find((c) => c.a === r.a && c.b === r.b)) continue;
       if (chance((r.tensao / 100) * 0.07 + quente * 0.03)) {
-        const novo = { id: `${r.a}_${r.b}_${estado.turno || 0}`, a: r.a, b: r.b, intensidade: 45 + Math.random() * 25, turnos: 0, tema: r.tema };
+        const novo = { id: `${r.a}_${r.b}_${estado.turno || 0}`, a: r.a, b: r.b, intensidade: 45 + rand() * 25, turnos: 0, tema: r.tema };
         estado.conflitosNPC.push(novo);
         eventos.push({
           tom: 'ruim', visual: { tipo: 'conflito', a: r.a, b: r.b, novo: true },
@@ -178,7 +179,7 @@ export function tickMundoVivo(estado) {
 
   // 3) PACTOS: o mundo também coopera (e cooperação alheia também é ameaça)
   if (chance(0.16)) {
-    const a = rand(AFINIDADES.filter((p) => p.a !== eu && p.b !== eu
+    const a = sorteioDe(AFINIDADES.filter((p) => p.a !== eu && p.b !== eu
       && !estado.pactosNPC.find((x) => x.a === p.a && x.b === p.b)));
     if (a) {
       estado.pactosNPC.push({ a: a.a, b: a.b, tema: a.tema, turno: estado.turno || 0 });
@@ -203,15 +204,15 @@ function tickPandemias(estado, eu) {
   // NASCE como PRÉ-SURTO (rumor, ainda não oficial) — só os sinais no X denunciam. Intel
   // alta ganha mais antecedência pra reagir barato antes de virar notícia.
   if (!estado.pandemias.length && chance(0.045)) {
-    const p = rand(PATOGENOS);
-    const regiao = rand(Object.keys(REGIOES));
-    const origem = rand(REGIOES[regiao]);
-    const antecedencia = 2 + Math.floor(Math.random() * 3) + Math.floor((estado.inteligencia || 0) / 25);
+    const p = sorteioDe(PATOGENOS);
+    const regiao = sorteioDe(Object.keys(REGIOES));
+    const origem = sorteioDe(REGIOES[regiao]);
+    const antecedencia = 2 + Math.floor(rand() * 3) + Math.floor((estado.inteligencia || 0) / 25);
     estado.pandemias.push({
       id: `${p.nome}_${estado.turno || 0}`.replace(/\s/g, '_'),
       nome: p.nome, tipo: p.tipo, historia: p.historia, origem, regiao, paises: [],
       turnos: 0, fase: 'presurto', r0: rrange(p.r0), letalidade: rrange(p.letal),
-      gravidade: 4 + Math.random() * 6, gravidadeAnt: 5, mortos: 0,
+      gravidade: 4 + rand() * 6, gravidadeAnt: 5, mortos: 0,
       curaAcumulada: 0, contencaoAcumulada: 0, turnosPresurtoRestantes: antecedencia,
       antecedenciaTotal: antecedencia, contidoEm: {},
     });
@@ -225,7 +226,7 @@ function tickPandemias(estado, eu) {
     // ── FASE PRÉ-SURTO: rumores no X, chance de abafar ANTES de estourar ──
     if (p.fase === 'presurto') {
       p.turnosPresurtoRestantes -= 1;
-      p.gravidade = clamp(p.gravidade + 1 + Math.random() * 2, 0, 40);
+      p.gravidade = clamp(p.gravidade + 1 + rand() * 2, 0, 40);
       estado._pandemiaPosts = estado._pandemiaPosts || [];
       estado._pandemiaPosts.push(...sinaisPrecocesPandemia(estado.iso || eu, p, nomeDe(p.origem), p.antecedenciaTotal));
       // abafado a tempo? some sem NUNCA virar notícia oficial (recompensa agir cedo).
@@ -248,7 +249,7 @@ function tickPandemias(estado, eu) {
     // ── GRAVIDADE: cresce por R0×alcance, freia com contenção+cura ──
     const resistencia = clamp((p.contencaoAcumulada || 0) + (p.curaAcumulada || 0) * 0.6, 0, 100);
     const empurrao = p.r0 * 5.5 * (Math.max(1, p.paises.length) ** 0.35);
-    p.gravidade = clamp(p.gravidade + empurrao - resistencia * 0.11 + (Math.random() * 4 - 2), 0, 100);
+    p.gravidade = clamp(p.gravidade + empurrao - resistencia * 0.11 + (rand() * 4 - 2), 0, 100);
 
     if (p.gravidade <= 8 && p.turnos > 3) p.fase = 'declinio';
     else if (p.gravidade >= 62 || p.paises.length >= 5) p.fase = 'pandemia';
@@ -268,11 +269,11 @@ function tickPandemias(estado, eu) {
         const dentroDa = REGIOES[p.regiao].filter((i) => !p.paises.includes(i) && !p.contidoEm[i]);
         const salto = chance(0.3);
         const novos = [];
-        if (dentroDa.length && !salto) novos.push(rand(dentroDa));
+        if (dentroDa.length && !salto) novos.push(sorteioDe(dentroDa));
         else {
-          const outra = rand(Object.keys(REGIOES).filter((r) => r !== p.regiao));
+          const outra = sorteioDe(Object.keys(REGIOES).filter((r) => r !== p.regiao));
           const cand = REGIOES[outra].filter((i) => !p.paises.includes(i));
-          if (cand.length) { novos.push(rand(cand)); p.regiao = outra; }
+          if (cand.length) { novos.push(sorteioDe(cand)); p.regiao = outra; }
         }
         if (novos.length) {
           p.paises.push(...novos);
@@ -342,11 +343,11 @@ const ESCARAMUCAS = [
   (a, b) => `Tropas de ${a} tentam avançar sobre ${b} e recuam com baixas. O comunicado oficial chama de "reposicionamento".`,
 ];
 export function escaramucaAleatoria(estado) {
-  const c = rand(estado.conflitosNPC || []);
+  const c = sorteioDe(estado.conflitosNPC || []);
   if (!c) return null;
   const invertido = chance(0.5);
   const [de, para] = invertido ? [c.b, c.a] : [c.a, c.b];
-  return { de, para, texto: rand(ESCARAMUCAS)(nomeDe(de), nomeDe(para)) };
+  return { de, para, texto: sorteioDe(ESCARAMUCAS)(nomeDe(de), nomeDe(para)) };
 }
 
 // ── PULSO AO VIVO (entre turnos) ──────────────────────────────────────
@@ -368,7 +369,7 @@ export function pulsoAoVivo(estado) {
   // 1) Guerra num PETRO-ESTADO sacode o SEU barril — e vira plantão.
   const petro = conflitos.find((c) => ehPetroestado(c.a) || ehPetroestado(c.b));
   if (petro && chance(0.4)) {
-    const alta = 4 + Math.round(Math.random() * 8);
+    const alta = 4 + Math.round(rand() * 8);
     const antes = estado.preco_petroleo || 78;
     estado.preco_petroleo = clamp(antes + alta, 18, 240);
     const iso = ehPetroestado(petro.a) ? petro.a : petro.b;
@@ -382,5 +383,5 @@ export function pulsoAoVivo(estado) {
   const esc = escaramucaAleatoria(estado);
   if (esc && chance(0.65)) return { tipo: 'escaramuca', de: esc.de, para: esc.para, texto: esc.texto, tom: 'aviso' };
   // 3) Murmúrio de mundo (quando não há guerra pra mostrar).
-  return { tipo: 'murmurio', ...rand(MURMURIOS) };
+  return { tipo: 'murmurio', ...sorteioDe(MURMURIOS) };
 }

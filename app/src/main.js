@@ -19,6 +19,7 @@ import { definirJogador } from './dados/paises.js';
 import { carregarPartida } from './jogo/save.js';
 import { bootstrapIA } from './config.js';
 import { carregarPerfil, sincronizarNuvem } from './jogo/nuvem.js';
+import { iniciarAudio } from './ui/audio.js';
 
 const app = document.querySelector('#app');
 
@@ -39,6 +40,9 @@ function comecarJogo({ pais, presidente, continuar, online, net, sala, jogadores
 }
 
 async function iniciar() {
+  // Som antes de tudo: a música é do MENU também, e o click universal vale em
+  // qualquer tela. Se o navegador bloquear autoplay, destrava no primeiro gesto.
+  iniciarAudio();
   // Em paralelo: descobre se a IA está ligada e registra o perfil na nuvem.
   await Promise.allSettled([bootstrapIA(), carregarPerfil()]);
   // Sincroniza a partida local com a nuvem (se houver save mais novo lá).

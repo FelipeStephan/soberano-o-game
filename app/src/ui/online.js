@@ -159,7 +159,7 @@ export function ligarOnline(jogo, net, hooks) {
     const g = hooks.globoCtrl?.();
     if (d.anim && g) {
       const de = g.ondeEsta?.(d.anim.de); const para = g.ondeEsta?.(d.anim.para || d.anim.iso);
-      if (d.anim.tipo === 'escaramuca' && de && para) { g.desenharLinha?.(para, 'ataque', 6000, de); g.salvaMisseis?.(para, 2, de); }
+      if (d.anim.tipo === 'escaramuca' && de && para) { g.desenharLinha?.(para, 'ataque', 6000, de); g.salvaMisseis?.(para, 2, de, { som: false }); }
       else if (d.anim.tipo === 'petroleo' && para) g.ondaRadar?.(para, { cor: 0xffb020, max: 55 });
     }
     // relógio da sala: o período do HOST vira o período mostrado (sem mexer no turno local)
