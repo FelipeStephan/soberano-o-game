@@ -16,6 +16,7 @@ import { breakingRemoto } from './breaking.js';
 import { tentarIntervencao } from '../jogo/intervencaoConflito.js';
 import { techDaFrota } from '../dados/forcas.js';
 import { tocarEfeito } from './audio.js';
+import { offsetServidor } from '../net/lobby.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -80,12 +81,23 @@ export function ligarOnline(jogo, net, hooks) {
     // FROTA de outro jogador no mar: aparece no SEU globo (e some quando recolhe).
     if (ev.tipo === 'frota_pos') { upsertFrotaHumana(ev); return; }
     if (ev.tipo === 'frota_out') { removerFrotaHumana(ev); return; }
+    // RESULTADO DE COMBATE NAVAL: o dono da frota atacada SENTE o golpe (afundou/
+    // baixas) e todos removem o pino — acabou o "navio fantasma".
+    if (ev.tipo === 'naval_resultado') { aplicarResultadoNaval(ev); return; }
+    // CONQUISTA TERRITORIAL: os estados atingidos mudam de dono/entram em conflito
+    // no mapa de TODOS — o atacado vê o próprio território marcado, como o atacante.
+    if (ev.tipo === 'guerra_resultado') { aplicarImpactoTerritorial(ev); return; }
     // PLANTÃO de outro jogador: o mesmo breaking, o mesmo texto, na tela de todos.
     if (ev.tipo === 'breaking') { breakingRemoto(jogo, ev.dados || {}); return; }
     // MEDIAÇÃO: a diplomacia de um jogador MOVE o conflito da sala — o host aplica os
     // pontos no mundo autoritativo e a próxima batida espalha o avanço pra todos.
     if (ev.tipo === 'mediacao' && ev.dados?.conflitoId && net.estado().host) {
       try { tentarIntervencao(jogo.estado, ev.dados.conflitoId, ev.dados.frente || 'mediar'); } catch { /* conflito já acabou */ }
+    }
+    // Ataque a UM estado: o território atingido marca no mapa de todos (e segue
+    // para o fluxo normal — alerta/Modo Defesa se o alvo for você).
+    if (ev.tipo === 'ataque_estado' && ev.dados?.estadoId) {
+      aplicarImpactoTerritorial({ ...ev, dados: { caem: ev.dados.tomou ? [ev.dados.estadoId] : [], conflito: [ev.dados.estadoId] } }, { silencioso: true });
     }
     const est = ESTILO[ev.tipo] || { cor: '#7488ad', urgente: false, rot: (ev.tipo || 'AGIU').toUpperCase(), ic: 'radio' };
     const origem = ev.deNome ? `${ev.deNome} (${nomeDe(ev.dePais)})` : nomeDe(ev.dePais);
@@ -201,8 +213,22 @@ export function ligarOnline(jogo, net, hooks) {
       id, code: ev.dePais, humana: true, lat: d.lat, lng: d.lng,
       unidades: d.unidades || { navios: 4 }, presenca: d.presenca ?? 6,
     };
-    if (atual) Object.assign(atual, frota);
-    else e.frotasInimigas.push(frota);
+    // EM TRÂNSITO: a esquadra NAVEGA no seu globo igual no do dono — mesma rota,
+    // mesmos horários (convertidos do relógio do servidor pro seu). O tique de
+    // trânsito do globo interpola sozinho e crava no destino na hora certa.
+    if (d.destino && Number.isFinite(d.chegaEm)) {
+      const off = offsetServidor();
+      frota.origem = { lat: d.lat, lng: d.lng };
+      frota.destino = { lat: d.destino.lat, lng: d.destino.lng };
+      frota.partiuEm = (d.partiuEm ?? Date.now()) - off;
+      frota.chegaEm = d.chegaEm - off;
+      if (Array.isArray(d.rota) && d.rota.length >= 2) frota.rota = d.rota;
+    }
+    if (atual) {
+      // atualização de posição: limpa um trânsito antigo antes de aplicar o novo
+      delete atual.origem; delete atual.destino; delete atual.partiuEm; delete atual.chegaEm; delete atual.rota;
+      Object.assign(atual, frota);
+    } else e.frotasInimigas.push(frota);
     const g = hooks.globoCtrl?.();
     g?.atualizar?.();
     // ÁGUAS TERRITORIAIS: frota humana perto da SUA costa → a sua defesa costeira
@@ -224,6 +250,70 @@ export function ligarOnline(jogo, net, hooks) {
       hooks.renderFeed?.();
     }
   }
+  // ── RESULTADO NAVAL chega: o DONO da frota sente o golpe ────────────
+  function aplicarResultadoNaval(ev) {
+    const d = ev.dados || {};
+    const donoIso = ev.alvo;
+    if (!donoIso || !d.frotaId) return;
+    const e = jogo.estado;
+    const g = hooks.globoCtrl?.();
+    // TODOS removem/atualizam o pino da frota atacada (adeus, navio fantasma)
+    if (d.venceu && e.frotasInimigas) {
+      e.frotasInimigas = e.frotasInimigas.filter((f) => f.id !== `hum_${donoIso}_${d.frotaId}`);
+    }
+    // O DONO aplica no próprio estado: afundou (some + tropa perdida) ou baixas
+    if (donoIso === meuIso) {
+      const fr = (e.frotas || []).find((f) => f.id === d.frotaId);
+      if (fr) {
+        if (d.venceu) {
+          if (fr.guarnKey && e.guarnicoes) delete e.guarnicoes[fr.guarnKey];   // a tropa AFUNDOU junto
+          e.frotas = e.frotas.filter((f) => f.id !== fr.id);
+          alertaUrgente({ titulo: 'SUA FROTA FOI AFUNDADA', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} destruiu a sua esquadra.`, tom: 'ataque' });
+          jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚓ Marinha', cor: '#ff3b5c', texto: `Perdemos a esquadra em combate contra ${nomeDe(ev.dePais)}. As unidades a bordo afundaram com ela.` }]);
+        } else {
+          const pct = Math.max(0, Math.min(95, d.perdaPct || 30));
+          for (const k of Object.keys(fr.unidades || {})) {
+            fr.unidades[k] = Math.max(0, Math.floor(fr.unidades[k] * (1 - pct / 100)));
+            if (!fr.unidades[k]) delete fr.unidades[k];
+          }
+          if (fr.guarnKey && e.guarnicoes) e.guarnicoes[fr.guarnKey] = { ...fr.unidades };
+          alertaUrgente({ titulo: 'SUA FROTA FOI ATACADA', texto: `${ev.deNome || nomeDe(ev.dePais)} atacou sua esquadra — ela resistiu com ${pct}% de baixas.`, tom: 'ataque' });
+        }
+        hooks.renderFeed?.();
+      }
+    }
+    g?.atualizar?.();
+  }
+
+  // ── IMPACTO TERRITORIAL chega: o mapa de TODOS marca a conquista/conflito ──
+  function aplicarImpactoTerritorial(ev, { silencioso = false } = {}) {
+    const d = ev.dados || {};
+    const e = jogo.estado;
+    const atacante = ev.dePais;
+    if (!atacante) return;
+    e.donoEstado = e.donoEstado || {};
+    e.conflitosEstado = e.conflitosEstado || {};
+    for (const id of (d.caem || [])) {
+      e.donoEstado[id] = atacante;                     // o estado MUDOU DE DONO no mapa de todos
+      e.conflitosEstado[id] = { por: atacante, intensidade: 45, turnos: 0 };
+    }
+    for (const id of (d.conflito || [])) {
+      if (!e.conflitosEstado[id]) e.conflitosEstado[id] = { por: atacante, intensidade: 30, turnos: 0 };
+    }
+    const g = hooks.globoCtrl?.();
+    // o país atacado abre em estados no globo de quem olha (pra marca aparecer)
+    if (ev.alvo) g?.carregarPais?.(ev.alvo)?.then?.(() => g?.atualizar?.());
+    g?.atualizar?.();
+    if (silencioso) return;
+    // veio do desfecho de uma OFENSIVA (guerra_resultado): alerta o dono + feed geral
+    if (ev.alvo === meuIso) {
+      alertaUrgente({ titulo: 'TERRITÓRIO PERDIDO', texto: ev.texto || `${ev.deNome || nomeDe(atacante)} tomou ${d.caem?.length || 0} território(s) seu(s). Clique no seu país para ver o estrago.`, tom: 'ataque' });
+    }
+    jogo._empilharFeed?.([{ tipo: 'jogador', handle: ev.deNome || nomeDe(atacante), paisOrigem: atacante, paisAlvo: ev.alvo || null,
+      texto: ev.texto || `Ofensiva concluída: ${d.caem?.length || 0} território(s) tomado(s).`, cor: '#ff3b5c' }]);
+    hooks.renderFeed?.();
+  }
+
   function removerFrotaHumana(ev) {
     const e = jogo.estado;
     if (!e.frotasInimigas) return;
@@ -263,7 +353,14 @@ export function ligarOnline(jogo, net, hooks) {
     // A BATIDA do host viaja pra sala (e o servidor a cacheia pro próximo que entrar).
     relayBeat: (dados) => net.evento('beat', null, '', dados),
     // A SUA frota no mar, visível pra sala: posição/composição resumida — e a saída.
-    relayFrota: (dados) => net.evento('frota_pos', null, '', dados),
+    // Horários de trânsito viajam em TEMPO DO SERVIDOR (cada cliente converte de volta).
+    relayFrota: (dados) => {
+      const d = { ...dados };
+      const off = offsetServidor();
+      if (Number.isFinite(d.partiuEm)) d.partiuEm += off;
+      if (Number.isFinite(d.chegaEm)) d.chegaEm += off;
+      net.evento('frota_pos', null, '', d);
+    },
     relayFrotaSaiu: (frotaId) => net.evento('frota_out', null, '', { id: frotaId }),
     // VOCÊ agiu sobre um país. Se for humano, dispara o alerta pra ele. Sempre publica
     // no feed da sala (todos veem o impacto — é o World Trends).

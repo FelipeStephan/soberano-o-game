@@ -5479,3 +5479,10 @@ button[data-tip], .tip-q { cursor: pointer; }
 .env-simbolo.resgate { color: var(--verde); }
 .env-jaguerra.resgate { background: rgba(34,224,160,.08); box-shadow: inset 2px 0 0 var(--verde); color: var(--texto); }
 .env-jaguerra.resgate .ico { color: var(--verde); }
+
+/* ═══ FROTA HUMANA — tom por relação (aliada/neutra/hostil) ═══ */
+.mm-in.aliada { box-shadow: inset 0 0 0 1px rgba(34,224,160,.55), 0 0 14px rgba(34,224,160,.25); }
+.mm-in.aliada .mm-rot { color: var(--verde); }
+.mm-in.neutra { box-shadow: inset 0 0 0 1px rgba(255,176,32,.5), 0 0 12px rgba(255,176,32,.2); }
+.mm-in.neutra .mm-rot { color: var(--ambar); }
+.fah-dom:not(.hostil) { background: rgba(255,176,32,.18); color: var(--ambar); }

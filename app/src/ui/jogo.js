@@ -1069,6 +1069,14 @@ export function iniciarJogo(container, jogo, opts = {}) {
       });
       if (res.falha) { proxima(); return; }
       jogo.aplicarGuerra(feature, res);
+      // MUNDO ÚNICO: o desfecho da ofensiva viaja pra sala — os territórios tomados
+      // mudam de dono no mapa de TODOS, e o atacado vê o próprio país marcado.
+      if (jogo.ehOnline) {
+        const caem = (res.campanha?.caem || []).map((x) => x.id).filter(Boolean);
+        jogo._relayOnline?.('guerra_resultado', o.alvoIso,
+          `Ofensiva de ${jogo.ficha.presidente || jogo.ficha.pais} contra ${o.alvoNome}: ${caem.length} território(s) tomado(s)${res.campanha?.tomouCapital ? ' — a CAPITAL caiu' : ''}.`,
+          { caem, tomouCapital: !!res.campanha?.tomouCapital });
+      }
       // visuais no globo: o eixo de ataque + a esquadrilha voando até o alvo
       const alvoC = globoCtrl?.ondeEsta?.(o.alvoIso);
       if (alvoC) { globoCtrl?.desenharLinha?.(alvoC, 'ataque', 6000, globoCtrl?.ondeEsta?.(jogo.estado.iso)); globoCtrl?.lancarEsquadrilha?.(alvoC, 'ataque'); }

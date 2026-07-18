@@ -196,6 +196,15 @@ async function executarAtaqueNucleo({ fr, a, selecao, defesa, jogo, helpers, pal
     if (g) for (const k of Object.keys(g)) { g[k] = Math.max(0, Math.floor((g[k] || 0) * (1 - res.perdaDefensorPct / 100))); if (!g[k]) delete g[k]; }
   }
   if (a.tipo === 'frota') {
+    // FROTA DE JOGADOR HUMANO: o DONO precisa sentir o golpe — o resultado viaja
+    // pra sala (ele perde a frota/tropas de verdade; todos removem o pino).
+    if (a.frota.humana) {
+      const donoIso = a.frota.code;
+      const idOriginal = String(a.frota.id).replace(new RegExp(`^hum_${donoIso}_`), '');
+      jogo._relayOnline?.('naval_resultado', donoIso,
+        res.venceu ? `A esquadra de ${meuNome} AFUNDOU a sua frota.` : `A esquadra de ${meuNome} atacou a sua frota — ela resistiu.`,
+        { frotaId: idOriginal, venceu: res.venceu, perdaPct: res.perdaDefensorPct });
+    }
     if (res.venceu) {
       e.frotasInimigas = (e.frotasInimigas || []).filter((f) => f.id !== a.frota.id);
       fr.abates = fr.abates || []; fr.abates.push({ nome: PAISES[a.frota.code]?.nome || a.frota.code, code: a.frota.code, poder: poderNaval(a.frota), turno: e.turno || 0 });

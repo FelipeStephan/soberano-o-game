@@ -484,6 +484,13 @@ export async function montarGlobo(container, jogo, {
     rota = cortarRota(rota, alc);
     const alvoFinal = rota[rota.length - 1];
     const dur = iniciarTransito(fr, alvoFinal, Date.now(), rota);
+    // MUNDO ÚNICO: o trânsito ecoa na sala — os outros veem a esquadra NAVEGANDO
+    // pela mesma rota, no mesmo horário (não um teleporte pro destino).
+    jogo._relayFrota?.({
+      id: fr.id, lat: fr.lat, lng: fr.lng, destino: { lat: alvoFinal.lat, lng: alvoFinal.lng },
+      partiuEm: fr.partiuEm || null, chegaEm: fr.chegaEm || null, rota: fr.rota || null,
+      unidades: { ...(fr.unidades || {}) }, presenca: fr.presenca,
+    });
     // A ESTEIRA segue a rota: desenha a polilinha em trechos, UMA vez, no início — o
     // movimento em si é do tique de trânsito, não destes arcos efêmeros.
     const vida = Math.min(9000, dur);
@@ -1583,8 +1590,13 @@ export async function montarGlobo(container, jogo, {
         const nomeI = PAISES[fi.code]?.nome ? `Frota de ${PAISES[fi.code].nome}` : (eqI?.nome || NOME_NAVAL[domI]);
         const linhasI = presentes.map((k) => `${u[k]} × ${NOME_NAVAL[k]}`).join(' · ');
         const forcaI = poderNaval(fi);
+        // FROTA HUMANA tem TOM pela relação: aliada (verde), neutra (âmbar), hostil
+        // (vermelha) — o dono pediu a distinção sutil no pino. NPC segue hostil.
+        const relI = Number(jogo.estado[PAISES[fi.code]?.rel ?? `rel_${(fi.code || '').toLowerCase()}`] ?? 0);
+        const tomI = fi.humana ? (relI >= 30 ? 'aliada' : relI <= -20 ? 'hostil' : 'neutra') : 'hostil';
+        const corFoco = tomI === 'aliada' ? 'rgba(34,224,160,' : tomI === 'neutra' ? 'rgba(255,176,32,' : 'rgba(255,59,92,';
         const roverI = `<div class="fah-nav inimiga">
-          <div class="fah-foto">${fotoI ? `<img src="${fotoI}" alt="" onerror="this.parentElement.innerHTML='${ico(ICO_NAVAL[domI], 22)}'">` : ico(ICO_NAVAL[domI], 22)}<span class="fah-dom hostil">HOSTIL</span></div>
+          <div class="fah-foto">${fotoI ? `<img src="${fotoI}" alt="" onerror="this.parentElement.innerHTML='${ico(ICO_NAVAL[domI], 22)}'">` : ico(ICO_NAVAL[domI], 22)}<span class="fah-dom ${tomI === 'hostil' ? 'hostil' : ''}">${tomI.toUpperCase()}</span></div>
           <div class="fah-corpo">
             <div class="fah-nome">${esc(nomeI)}</div>
             <div class="fah-fab">${esc(linhasI || 'força naval')}</div>
@@ -1599,12 +1611,12 @@ export async function montarGlobo(container, jogo, {
         const di = poolInimiga.get(fi) || {};
         if (!poolInimiga.has(fi)) poolInimiga.set(fi, di);
         Object.assign(di, {
-          lat: fi.lat, lng: fi.lng, tipo: 'frota-inimiga', foto: fotoI, svg: ico(ICO_NAVAL[domI], 12), rot: `${totalI}`,
-          semInfo: true, frotaInimigaRef: fi, avistada: true, avistadaHostil: true,
+          lat: fi.lat, lng: fi.lng, tipo: `frota-inimiga ${tomI}`, foto: fotoI, svg: ico(ICO_NAVAL[domI], 12), rot: `${totalI}`,
+          semInfo: true, frotaInimigaRef: fi, avistada: true, avistadaHostil: tomI === 'hostil',
           titulo: `${nomeI} · força ${forcaI}`, tip: roverI,
         });
         novos.push(di);
-        focos.push({ lat: fi.lat, lng: fi.lng, cor: 'rgba(255,59,92,', raio: 2 + Math.min(2.5, totalI * 0.3), vel: 1.5, periodo: 1100, forca: 0.4 });
+        focos.push({ lat: fi.lat, lng: fi.lng, cor: corFoco, raio: 2 + Math.min(2.5, totalI * 0.3), vel: 1.5, periodo: 1100, forca: 0.4 });
       }
     }
 

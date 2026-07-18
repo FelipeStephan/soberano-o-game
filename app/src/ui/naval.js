@@ -372,9 +372,15 @@ export function abrirPosicaoNaval(coord, jogo, { onFim, globoCtrl } = {}) {
     fr.guarnKey = `MAR_${fr.id}`;                         // LIGA a frota à tropa comprometida
     e.guarnicoes[fr.guarnKey] = { ...envio };            // ocupa a tropa (sai de tropaLivre)
 
-    // MUNDO ÚNICO: a frota aparece no globo DOS OUTROS jogadores da sala (destino
-    // final — quem olha vê a esquadra chegando na posição).
-    jogo._relayFrota?.({ id: fr.id, lat: coord.lat, lng: coord.lng, unidades: { ...envio }, presenca: pres });
+    // MUNDO ÚNICO: a frota aparece no globo DOS OUTROS jogadores NAVEGANDO — com o
+    // MESMO trânsito (origem, destino, horários). Nada de teleporte só pro inimigo:
+    // todos veem a esquadra zarpar do porto e cruzar o mar em sincronia.
+    jogo._relayFrota?.({
+      id: fr.id, lat: fr.lat, lng: fr.lng,
+      destino: porto ? { lat: coord.lat, lng: coord.lng } : null,
+      partiuEm: fr.partiuEm || null, chegaEm: fr.chegaEm || null, rota: fr.rota || null,
+      unidades: { ...envio }, presenca: pres,
+    });
 
     // O preço agora depende da ZONA e da RELAÇÃO, não é mais um número fixo:
     //   • parceiro → é um pedido de acesso: quase não custa relação, dá até soft_power.
