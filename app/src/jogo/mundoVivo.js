@@ -106,13 +106,19 @@ const nomeDe = (iso) => PAISES[iso]?.nome || NOMES_EXTRA[iso] || iso;
 // ── SEMENTE ───────────────────────────────────────────────────────────
 // O mundo já começa em movimento: a guerra Rússia–Ucrânia está acontecendo em 2026,
 // não esperando o jogador dar o primeiro clique.
+// ONLINE: país controlado por OUTRO jogador humano não é movido pela máquina. Offline
+// `estado._humanos` é undefined → sempre false → mundo vivo intacto no single-player.
+const humanoNPC = (estado, iso) => !!(estado._humanos && estado._humanos.includes(iso));
+
 export function semearMundoVivo(estado) {
   if (estado.conflitosNPC) return;
   estado.conflitosNPC = [];
   estado.pactosNPC = [];
   estado.pandemias = [];
   const eu = estado.iso || 'USA';
-  if (eu !== 'RUS' && eu !== 'UKR') {
+  // Não semeia a guerra Rússia×Ucrânia se qualquer um dos dois for um jogador humano —
+  // eles decidem a própria guerra, não a IA.
+  if (eu !== 'RUS' && eu !== 'UKR' && !humanoNPC(estado, 'RUS') && !humanoNPC(estado, 'UKR')) {
     estado.conflitosNPC.push({
       id: 'rus_ukr', a: 'RUS', b: 'UKR', intensidade: 82, turnos: 0, tema: 'a invasão',
     });
@@ -164,6 +170,7 @@ export function tickMundoVivo(estado) {
     const quente = (estado.temp_guerra || 30) / 100;
     for (const r of RIVALIDADES) {
       if (r.a === eu || r.b === eu) continue;                       // guerra SUA é outra mecânica
+      if (humanoNPC(estado, r.a) || humanoNPC(estado, r.b)) continue; // país de outro humano: a IA não declara guerra por ele
       if (estado.conflitosNPC.find((c) => c.a === r.a && c.b === r.b)) continue;
       if (chance((r.tensao / 100) * 0.07 + quente * 0.03)) {
         const novo = { id: `${r.a}_${r.b}_${estado.turno || 0}`, a: r.a, b: r.b, intensidade: 45 + rand() * 25, turnos: 0, tema: r.tema };
@@ -180,6 +187,7 @@ export function tickMundoVivo(estado) {
   // 3) PACTOS: o mundo também coopera (e cooperação alheia também é ameaça)
   if (chance(0.16)) {
     const a = sorteioDe(AFINIDADES.filter((p) => p.a !== eu && p.b !== eu
+      && !humanoNPC(estado, p.a) && !humanoNPC(estado, p.b)
       && !estado.pactosNPC.find((x) => x.a === p.a && x.b === p.b)));
     if (a) {
       estado.pactosNPC.push({ a: a.a, b: a.b, tema: a.tema, turno: estado.turno || 0 });
@@ -247,20 +255,30 @@ function tickPandemias(estado, eu) {
     }
 
     // ── GRAVIDADE: cresce por R0×alcance, freia com contenção+cura ──
-    const resistencia = clamp((p.contencaoAcumulada || 0) + (p.curaAcumulada || 0) * 0.6, 0, 100);
+    // A cura agora pesa 1:1 (antes 0.6) e o freio é 0.28 (antes 0.11). Sem isso a doença
+    // era MATEMATICAMENTE IMORTAL: o empurrão superava o teto do freio e a gravidade nunca
+    // caía até o declínio. Com cura≈100 o freio chega a ~28/turno e vence quase todo surto.
+    const resistencia = clamp((p.contencaoAcumulada || 0) + (p.curaAcumulada || 0), 0, 130);
     const empurrao = p.r0 * 5.5 * (Math.max(1, p.paises.length) ** 0.35);
-    p.gravidade = clamp(p.gravidade + empurrao - resistencia * 0.11 + (rand() * 4 - 2), 0, 100);
+    p.gravidade = clamp(p.gravidade + empurrao - resistencia * 0.28 + (rand() * 4 - 2), 0, 100);
 
     if (p.gravidade <= 8 && p.turnos > 3) p.fase = 'declinio';
     else if (p.gravidade >= 62 || p.paises.length >= 5) p.fase = 'pandemia';
     else if (p.gravidade >= 30 || p.paises.length >= 2) p.fase = 'epidemia';
     else p.fase = 'surto';
 
+    // CURA GLOBAL fechada (pesquisa em 100%): declínio irreversível. O dinheiro que os
+    // países investiram VIRA o fim da pandemia — não só um freio marginal que nunca chegava.
+    if ((p.curaAcumulada || 0) >= 100) { p.gravidade = clamp(p.gravidade - 12, 0, 100); p.fase = 'declinio'; }
+
     if (p.fase === 'declinio') {
-      if (p.gravidade <= 3 || p.turnos >= 16) {
+      const curada = (p.curaAcumulada || 0) >= 100;
+      if (curada || p.gravidade <= 3 || p.turnos >= 16) {
         estado.pandemias = estado.pandemias.filter((x) => x.id !== p.id);
         eventos.push({ tom: 'bom', visual: { tipo: 'fimPandemia', isos: p.paises },
-          texto: `A OMS declara o fim da emergência de ${p.nome}. ${p.mortos.toLocaleString('pt-BR')} mortos, ${p.paises.length} países atravessados.` });
+          texto: curada
+            ? `Vacina contra ${p.nome} aprovada e distribuída em massa. A OMS declara o fim da emergência — ${p.mortos.toLocaleString('pt-BR')} mortos ao longo de ${p.paises.length} países. A ciência venceu.`
+            : `A OMS declara o fim da emergência de ${p.nome}. ${p.mortos.toLocaleString('pt-BR')} mortos, ${p.paises.length} países atravessados.` });
         continue;
       }
     } else {
@@ -365,7 +383,8 @@ const MURMURIOS = [
 const nomeAoVivo = (iso) => nomeDe(iso);
 export function pulsoAoVivo(estado) {
   const eu = estado.iso || 'USA';
-  const conflitos = (estado.conflitosNPC || []).filter((c) => c.a !== eu && c.b !== eu);
+  const conflitos = (estado.conflitosNPC || []).filter((c) => c.a !== eu && c.b !== eu
+    && !humanoNPC(estado, c.a) && !humanoNPC(estado, c.b));
   // 1) Guerra num PETRO-ESTADO sacode o SEU barril — e vira plantão.
   const petro = conflitos.find((c) => ehPetroestado(c.a) || ehPetroestado(c.b));
   if (petro && chance(0.4)) {

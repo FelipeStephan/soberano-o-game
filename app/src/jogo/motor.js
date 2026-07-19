@@ -514,6 +514,15 @@ export class Jogo {
     if (acao.pandemiaAlvo) {
       const r = aplicarAcaoPandemia(this.estado, acao.pandemiaAlvo, resultado.sucesso !== false);
       if (r?.texto) this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Saúde', texto: r.texto, cor: r.tom === 'bom' ? '#22e0a0' : r.tom === 'aviso' ? '#ffb020' : '#7488ad' }]);
+      // ONLINE: a cura/contenção que VOCÊ financiou tem de SOMAR no mundo compartilhado. O
+      // host é a autoridade que acumula e reespalha via snapshot; sem isto a contribuição do
+      // convidado era apagada a cada batida (por que "financiar junto não tinha impacto").
+      if (this.ehOnline && resultado.sucesso !== false) {
+        this._relayOnline?.('pandemia_cura', null, '', {
+          pandemiaId: acao.pandemiaAlvo.pandemiaId, tipo: acao.pandemiaAlvo.tipo,
+          valor: acao.pandemiaAlvo.valor, alvoIso: acao.pandemiaAlvo.alvoIso,
+        });
+      }
     }
     this._empilharFeed([this._acaoParaPost(resultado)]);
     // a imprensa cobre a ação no X (card de link, tom do jornal) — o que faltava no tempo real

@@ -91,8 +91,6 @@ function logoX(tam = 20) {
 }
 const prob = (p) => (p >= 1 ? '100%' : `${Math.round(p * 100)}%`);
 
-const ISO2_MAPA = { USA: 'us', BRA: 'br', CHN: 'cn', RUS: 'ru', DEU: 'de', FRA: 'fr', GBR: 'gb', IND: 'in', JPN: 'jp', KOR: 'kr', ISR: 'il', TUR: 'tr', IRN: 'ir', ITA: 'it', SWE: 'se' };
-
 export function iniciarJogo(container, jogo, opts = {}) {
   const online = !!opts.online;
   const net = opts.net || null;
@@ -114,7 +112,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
     };
   });
   const f = jogo.ficha;
-  const ISO2_JOGADOR = ISO2_MAPA[f.iso] || 'us';
+  // Bandeira do topo pelo mapa CANÔNICO e completo (imagens.js). Antes usava um mapa local
+  // com só 15 países — UKR/SAU/EGY/PRK/PAK/VEN/IDN caíam na bandeira dos EUA ('us').
+  const ISO2_JOGADOR = ISO2_DE[f.iso] || 'us';
   let catAtual = 'Militar';
   let globoCtrl = null;
   let tr = null; // controlador do MODO TEMPO REAL (relógio + fila de ações com custo em segundos)

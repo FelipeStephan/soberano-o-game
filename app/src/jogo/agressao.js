@@ -102,8 +102,9 @@ export function ameacas(estado) {
   const eu = jogadorIso();
   const culpa = culpaDoJogador(estado);            // o mundo responde ao que VOCÊ faz
   const out = [];
+  const humanos = estado._humanos || null;   // online: países de outros jogadores não são movidos pela IA
   for (const [iso, info] of Object.entries(PAISES)) {
-    if (souEu(iso)) continue;
+    if (souEu(iso) || (humanos && humanos.includes(iso))) continue;
     const rel = Number(estado[info.rel] ?? 0);
     if (rel > -35) continue;                       // ninguém invade quem tolera (aliados idem)
 

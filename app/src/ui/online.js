@@ -14,6 +14,7 @@ import { abrirDefesa } from './defesa.js';
 import { alertaUrgente } from './efeitos.js';
 import { breakingRemoto } from './breaking.js';
 import { tentarIntervencao } from '../jogo/intervencaoConflito.js';
+import { aplicarAcaoPandemia } from '../jogo/pandemiaAcoes.js';
 import { techDaFrota } from '../dados/forcas.js';
 import { tocarEfeito } from './audio.js';
 import { offsetServidor } from '../net/lobby.js';
@@ -48,6 +49,11 @@ export function ligarOnline(jogo, net, hooks) {
     jogadores = (lista || []).filter((j) => j.pais);
     porPais.clear();
     for (const j of jogadores) if (j.pais && j.pais !== meuIso) porPais.set(j.pais, j);
+    // ROSTER PARA A SIMULAÇÃO: a máquina (agressão/mundo vivo) não pode decidir guerra/ação
+    // por país controlado por OUTRO humano. Stampamos os ISOs humanos no estado (inclui o
+    // local) — os módulos do motor leem `estado._humanos` e pulam esses países. Offline
+    // fica undefined → comportamento single-player intacto.
+    jogo.estado._humanos = jogadores.map((j) => j.pais).filter(Boolean);
     pintarBadge();
   }
 
@@ -71,6 +77,16 @@ export function ligarOnline(jogo, net, hooks) {
   // ── EVENTO CHEGANDO de outro humano ────────────────────────────────
   function receber(ev) {
     if (!ev || ev.dePais === meuIso) return;   // ignora eco do próprio
+    // #10 — CONSEQUÊNCIA DURÁVEL: sofrer uma ação hostil de outro humano REBAIXA a sua
+    // relação com ele. Sem isto, você afundava a frota de um país e ele seguia te tratando
+    // como "parceiro" — a postura (Aliado/Parceiro/Tenso/Hostil) deriva desse número.
+    // Só o ALVO rebaixa (via paraVoce/alvo); persiste no autosave.
+    const QUEDA_REL = { guerra: 60, nuclear: 60, guerra_resultado: 50, ataque_estado: 40, naval: 30, naval_resultado: 30, sancao: 20, espionagem: 15 };
+    if ((ev.paraVoce || ev.alvo === meuIso) && QUEDA_REL[ev.tipo]) {
+      const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
+      jogo.estado[k] = Math.max(-100, Math.min(100, (jogo.estado[k] || 0) - QUEDA_REL[ev.tipo]));
+      hooks.atualizar?.();
+    }
     // MUNDO COMPARTILHADO: o host é a autoridade do "mundo ao vivo". Ele retransmite os
     // posts do X, plantões e o período; os convidados APLICAM (em vez de gerar os seus,
     // que divergiam). Assim a sala inteira vê a MESMA timeline e o mesmo relógio.
@@ -78,6 +94,17 @@ export function ligarOnline(jogo, net, hooks) {
     // A BATIDA do host: o convidado avança o próprio mês em sincronia e aplica o
     // mundo compartilhado (Brent, guerras NPC, pandemias). É o coração do mundo único.
     if (ev.tipo === 'beat') { hooks.aoBeatHost?.(ev.dados || {}); return; }
+    // CURA COMPARTILHADA: um convidado financiou pesquisa/contenção. Só o HOST (autoridade
+    // do mundo) acumula na pandemia autoritativa; a próxima batida reespalha o total a todos.
+    if (ev.tipo === 'pandemia_cura' && net.estado().host && ev.dados?.pandemiaId) {
+      try {
+        aplicarAcaoPandemia(jogo.estado, {
+          pandemiaId: ev.dados.pandemiaId, tipo: ev.dados.tipo,
+          valor: ev.dados.valor, alvoIso: ev.dados.alvoIso,
+        }, true);
+      } catch { /* pandemia já encerrada */ }
+      return;
+    }
     // FROTA de outro jogador no mar: aparece no SEU globo (e some quando recolhe).
     if (ev.tipo === 'frota_pos') { upsertFrotaHumana(ev); return; }
     if (ev.tipo === 'frota_out') { removerFrotaHumana(ev); return; }

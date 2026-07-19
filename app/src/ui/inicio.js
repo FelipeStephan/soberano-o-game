@@ -173,6 +173,16 @@ export function mostrarInicio(container, onStart) {
     }
 
     // dentro de uma sala
+    // #5 — TRAVA ANTI-DUPLICATA: só dá pra INICIAR com um país CONFIRMADO pelo servidor
+    // (o servidor recusa país ocupado no handler 'pais' e só então difunde a sala com o
+    // seu país). `meuReg` é o país que o servidor registrou para MIM; se != sel, ainda não
+    // confirmou. E ninguém inicia num país que outro jogador já tomou.
+    const meuId = net?.estado().id;
+    const ocupadoPorOutro = jogadores.some((j) => j.id !== meuId && j.pais === sel);
+    const meuReg = jogadores.find((j) => j.id === meuId)?.pais;
+    const confirmado = !!sel && meuReg === sel;
+    const podeIniciar = confirmado && !ocupadoPorOutro && jogadores.length >= 1;
+    const rotBloqueio = ocupadoPorOutro ? 'PAÍS JÁ OCUPADO' : !confirmado ? 'CONFIRMANDO PAÍS…' : '';
     return `<div class="hm-lobby">
       <button class="hmf-voltar" id="lb-sair">${ico('log-out', 13)} SAIR DA SALA</button>
       <div class="lb-sala-cab">
@@ -195,13 +205,29 @@ export function mostrarInicio(container, onStart) {
           placeholder="${esc(cartaoDe(sel)?.lider || 'Seu nome')}" spellcheck="false" autocomplete="off">
       </div>
       ${euHost
-        ? `<button class="hmf-assumir" id="lb-iniciar" ${jogadores.length < 1 ? 'disabled' : ''}>${ico('play', 16)} <span>INICIAR PARTIDA</span></button>`
+        ? `<button class="hmf-assumir" id="lb-iniciar" ${podeIniciar ? '' : 'disabled'}>${ico('play', 16)} <span>${podeIniciar ? 'INICIAR PARTIDA' : rotBloqueio}</span></button>`
         : `<div class="lb-aguardando">${ico('loader', 14)} Aguardando o host iniciar…</div>
-           <button class="hmf-assumir lb-entrar-agora" id="lb-iniciar">${ico('crown', 15)} <span>ASSUMIR ${esc((cartaoDe(sel)?.nome || sel).toUpperCase())}</span></button>`}
+           <button class="hmf-assumir lb-entrar-agora" id="lb-iniciar" ${podeIniciar ? '' : 'disabled'}>${ico('crown', 15)} <span>${podeIniciar ? `ASSUMIR ${esc((cartaoDe(sel)?.nome || sel).toUpperCase())}` : rotBloqueio}</span></button>`}
     </div>`;
   }
 
   let modoOnline = null;   // 'hospedar' | 'entrar'
+
+  // #5 — garante que o jogador nunca fique parado num país já ocupado por outro. Ao entrar
+  // (ou quando alguém pega um país antes de você), move `sel` para um país livre e REGISTRA
+  // no servidor — que é a autoridade que recusa duplicatas. Converge sem loop: quando o
+  // servidor confirma, o país registrado passa a ser `sel` e não re-envia.
+  function garantirPaisLivre() {
+    if (!sala) return;
+    const meuId = net?.estado().id;
+    const ocup = new Set((sala.jogadores || []).filter((j) => j.id !== meuId && j.pais).map((j) => j.pais));
+    if (ocup.has(sel)) {
+      const livre = jogaveis().find((i) => !ocup.has(i));
+      if (livre) sel = livre;
+    }
+    const meu = (sala.jogadores || []).find((j) => j.id === meuId);
+    if (sel && !ocup.has(sel) && meu && meu.pais !== sel) net?.escolherPais(sel);
+  }
 
   function bannerContinuar() {
     const r = resumoSave();
@@ -239,7 +265,7 @@ export function mostrarInicio(container, onStart) {
     net = conectarLobby({
       nome: nomeJogador || 'Anônimo',
       onConexao: () => { if (tela === 'lobby') render(); if (modoOnline === 'entrar') net.listar(); },
-      onSala: (msg) => { sala = { codigo: msg.codigo, host: msg.host === net.estado().id, jogadores: msg.jogadores, max: msg.max }; erroLobby = ''; if (tela === 'lobby') render(); },
+      onSala: (msg) => { sala = { codigo: msg.codigo, host: msg.host === net.estado().id, jogadores: msg.jogadores, max: msg.max }; erroLobby = ''; garantirPaisLivre(); if (tela === 'lobby') render(); },
       onSalas: (lista) => { salasAbertas = lista; if (tela === 'lobby' && !sala) render(); },
       onErro: (m) => { erroLobby = m; if (tela === 'lobby') render(); },
     });
@@ -337,9 +363,17 @@ export function mostrarInicio(container, onStart) {
     const nomeLb = container.querySelector('#lb-nome');
     nomeLb?.addEventListener('input', () => { nomeJogador = nomeLb.value.trim(); });
     container.querySelector('#lb-iniciar')?.addEventListener('click', () => {
+      // Gate de segurança (o botão já vem disabled quando inválido, mas reconfirma no clique).
+      const meuId = net?.estado().id;
+      const ocupadoPorOutro = (sala?.jogadores || []).some((j) => j.id !== meuId && j.pais === sel);
+      const meuReg = (sala?.jogadores || []).find((j) => j.id === meuId)?.pais;
+      if (!sel || meuReg !== sel || ocupadoPorOutro) {
+        erroLobby = ocupadoPorOutro ? `${cartaoDe(sel)?.nome || sel} já foi escolhido. Pegue outro país.` : 'Confirmando seu país no servidor… tente de novo em 1 segundo.';
+        render();
+        return;
+      }
       const nome = (nomeLb?.value || '').trim() || cartaoDe(sel)?.lider || 'Comandante';
       localStorage.setItem('soberano_nome', nome);
-      net?.escolherPais(sel);
       partir({ pais: sel, ano: '2026', presidente: nome, online: true, net, sala, jogadores: sala?.jogadores || [] });
     });
   }

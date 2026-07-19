@@ -1154,7 +1154,14 @@ export async function montarGlobo(container, jogo, {
       const emMovimento = todasFr.some((f) => f.destino);
       if (emMovimento && agoraFr - ultimoTickFrota > 33) {   // ~30fps: suave, já que htmlTransitionDuration=0
         const chegaram = tickTransito(todasFr, agoraFr);
-        for (const d of marcadores) if (d.frotaRef) { d.lat = d.frotaRef.lat; d.lng = d.frotaRef.lng; }
+        // Sincroniza o MARCADOR visível com a posição interpolada — tanto das MINHAS
+        // frotas (frotaRef) quanto das de OUTROS JOGADORES (frotaInimigaRef). Antes só as
+        // minhas entravam aqui: o pino alheio congelava na travessia e SALTAVA pro destino
+        // só num atualizar() fortuito (htmlTransitionDuration=0, sem tween). Agora navega liso.
+        for (const d of marcadores) {
+          if (d.frotaRef) { d.lat = d.frotaRef.lat; d.lng = d.frotaRef.lng; }
+          else if (d.frotaInimigaRef) { d.lat = d.frotaInimigaRef.lat; d.lng = d.frotaInimigaRef.lng; }
+        }
         globe.htmlElementsData(marcadores);
         ultimoTickFrota = agoraFr;
         if (chegaram.length) {
