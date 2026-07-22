@@ -18,6 +18,8 @@ import { aplicarAcaoPandemia } from '../jogo/pandemiaAcoes.js';
 import { techDaFrota } from '../dados/forcas.js';
 import { tocarEfeito } from './audio.js';
 import { offsetServidor } from '../net/lobby.js';
+import { estadosDe } from '../jogo/territorio.js';
+import { aliancaCom, ehAliadoMilitar, quebrarPorTraicao, sincronizarBlocos } from '../jogo/aliancas.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -85,7 +87,31 @@ export function ligarOnline(jogo, net, hooks) {
     if ((ev.paraVoce || ev.alvo === meuIso) && QUEDA_REL[ev.tipo]) {
       const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
       jogo.estado[k] = Math.max(-100, Math.min(100, (jogo.estado[k] || 0) - QUEDA_REL[ev.tipo]));
+      // TRAIÇÃO: se quem me atacou era MEU ALIADO, o pacto se rompe na hora — ele sai
+      // do bloco, perde o desconto e a defesa mútua. Um aliado que atira vira inimigo.
+      const rompeu = quebrarPorTraicao(jogo.estado, ev.dePais);
+      if (rompeu) {
+        alertaUrgente({ titulo: '🗡 TRAIÇÃO', texto: `${ev.deNome || nomeDe(ev.dePais)} era seu aliado em ${rompeu.alianca} — e atacou você. O pacto está rompido.`, tom: 'ataque' });
+        jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Chancelaria', cor: '#ff3b5c',
+          texto: `${nomeDe(ev.dePais)} rompeu ${rompeu.alianca} com um ataque pelas costas. Expulso do bloco — e agora é só mais um inimigo.` }]);
+        hooks.renderFeed?.();
+      }
       hooks.atualizar?.();
+    }
+    // DEFESA MÚTUA: a guerra do meu ALIADO MILITAR é a minha guerra — sou avisado com
+    // força quando ele é atacado (mesmo que o alvo não seja eu).
+    if (ev.alvo && ev.alvo !== meuIso && ehAliadoMilitar(jogo.estado, ev.alvo)
+        && ['guerra', 'ataque_estado', 'nuclear', 'naval'].includes(ev.tipo)) {
+      alertaUrgente({
+        titulo: '⚔ SEU ALIADO ESTÁ SOB ATAQUE',
+        texto: `${nomeDe(ev.alvo)} — seu aliado por defesa mútua — foi atacado por ${ev.deNome || nomeDe(ev.dePais)}. O pacto te chama.`,
+        tom: 'ataque', comSom: false,
+      });
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Defesa Mútua', cor: '#ffb020',
+        texto: `${nomeDe(ev.alvo)} pediu socorro: ${nomeDe(ev.dePais)} abriu fogo contra um membro da nossa aliança.` }]);
+      hooks.renderFeed?.();
+      const g = hooks.globoCtrl?.();
+      g?.ondaRadar?.(g.ondeEsta?.(ev.alvo), { cor: 0xffb020, max: 50 });
     }
     // #3 — SANÇÃO SOFRIDA vira custo econômico recorrente (aparece no painel Governar).
     if (ev.tipo === 'sancao' && (ev.paraVoce || ev.alvo === meuIso)) {
@@ -124,6 +150,29 @@ export function ligarOnline(jogo, net, hooks) {
     if (ev.tipo === 'guerra_resultado') { aplicarImpactoTerritorial(ev); return; }
     // PLANTÃO de outro jogador: o mesmo breaking, o mesmo texto, na tela de todos.
     if (ev.tipo === 'breaking') { breakingRemoto(jogo, ev.dados || {}); return; }
+    // ANEXAÇÃO: o país anexado vira território do conquistador NO MAPA DE TODOS —
+    // cor, dono dos estados e status. O mundo inteiro atualiza na hora.
+    if (ev.tipo === 'anexacao' && ev.dados?.iso) {
+      const e = jogo.estado;
+      const alvo = ev.dados.iso;
+      e.donoEstado = e.donoEstado || {};
+      for (const est of estadosDe(alvo)) e.donoEstado[est.id] = ev.dePais;
+      e.ocupacoes = e.ocupacoes || {};
+      e.ocupacoes[alvo] = { ...(e.ocupacoes[alvo] || {}), anexado: true, por: ev.dePais };
+      if (alvo === meuIso) {
+        alertaUrgente({ titulo: '☠ SEU PAÍS FOI ANEXADO', texto: `${ev.deNome || nomeDe(ev.dePais)} incorporou a sua nação.`, tom: 'ataque' });
+      }
+      hooks.globoCtrl?.()?.atualizar?.();
+    }
+    // STATS VIVOS de outro jogador (PIB, militar, petróleo, território): alimentam o
+    // ÍNDICE MUNDIAL e a força que eu vejo dele — números REAIS, não tabela estática.
+    if (ev.tipo === 'stats') {
+      if (ev.dePais && ev.dados) {
+        jogo.estado._statsHumanos = jogo.estado._statsHumanos || {};
+        jogo.estado._statsHumanos[ev.dePais] = ev.dados;
+      }
+      return;
+    }
     // MEDIAÇÃO: a diplomacia de um jogador MOVE o conflito da sala — o host aplica os
     // pontos no mundo autoritativo e a próxima batida espalha o avanço pra todos.
     if (ev.tipo === 'mediacao' && ev.dados?.conflitoId && net.estado().host) {
@@ -179,6 +228,20 @@ export function ligarOnline(jogo, net, hooks) {
         });
       } else if (ev.tipo === 'naval') {
         alertaUrgente({ titulo: 'ATAQUE NAVAL CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: false });
+      } else if (ev.tipo === 'resposta' && ev.dados?.sobre === 'alianca') {
+        // O CONVIDADO RESPONDEU: se aceitou, ele entra na MINHA aliança de verdade.
+        if (ev.dados.aceito) {
+          const al = (jogo.estado.aliancas || []).find((x) => x.id === ev.dados.alianca?.id);
+          if (al && !al.membros.includes(ev.dePais)) { al.membros.push(ev.dePais); sincronizarBlocos(jogo.estado); }
+          const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
+          jogo.estado[k] = Math.min(100, (jogo.estado[k] || 0) + 20);
+          jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Chancelaria', cor: '#22e0a0',
+            texto: `${nomeDe(ev.dePais)} ACEITOU entrar em ${al?.nome || 'nossa aliança'}. O bloco cresce.` }]);
+        } else {
+          jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Chancelaria', cor: '#ffb020',
+            texto: `${nomeDe(ev.dePais)} recusou o convite de aliança.` }]);
+        }
+        hooks.renderFeed?.(); hooks.atualizar?.();
       } else if (ev.tipo === 'alianca' || ev.tipo === 'comercio') {
         propostaRecebida(ev, est);
       } else {
@@ -203,11 +266,15 @@ export function ligarOnline(jogo, net, hooks) {
       </div>`;
     document.body.appendChild(el);
     const responder = (aceito) => {
-      net.evento('resposta', ev.dePais, aceito ? 'Aceitou a proposta.' : 'Recusou a proposta.', { sobre: ev.tipo, aceito });
+      net.evento('resposta', ev.dePais, aceito ? 'Aceitou a proposta.' : 'Recusou a proposta.',
+        { sobre: ev.tipo, aceito, alianca: ev.dados?.alianca || null });
       if (aceito) {
         // aceitar melhora a relação localmente
         const k = `rel_${ev.dePais?.toLowerCase()}`;
         if (k in jogo.estado) jogo.estado[k] = Math.min(100, (jogo.estado[k] || 0) + 20);
+        // ALIANÇA DE VERDADE: o bloco entra no MEU estado com os dois membros — a partir
+        // daqui ele é meu aliado no mapa (verde), na defesa mútua e nos descontos.
+        if (ev.tipo === 'alianca' && ev.dados?.alianca) entrarNaAliancaRemota(ev.dados.alianca, ev.dePais);
         hooks.atualizar?.();
       }
       fecharAlerta();
@@ -216,6 +283,24 @@ export function ligarOnline(jogo, net, hooks) {
     el.querySelector('.onl-nao').addEventListener('click', () => responder(false));
     // timer de 20s: deixar expirar recusa por omissão — decidir rápido É a ansiedade
     autoFechar = setTimeout(() => responder(false), 20000);
+  }
+
+  // ── ALIANÇA MATERIALIZADA (os dois lados ficam com o MESMO bloco) ──────
+  // Recebe o desenho da aliança do proponente e a grava no meu estado, comigo dentro.
+  // É o que faz o aceite virar aliança de verdade (antes só mexia na relação).
+  function entrarNaAliancaRemota(al, isoFundador) {
+    if (!al?.id) return;
+    const e = jogo.estado;
+    e.aliancas = e.aliancas || [];
+    const membros = [...new Set([...(al.membros || [isoFundador]), meuIso])];
+    const existente = e.aliancas.find((x) => x.id === al.id);
+    if (existente) existente.membros = [...new Set([...existente.membros, ...membros])];
+    else e.aliancas.push({ ...al, membros, convites: al.convites || [] });
+    sincronizarBlocos(e);
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Chancelaria', cor: '#22e0a0',
+      texto: `Pacto assinado: ${al.nome} agora reúne ${membros.map((m) => nomeDe(m)).join(' e ')}.` }]);
+    hooks.renderFeed?.();
+    hooks.globoCtrl?.()?.atualizar?.();
   }
 
   // ── ALERTA urgente simples (sanção, espionagem, etc.) ──
@@ -449,6 +534,9 @@ export function ligarOnline(jogo, net, hooks) {
     relayMundo: (dados) => net.evento('mundo', null, '', dados),
     // A BATIDA do host viaja pra sala (e o servidor a cacheia pro próximo que entrar).
     relayBeat: (dados) => net.evento('beat', null, '', dados),
+    // MEUS números reais (PIB/militar/petróleo/território) — todo jogador emite por
+    // batida; alimenta o Índice Mundial e a força que os outros veem de mim.
+    relayStats: (dados) => net.evento('stats', null, '', dados),
     // A SUA frota no mar, visível pra sala: posição/composição resumida — e a saída.
     // Horários de trânsito viajam em TEMPO DO SERVIDOR (cada cliente converte de volta).
     relayFrota: (dados) => {

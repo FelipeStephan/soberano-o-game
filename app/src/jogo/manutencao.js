@@ -88,6 +88,11 @@ export function acaoAnexar(estado, iso, feature = null) {
   const nome = (estado.conquistados || []).find((x) => x.iso === iso)?.nome || info.nome || iso;
 
   estado.conquistados = (estado.conquistados || []).filter((c) => c.iso !== iso);
+  // POSSE REAL (pedido do dono): anexar não é só tirar da lista de ocupação — TODO
+  // estado daquele país passa a ser MEU em `donoEstado`. É isso que faz o mapa
+  // tático, o índice e o mundo inteiro enxergarem o território como nacional.
+  estado.donoEstado = estado.donoEstado || {};
+  for (const e of estadosDe(iso)) estado.donoEstado[e.id] = estado.iso || 'USA';
   const oc = garantirOcupacao(estado, iso); oc.anexado = true;
 
   // PIB incorporado: do GeoJSON se veio a feature (mais preciso), senão pela força do país.

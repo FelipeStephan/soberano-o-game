@@ -35,6 +35,8 @@ import { multiplicadoresOfensiva } from '../jogo/ofensiva.js';
 import { dispararBreaking } from './breaking.js';
 import { abrirPontosQuentes, fecharPontosQuentes } from './pontosQuentes.js';
 import { abrirIndiceMundial } from './indiceMundial.js';
+import { statsVivos } from '../jogo/indiceMundial.js';
+import { diagnosticoQueda, obituarioDaQueda } from './relatorioQueda.js';
 import { abrirBlocosVisor } from './blocos.js';
 import { montarTelefonia } from './telefone.js';
 import { abrirMercado } from './mercado.js';
@@ -241,6 +243,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // na sala sem depender do onlineCtrl no escopo: jogo._relayOnline(tipo, alvo, texto, dados).
     jogo._relayOnline = (tipo, alvo, texto, dados) => onlineCtrl?.notificar(tipo, alvo, texto, dados);
     jogo._relayFrota = (dados) => onlineCtrl?.relayFrota(dados);
+    jogo._ehHumanoOnline = (iso) => !!onlineCtrl?.ehHumano(iso);   // a mesa de alianças pergunta isto
     jogo._relayFrotaSaiu = (id) => onlineCtrl?.relayFrotaSaiu(id);
     // TELEFONE VERMELHO: escuta o canal `direto` (que ligarOnline não usa — setHandlers
     // faz merge, então onDireto entra sem atropelar onSala/onEvento).
@@ -1033,6 +1036,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // MUNDO ÚNICO: o HOST transmite a batida à sala — o servidor cacheia o retrato
     // pro próximo que entrar, e cada convidado avança o mês em sincronia.
     if (jogo.ehOnline && onlineCtrl?.souHost()) onlineCtrl.relayBeat(jogo.snapshotMundo());
+    // TODO jogador (host e convidado) publica os PRÓPRIOS números a cada batida: é o
+    // que faz o Índice Mundial e as forças serem reais e iguais pra sala inteira.
+    if (jogo.ehOnline) onlineCtrl?.relayStats(statsVivos(jogo.estado));
     refreshTempo(res?.economia?.mudancas);
     consumirBreakingDoTurno(res);           // plantão (petróleo/mídia) no máximo 1 por batida
     animarEventosVivos(res.eventosVivos);   // arcos/conflitos no globo
@@ -1358,6 +1364,18 @@ export function iniciarJogo(container, jogo, opts = {}) {
     modal.querySelector('#ppu-anexar')?.addEventListener('click', () => {
       const r = acaoAnexar(jogo.estado, code, feature);
       if (r.falha) { toastFila(r.falha); return; }
+      // ANEXAÇÃO É PÚBLICA: o mundo inteiro atualiza o mapa (o país vira meu em todos
+      // os clientes) e a notícia sai no X e nos jornais de todos — nunca privada.
+      if (jogo.ehOnline) {
+        onlineCtrl?.notificar('anexacao', code,
+          `${jogo.ficha.presidente || jogo.ficha.pais} ANEXOU ${r.nome} — o país deixou de existir como nação soberana.`,
+          { iso: code, nome: r.nome });
+      }
+      dispararBreaking(jogo, {
+        assunto: `${jogo.ficha.pais} anexa ${r.nome}`,
+        contexto: `A ocupação virou incorporação: ${r.nome} deixa de ser um país e passa a ser território de ${jogo.ficha.pais}. PIB incorporado: ${r.pibGanho} tri.`,
+        tom: 'quente', iso: code,
+      });
       fechar(); cenaAnexacao(r, oc, feature, atualizarTudo);
     });
     modal.querySelectorAll('.pais-acao[data-id]').forEach((b) => b.addEventListener('click', () => {
@@ -1925,6 +1943,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     cancelarFlash();
     const venceu = fim.tipo === 'vitoria';
     const e = jogo.estado;
+    const diag = diagnosticoQueda(jogo, fim);   // POR QUE caiu — determinístico, sempre existe
     // Tempo no poder em anos + meses (cada batida = 1 mês).
     const anosI = Math.floor(jogo.turno / 12); const mesesI = jogo.turno % 12;
     const anos = anosI > 0
@@ -1953,6 +1972,18 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <p class="fim-txt">${esc(fim.texto)}</p>
 
           <div class="fim-legado">${ico('gavel', 15)} <span>${esc(legado)}</span></div>
+
+          <!-- POR QUE VOCÊ CAIU: causa formal + os números que cavaram a cova. Sempre
+               existe (não depende da IA). O obituário narrado chega logo abaixo. -->
+          <div class="fim-causa">
+            <div class="fim-causa-rot">${ico('search', 13)} ${esc(diag.causaRot)}</div>
+            ${diag.culpados.length ? `<div class="fim-culpados">${diag.culpados.map((c) => `
+              <span class="fim-culpado"><i>${esc(c.k)}</i><b>${esc(c.v)}</b><small>${esc(c.txt)}</small></span>`).join('')}</div>`
+    : '<div class="fim-culpados-vazio">Nenhum indicador isolado explica: foi o conjunto da obra.</div>'}
+          </div>
+
+          <div class="fim-sec">${ico('feather', 13)} O OBITUÁRIO POLÍTICO</div>
+          <div class="fim-obito" id="fim-obito"><i class="fim-obito-load">${ico('loader', 13)} a imprensa está escrevendo sobre você…</i></div>
 
           <div class="fim-sec">${ico('chart-line', 13)} O QUE VOCÊ DEIXOU PRA TRÁS</div>
           <div class="fim-grid">
@@ -1983,6 +2014,14 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <button class="fim-btn" onclick="location.reload()">${ico('rotate-ccw', 16)} NOVO REINADO</button>
         </div>
       </div>`);
+
+    // O OBITUÁRIO chega depois (a IA escreve enquanto o jogador lê os números). Se a
+    // IA estiver desligada, o fallback escrito à mão entra no lugar — nunca fica vazio.
+    obituarioDaQueda(jogo, fim, diag).then((texto) => {
+      const alvo = container.querySelector('#fim-obito');
+      if (!alvo) return;
+      alvo.innerHTML = String(texto).split(/\n{2,}/).map((p) => `<p>${esc(p.trim())}</p>`).join('');
+    }).catch(() => {});
   }
 
   // MODO TEMPO REAL: cria o relógio (fila + batida do mundo) e o liga. Sem "passar turno".
@@ -2010,4 +2049,5 @@ export function iniciarJogo(container, jogo, opts = {}) {
   window.__jogo = jogo; // hook de debug (dev)
   window.__tr = tr; // hook de debug (dev)
   window.__render = { renderFeed, renderHud, renderAcoes, renderTopo }; // hook de debug (dev)
+  window.__fim = mostrarFim; // hook de debug (dev): testar a tela de queda sem esperar cair
 }

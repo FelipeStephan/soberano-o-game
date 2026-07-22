@@ -37,7 +37,13 @@ export function fichaForca(estado, iso, feature = null) {
 }
 
 // A força REAL de um país agora: base (rearmada pelo tempo) + o que aliados emprestaram.
+// MUNDO ÚNICO: se o país é de um JOGADOR HUMANO, a força é a REAL dele (transmitida a
+// cada batida em `_statsHumanos`) — não a estimativa local. Quem se arma de verdade
+// aparece armado na tela dos outros.
 export function forcaDe(estado, iso, feature = null) {
+  const eu = estado.iso || 'USA';
+  const real = iso !== eu ? estado._statsHumanos?.[iso]?.mil : null;
+  if (Number.isFinite(real)) return Math.max(1, Math.round(real));
   const f = fichaForca(estado, iso, feature);
   const cresc = estado.crescimentoRival || 1;
   return Math.max(1, Math.round(f.base * cresc + f.boost));

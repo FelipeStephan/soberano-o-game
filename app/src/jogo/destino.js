@@ -59,16 +59,16 @@ export function bandaDe(destino) {
 // Verifica fim por Destino/era. Retorna null ou { tipo, titulo, texto }.
 export function checarDestino(estado, destino, turno, eraTurnoMax) {
   if (destino >= 95) {
-    return { tipo: 'vitoria', titulo: '👑 Imperador do Mundo', texto: 'A Máquina se cala. Nenhuma nação rivaliza com a sua. Você não apenas sobreviveu à história — você a dobrou à sua vontade.' };
+    return { tipo: 'vitoria', causa: 'dominio', titulo: '👑 Imperador do Mundo', texto: 'A Máquina se cala. Nenhuma nação rivaliza com a sua. Você não apenas sobreviveu à história — você a dobrou à sua vontade.' };
   }
   if (destino <= 4) {
-    return { tipo: 'derrota', titulo: '☠️ Colapso Total', texto: 'A nação implodiu sob seu comando. A Máquina embaralha as cartas e seu nome vira nota de rodapé.' };
+    return { tipo: 'derrota', causa: 'colapso', titulo: '☠️ Colapso Total', texto: 'A nação implodiu sob seu comando. A Máquina embaralha as cartas e seu nome vira nota de rodapé.' };
   }
   if (turno >= eraTurnoMax) {
     const banda = bandaDe(destino);
     const venceu = destino >= 61; // Superpotência+ conta como reinado vitorioso
     return {
-      tipo: venceu ? 'vitoria' : 'derrota',
+      tipo: venceu ? 'vitoria' : 'derrota', causa: 'tempo',
       titulo: `Fim da Era — ${banda.icone} ${banda.nome}`,
       texto: venceu
         ? `O relógio da Máquina zerou e você terminou como ${banda.nome}. Um reinado que entra pra história.`

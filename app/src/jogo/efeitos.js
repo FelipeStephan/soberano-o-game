@@ -37,10 +37,10 @@ export function aplicarEfeitos(estado, efeitos) {
 // como acontece de verdade. Dívida é o caminho, não a sentença.
 export function checarFim(estado) {
   if (estado.aprovacao <= 0) {
-    return { tipo: 'derrota', titulo: 'Deposto', texto: 'Sua aprovação chegou a zero. O gabinete se voltou contra você — um golpe silencioso encerra seu reinado.' };
+    return { tipo: 'derrota', causa: 'aprovacao', titulo: 'Deposto', texto: 'Sua aprovação chegou a zero. O gabinete se voltou contra você — um golpe silencioso encerra seu reinado.' };
   }
   if (estado.estabilidade <= 0) {
-    return { tipo: 'derrota', titulo: 'O país se partiu', texto: 'A coesão social ruiu. As instituições não seguram mais a nação — o caos toma conta.' };
+    return { tipo: 'derrota', causa: 'estabilidade', titulo: 'O país se partiu', texto: 'A coesão social ruiu. As instituições não seguram mais a nação — o caos toma conta.' };
   }
   return null;
 }

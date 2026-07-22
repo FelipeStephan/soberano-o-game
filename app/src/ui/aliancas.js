@@ -192,6 +192,16 @@ export function abrirAliancas(jogo, { onFim, globoCtrl } = {}) {
   function ligarComando(al) {
     modal.querySelectorAll('.alc-conv-btn').forEach((b) => b.addEventListener('click', () => {
       const iso = b.dataset.iso;
+      // PAÍS DE UM HUMANO: o convite NÃO é decidido pela IA — vai pela rede e o
+      // jogador de lá aceita ou recusa (era isso que "recusava automaticamente").
+      if (jogo.ehOnline && jogo._ehHumanoOnline?.(iso)) {
+        jogo._relayOnline?.('alianca', iso,
+          `${jogo.ficha.presidente || jogo.ficha.pais} convida você para ${al.nome} — ${caraterDe(al).rot}.`,
+          { alianca: { id: al.id, nome: al.nome, tag: al.tag, cor: al.cor, fundador: al.fundador, membros: al.membros, regras: al.regras, objetivo: al.objetivo } });
+        const nomeH = PAISES[iso]?.nome || iso;
+        render({ tom: 'bom', msg: `Convite enviado a ${nomeH}. Aguardando a resposta do presidente de lá…` });
+        return;
+      }
       const r = convidar(estado, al.id, iso);
       if (r.erro) { render({ tom: 'ruim', msg: r.erro }); return; }
       const nome = PAISES[iso]?.nome || iso;

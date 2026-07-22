@@ -263,3 +263,29 @@ export function minhasAliancas(estado) {
   const eu = estado.iso || jogadorIso();
   return (estado.aliancas || []).filter((a) => a.membros.includes(eu));
 }
+
+// ── É MEU ALIADO? — a pergunta que o mapa e a guerra fazem o tempo todo ──
+// Aliado = está numa aliança comigo. Devolve a aliança (pra cor/rótulo) ou null.
+export function aliancaCom(estado, iso) {
+  const eu = estado.iso || jogadorIso();
+  if (!iso || iso === eu) return null;
+  return minhasAliancas(estado).find((a) => a.membros.includes(iso)) || null;
+}
+export function ehAliado(estado, iso) { return !!aliancaCom(estado, iso); }
+// Aliado MILITAR: a guerra dele é a minha (defesa mútua).
+export function ehAliadoMilitar(estado, iso) {
+  const al = aliancaCom(estado, iso);
+  return !!al && ehMilitar(al);
+}
+
+// TRAIÇÃO: um membro me atacou → sai da aliança na hora. Devolve o que aconteceu
+// (pra UI narrar). Quem trai perde o bloco, o desconto e a defesa mútua.
+export function quebrarPorTraicao(estado, isoAgressor) {
+  const al = aliancaCom(estado, isoAgressor);
+  if (!al) return null;
+  al.membros = al.membros.filter((m) => m !== isoAgressor);
+  al.traicoes = al.traicoes || [];
+  al.traicoes.push({ iso: isoAgressor, quando: estado.turno || 0 });
+  sincronizarBlocos(estado);
+  return { alianca: al.nome, iso: isoAgressor };
+}

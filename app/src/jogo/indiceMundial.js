@@ -23,13 +23,29 @@ function pool(estado) {
 }
 
 // Os quatro números-base de um país, com a SUA nação usando valores vivos.
+// MUNDO ÚNICO: países de OUTROS JOGADORES HUMANOS também usam valores vivos — os
+// stats reais que cada um transmite a cada batida (estado._statsHumanos). O placar
+// é o mesmo pra sala inteira, com números de verdade, não a tabela estática.
 function statsDe(estado, iso) {
   const eu = iso === (estado.iso || 'USA');
+  const hum = !eu ? estado._statsHumanos?.[iso] : null;
   return {
-    pib: eu ? Math.round((estado.pib || 0) * 10) / 10 : (MUNDO_STATS[iso]?.pib ?? null),
-    mil: Math.round(forcaDe(estado, iso)),
-    petro: Math.round((PETROLEO[iso]?.reservas || 0) + (eu ? controlado(estado) : 0)),
-    area: MUNDO_STATS[iso] ? Math.round((MUNDO_STATS[iso].area + (eu ? Math.max(0, (estado.territorio || 1) - 1) * 0.2 : 0)) * 100) / 100 : null,
+    pib: eu ? Math.round((estado.pib || 0) * 10) / 10 : (hum?.pib ?? MUNDO_STATS[iso]?.pib ?? null),
+    mil: eu ? Math.round(forcaDe(estado, iso)) : (hum?.mil != null ? Math.round(hum.mil) : Math.round(forcaDe(estado, iso))),
+    petro: hum?.petro != null ? Math.round(hum.petro) : Math.round((PETROLEO[iso]?.reservas || 0) + (eu ? controlado(estado) : 0)),
+    area: hum?.area != null ? hum.area : (MUNDO_STATS[iso] ? Math.round((MUNDO_STATS[iso].area + (eu ? Math.max(0, (estado.territorio || 1) - 1) * 0.2 : 0)) * 100) / 100 : null),
+  };
+}
+
+// O RETRATO VIVO da MINHA nação — é o que viaja pra sala a cada batida, pra o índice
+// (e as prévias de força) dos outros usarem os meus números REAIS.
+export function statsVivos(estado) {
+  const eu = estado.iso || 'USA';
+  return {
+    pib: Math.round((estado.pib || 0) * 10) / 10,
+    mil: Math.round(forcaDe(estado, eu)),
+    petro: Math.round((PETROLEO[eu]?.reservas || 0) + controlado(estado)),
+    area: MUNDO_STATS[eu] ? Math.round((MUNDO_STATS[eu].area + Math.max(0, (estado.territorio || 1) - 1) * 0.2) * 100) / 100 : null,
   };
 }
 function controlado(estado) { try { return Number(reservasControladas(estado)) || 0; } catch { return 0; } }

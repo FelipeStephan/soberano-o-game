@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { iso, nomePais, relacaoAtual, souEu, jogadorIso, PAISES } from '../dados/paises.js';
 import { detalheForca } from '../jogo/forcasMundo.js';
 import { blocosDoIso } from '../dados/blocos.js';
+import { ehAliado } from '../jogo/aliancas.js';
 import { cartaoDe } from '../dados/registro.js';
 import { liderDe } from '../dados/lideres.js';
 import { bandeiraDeFeature, bandeira, ISO2_DE, FOTO_UNIDADE } from '../dados/imagens.js';
@@ -44,8 +45,14 @@ const iso2 = (f) => (f?.properties?.ISO_A2_EH || f?.properties?.ISO_A2 || '').re
 function corPais(estado, f, realista) {
   const code = iso(f);
   if (souEu(code)) return 'rgba(255, 200, 60, 0.30)';   // discreto: quem marca é o pino
+  // ANEXADO É MEU: depois da anexação o país deixa de ser "ocupação" e passa a ser
+  // território nacional — pinta com a MINHA cor, não com a relação diplomática.
+  if (estado.ocupacoes?.[code]?.anexado) return 'rgba(255, 200, 60, 0.30)';
   if (estaOcupado(estado, code)) return 'rgba(255, 150, 40, 0.55)';
   if ((estado.emGuerra || []).includes(code)) return 'rgba(255, 59, 92, 0.55)';
+  // ALIADO É INCONFUNDÍVEL: quem está numa aliança comigo fica VERDE VIVO — acima da
+  // relação diplomática, abaixo de guerra/ocupação (perigo sempre tem precedência).
+  if (ehAliado(estado, code)) return 'rgba(34, 224, 160, 0.62)';
   const r = relacaoAtual(estado, f);
   if (realista) {
     if (r >= 30) return 'rgba(34, 224, 160, 0.16)';
@@ -784,7 +791,12 @@ export async function montarGlobo(container, jogo, {
   // Lança uma esquadrilha 3D que segue até o alvo pelo domínio certo.
   // `origem` é opcional: se você tem uma BASE perto do alvo, o ataque sai DE LÁ —
   // e a diferença fica visível no globo (arco curto vs. travessia de oceano).
+  // MODELOS NAVAIS FORA DO ATAQUE (pedido do dono): navio/porta-aviões/submarino em 3D
+  // cruzando o globo poluíam a cena — no ataque o que conta é o míssil. Os tipos navais
+  // viram no-op aqui; a frota continua existindo como PINO no mar (ela não some do jogo).
+  const SEM_MODELO_3D = new Set(['naval', 'frota', 'submarino']);
   function lancarEsquadrilha(alvo, tipo = 'ataque', origem = null) {
+    if (SEM_MODELO_3D.has(tipo)) return;
     const eu = origem || ondeEsta(jogadorIso());
     const c = alvo?.properties ? centro(alvo) : alvo;
     if (!eu || !c) return;
