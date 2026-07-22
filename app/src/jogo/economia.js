@@ -32,6 +32,17 @@ export function dividendoSoberania(estado) {
   return round2(base * fatorConfianca(estado) * (1 + fatorParcerias(estado)));
 }
 
+// CUSTO DAS SANÇÕES SOFRIDAS: cada país que te sancionou aperta a sua economia — comércio
+// perdido, capital que foge, custo de contornar o bloqueio. Dreno mensal proporcional à soma
+// das intensidades e ao PIB, com teto. `estado.sancoesSofridas` é preenchido quando um
+// jogador (ou NPC) te sanciona no online; sem sanções, custa 0 (a linha nem aparece).
+export function custoSancoes(estado) {
+  const lista = Array.isArray(estado.sancoesSofridas) ? estado.sancoesSofridas : [];
+  if (!lista.length) return 0;
+  const intensidade = Math.min(300, lista.reduce((s, x) => s + (Number(x?.intensidade) || 20), 0));
+  return round2(Math.min(estado.pib * 0.02, intensidade * 0.0004 * (estado.pib || 1)));
+}
+
 // Calcula o fluxo do MÊS SEM aplicar (para a HUD mostrar a projeção).
 export function calcularFluxo(estado) {
   const receita = round2(estado.pib * (estado.aliquota / 100) / MES);      // arrecadação/mês
@@ -41,6 +52,7 @@ export function calcularFluxo(estado) {
   const taxa = taxaJuros(estado);
   const juros = round2((estado.divida / 100) * estado.pib * taxa / MES);   // serviço da dívida/mês
   const bases = round2(custoBases(estado) / MES);                          // presença global custa caro
+  const sancoes = custoSancoes(estado);                                    // prejuízo das sanções sofridas
 
   // Petróleo: já é por período (DIAS_TURNO=30 = um mês). Positivo se exporta, negativo se importa.
   const oleo = fluxoPetroleo(estado);
@@ -49,15 +61,38 @@ export function calcularFluxo(estado) {
   const dividendo = dividendoSoberania(estado);   // a renda de soberania (mantém o jogador líquido)
   const bloco = rendaAlianca(estado);             // comércio interno de uma união econômica (aliancas.js)
 
-  const despesa = round2(gastoSocial + manutencaoMilitar + juros + bases);
+  const despesa = round2(gastoSocial + manutencaoMilitar + juros + bases + sancoes);
   const saldo = round2(receita - despesa + petroleo + dividendo + bloco);
-  return { receita, despesa, saldo, juros, taxa, manutencaoMilitar, gastoSocial, bases, petroleo, dividendo, bloco, oleo };
+  return { receita, despesa, saldo, juros, taxa, manutencaoMilitar, gastoSocial, bases, sancoes, petroleo, dividendo, bloco, oleo };
+}
+
+// TENDÊNCIA FISCAL: lê o histórico de saldos (anel de ~12 meses) e diz se o país está
+// poupando, no vermelho e há quanto tempo. É o que o painel usa pra o selo "POUPANDO/NO
+// VERMELHO". Sem histórico ainda, deduz do saldo do mês.
+export function tendenciaFiscal(estado) {
+  const h = Array.isArray(estado._histSaldo) ? estado._histSaldo : [];
+  if (h.length < 2) {
+    const s = calcularFluxo(estado).saldo;
+    return { dir: s > 0.02 ? 'sobe' : s < -0.02 ? 'desce' : 'estavel', mesesNoVermelho: s < 0 ? 1 : 0, media: s,
+      rot: s > 0.02 ? 'POUPANDO' : s < -0.02 ? 'NO VERMELHO' : 'EQUILIBRADO' };
+  }
+  const media = round2(h.reduce((s, x) => s + x, 0) / h.length);
+  const inclin = h[h.length - 1] - h[0];
+  let mesesNoVermelho = 0;
+  for (let i = h.length - 1; i >= 0 && h[i] < 0; i -= 1) mesesNoVermelho += 1;
+  const dir = inclin > 0.02 ? 'sobe' : inclin < -0.02 ? 'desce' : 'estavel';
+  const rot = mesesNoVermelho >= 2 ? `NO VERMELHO há ${mesesNoVermelho} meses`
+    : media > 0.02 ? 'POUPANDO' : media < -0.02 ? 'NO VERMELHO' : 'EQUILIBRADO';
+  return { dir, mesesNoVermelho, media, rot };
 }
 
 // Aplica o fluxo ao estado no fechamento do turno. Retorna um resumo pra UI.
 export function aplicarFluxo(estado) {
   const fluxo = calcularFluxo(estado);
   estado.tesouro = round2(estado.tesouro + fluxo.saldo);
+
+  // HISTÓRICO p/ a TENDÊNCIA: anel dos últimos 12 saldos mensais (barato, JSON puro).
+  estado._histSaldo = [...(Array.isArray(estado._histSaldo) ? estado._histSaldo : []), fluxo.saldo].slice(-12);
 
   // Caixa negativo vira dívida — é o que TODO país faz: emite título e cobre o
   // rombo. Ninguém "fica sem dinheiro" e deixa de existir; fica devendo. O caixa

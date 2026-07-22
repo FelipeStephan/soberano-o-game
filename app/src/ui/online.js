@@ -87,6 +87,14 @@ export function ligarOnline(jogo, net, hooks) {
       jogo.estado[k] = Math.max(-100, Math.min(100, (jogo.estado[k] || 0) - QUEDA_REL[ev.tipo]));
       hooks.atualizar?.();
     }
+    // #3 — SANÇÃO SOFRIDA vira custo econômico recorrente (aparece no painel Governar).
+    if (ev.tipo === 'sancao' && (ev.paraVoce || ev.alvo === meuIso)) {
+      const e = jogo.estado;
+      e.sancoesSofridas = e.sancoesSofridas || [];
+      if (!e.sancoesSofridas.some((s) => s.por === ev.dePais)) {
+        e.sancoesSofridas.push({ por: ev.dePais, nome: ev.deNome || ev.dePais, intensidade: 30, desde: Date.now() });
+      }
+    }
     // MUNDO COMPARTILHADO: o host é a autoridade do "mundo ao vivo". Ele retransmite os
     // posts do X, plantões e o período; os convidados APLICAM (em vez de gerar os seus,
     // que divergiam). Assim a sala inteira vê a MESMA timeline e o mesmo relógio.

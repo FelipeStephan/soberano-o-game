@@ -18,7 +18,7 @@
 // só atualiza em place os nós da projeção (ver projetar()). Motivo: refazer
 // innerHTML no `input` destruía o próprio <input type=range> no meio do
 // arrasto e o navegador soltava o drag (o pino "engasgava").
-import { calcularFluxo } from '../jogo/economia.js';
+import { calcularFluxo, tendenciaFiscal } from '../jogo/economia.js';
 import { lucroDoTurno } from '../dados/empresas.js';
 import { reservasControladas } from '../jogo/petroleo.js';
 import { dinheiro } from '../jogo/formato.js';
@@ -106,6 +106,7 @@ function extratoFiscal(jogo) {
     { id: 'militar', rot: 'Manutenção militar', v: fx.manutencaoMilitar, nota: 'soldo, combustível, peças das forças armadas' },
     { id: 'juros', rot: 'Juros da dívida', v: fx.juros, nota: `o mercado cobra ${(fx.taxa * 100).toFixed(1)}% a.a. pelo seu risco` },
     ...(fx.bases > 0.004 ? [{ id: 'bases', rot: 'Bases no exterior', v: fx.bases, nota: 'presença global custa caro' }] : []),
+    ...(fx.sancoes > 0.004 ? [{ id: 'sancoes', rot: 'Prejuízo de sanções', v: fx.sancoes, nota: `${(e.sancoesSofridas || []).length} sanção(ões) sofrida(s) — comércio perdido e fuga de capital` }] : []),
     ...(fx.petroleo < 0 ? [{ id: 'petroleo', rot: 'Petróleo (importação)', v: -fx.petroleo, nota: 'a diferença entre o que queima e o que bombeia' }] : []),
   ].filter((d) => d.v > 0.004);
   const totalR = receitas.reduce((s, r) => s + r.v, 0);
@@ -126,6 +127,23 @@ function donutSVG(fatias, total) {
     return c;
   }).join('');
   return `<svg class="gov-donut" viewBox="0 0 42 42" role="img" aria-label="origem das receitas">${aneis}</svg>`;
+}
+
+// SPARKLINE SVG — o saldo mês a mês (#3 tendência): verde se o último é positivo, vermelho
+// se negativo; a linha tracejada é o zero. Sem lib, só uma <polyline>.
+function sparkSVG(serie) {
+  if (!Array.isArray(serie) || serie.length < 2) return '';
+  const w = 220; const h = 34; const pad = 3;
+  const min = Math.min(0, ...serie); const max = Math.max(0, ...serie);
+  const rng = (max - min) || 1;
+  const px = (i) => pad + (i / (serie.length - 1)) * (w - pad * 2);
+  const py = (v) => h - pad - ((v - min) / rng) * (h - pad * 2);
+  const pts = serie.map((v, i) => `${px(i).toFixed(1)},${py(v).toFixed(1)}`).join(' ');
+  const ult = serie[serie.length - 1];
+  return `<svg class="gov-spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="saldo mês a mês">
+    <line x1="0" y1="${py(0).toFixed(1)}" x2="${w}" y2="${py(0).toFixed(1)}" stroke="rgba(150,190,240,.22)" stroke-width="1" stroke-dasharray="3 3"></line>
+    <polyline points="${pts}" fill="none" stroke="${ult >= 0 ? 'var(--verde)' : 'var(--perigo)'}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+  </svg>`;
 }
 
 export function abrirGovernanca(jogo, { tr, onFim, globoCtrl } = {}) {
@@ -157,6 +175,8 @@ export function abrirGovernanca(jogo, { tr, onFim, globoCtrl } = {}) {
   // ── conteúdo de cada aba ────────────────────────────────────────────
   function abaExtrato() {
     const x = extratoFiscal(jogo);
+    const tend = tendenciaFiscal(e);
+    const iconeTend = tend.dir === 'sobe' ? 'trending-up' : tend.dir === 'desce' ? 'trending-down' : 'minus';
     const linhaR = (r) => `<div class="gov-xl"><i class="gov-xl-dot" style="background:${r.cor}"></i>
       <span class="gov-xl-rot">${esc(r.rot)}<small>${esc(r.nota)}</small></span>
       <span class="gov-xl-val bom">+${dinheiro(r.v)}</span>
@@ -171,6 +191,12 @@ export function abrirGovernanca(jogo, { tr, onFim, globoCtrl } = {}) {
         <div class="gov-fx"><span>Entra</span><div class="gov-fx-t"><i class="rec" style="width:100%"></i></div><b class="bom">${dinheiro(x.totalR)}</b></div>
         <div class="gov-fx"><span>Sai</span><div class="gov-fx-t"><i class="desp" style="width:${x.totalR ? Math.min(100, (x.totalD / x.totalR) * 100) : 100}%"></i></div><b class="ruim">${dinheiro(x.totalD)}</b></div>
         <div class="gov-fx-saldo"><span>Saldo/mês</span><b class="${x.saldo >= 0 ? 'bom' : 'ruim'}">${x.saldo >= 0 ? '+' : '−'}${dinheiro(Math.abs(x.saldo))}</b></div>
+      </div>
+
+      <div class="gov-tendencia ${tend.dir === 'sobe' ? 'bom' : tend.dir === 'desce' ? 'ruim' : ''}">
+        <div class="gov-tend-cab">${ico(iconeTend, 13)} <b>${esc(tend.rot)}</b>
+          <small>tendência · últimos ${Math.max(1, (e._histSaldo || []).length)} meses</small></div>
+        ${sparkSVG(e._histSaldo || []) || '<small class="gov-tend-vazio">o histórico aparece conforme os meses passam</small>'}
       </div>
 
       <div class="gov-sec">${ico('chart-pie', 11)} De onde vem o dinheiro</div>

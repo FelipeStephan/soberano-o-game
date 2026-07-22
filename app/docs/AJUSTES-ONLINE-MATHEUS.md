@@ -65,7 +65,19 @@ diga quem controla cada país e o que já aconteceu no mundo.**
   `_humanos` é undefined → single-player 100% intacto (verificado: jogo offline roda normal).
 
 ### #3 — Sistema de gastos e lucros ao clicar em "Governar"
-- **Status:** 🟢 investigado (plano pronto — Frente C concluída)
+- **Status:** ✅ **IMPLEMENTADO E VERIFICADO** (painel abre com tendência "POUPANDO",
+  sparkline e linha de sanções renderizando).
+- **O que foi feito (baixo risco, aditivo — sem mexer em onde o dinheiro é aplicado):**
+  (a) **Sanções como prejuízo:** `custoSancoes()` em `economia.js` drena o caixa por sanção
+  sofrida (`estado.sancoesSofridas`), entra no fluxo e aparece como linha "Prejuízo de
+  sanções" no extrato; o evento online `sancao` popula a lista (`online.js`). (b)
+  **Tendência:** anel `_histSaldo` (12 meses) em `aplicarFluxo` + `tendenciaFiscal()` +
+  **sparkline** e selo "POUPANDO / NO VERMELHO há N meses" na aba EXTRATO. Dívida/juros já
+  eram sólidos e continuam.
+- **Não feito (evitado o risco de crédito em dobro):** o refactor que move
+  empresas/pedágio para dentro de `aplicarFluxo`. O extrato já mostra empresas; pedágio
+  segue creditado direto. Fica como melhoria futura de coerência fina.
+- **Investigação (Frente C) abaixo.**
 - **DESCOBERTA-CHAVE:** o painel **já existe ~70%**. `abrirGovernanca()`
   (`ui/governanca.js:131`) já é um modal com 3 abas (EXTRATO/IMPOSTOS/REFORMAS) + panorama
   (PIB, Tesouro, Dívida, Aprovação). A aba EXTRATO (`governanca.js:158-196`) já mostra
