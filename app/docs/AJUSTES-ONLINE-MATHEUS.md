@@ -99,7 +99,10 @@ diga quem controla cada país e o que já aconteceu no mundo.**
 
 ### #4 — Auditoria das 8 áreas (Militar, Arsenal, Inteligência, Economia, Diplomacia,
 Ciência, Mídia, Política): cada uma tem função definida? Está ligada no online?
-- **Status:** 🟢 investigado (Frente E concluída — tabela abaixo)
+- **Status:** 🟡 auditado + 1º wiring feito. **Inteligência LIGADA** (botão ESPIONAR avisa
+  o alvo humano). Falta: Economia (embargo/sanção econômica dirigida), Mídia (propaganda de
+  convidado subir pro feed de todos), Arsenal (sinal de que rival se arma). Essas exigem
+  novos tipos de evento + seleção de alvo e um teste com 2 clientes — próximo bloco dedicado.
 - **DESCOBERTA-CHAVE:** o painel de ações (`renderAcoes`, `ui/jogo.js:996-1000`) executa
   TODO chip das 8 abas só com `tr.enfileirar(...)` e **nunca chama `notificar`**. O online
   só acontece por fluxos PARALELOS dedicados (carta do país, modal de guerra, naval,
@@ -242,19 +245,21 @@ Ciência, Mídia, Política): cada uma tem função definida? Está ligada no on
 | **D · Pandemia / Cura** | #6 | ✅ concluída | #6✅ |
 | **E · Auditoria das 8 áreas** | #4 | ✅ concluída | wiring **pendente** |
 
-### PLACAR: 6 de 10 implementados
-✅ **Feitos:** #1 (bandeira), #2 (IA não controla humano), #5 (país duplicado), #6 (pandemia
-full), #7 (frota navegando), #10 (relação reage a ataque).
-🔴 **Faltam:** #3 (painel de finanças — grande, plano pronto), #4 (ligar áreas mudas no
-online), #8 (estado autoritativo + janela de reação — MAIOR peça), #9 (combate naval em
-fases — reaproveita a infra do #8).
+### PLACAR: 9 de 10 implementados (base) — só falta o wiring amplo do #4
+✅ **Completos e verificados:** #1 (bandeira), #3 (painel finanças), #6 (pandemia full),
+#7 (frota navegando).
+✅ **Implementados (base sólida, validar em partida 2 humanos):** #2 (IA não controla
+humano), #5 (país duplicado), #8 (persistência + janela nuclear), #9 (naval em fases),
+#10 (relação reage a ataque).
+🟡 **Parcial:** #4 — Inteligência ligada; falta wiring de Economia/Mídia/Arsenal.
 
 ### ⏭ PRÓXIMO PASSO
-1. **#8 é a keystone que falta** — estado autoritativo por sala (`server/lobby.js`) + janela
-   de voo. Sobre ele assentam a persistência do #10 e o #9 naval.
-2. **#3** (painel de finanças) e **#4** (wiring de Inteligência/Economia/Mídia) são
-   independentes do #8 e podem ir em paralelo.
-3. Validar #2/#5/#10 numa partida real com 2 humanos (só dá pra testar com 2 clientes).
+1. **Teste com 2 clientes** para validar #2/#5/#8/#9/#10 no fluxo real (só dá pra ver com
+   dois humanos numa sala).
+2. **#4 restante** — novo bloco dedicado: sanção econômica dirigida, propaganda de mídia no
+   feed compartilhado, sinal de inteligência do arsenal rival.
+3. **Refinos do #8:** estender a janela de reação a guerra/terrestre e adicionar uma reação
+   ATIVA (interceptar a ogiva) usando a defesa antiaérea já modelada em `nuclear.js`.
 
 > **Por que os agentes investigam antes de editar:** as frentes tocam os MESMOS arquivos
 > (`ui/jogo.js`, `ui/online.js`, `server/lobby.js`, `ui/defesa.js`). Editar em paralelo se
