@@ -3808,6 +3808,10 @@ button[data-tip], .tip-q { cursor: pointer; }
 .onl-cab .ico { color: var(--oc); flex: none; }
 .onl-cab span { font-family: var(--mono); font-size: 8px; letter-spacing: .12em; color: var(--oc); text-transform: uppercase; margin-left: auto; }
 .onl-txt { font-size: 12px; color: #c3d4ee; line-height: 1.5; margin: 8px 0 10px; }
+.onl-contagem { font-family: var(--mono); font-size: 11px; letter-spacing: .1em; color: var(--oc);
+  text-transform: uppercase; border-top: 1px solid rgba(150,190,240,.14); padding-top: 8px; }
+.onl-contagem b { font-family: var(--disp); font-size: 18px; color: var(--texto); }
+.onl-alerta.incoming { border-color: var(--oc); box-shadow: 0 0 0 1px var(--oc), 0 8px 30px rgba(0,0,0,.5); }
 .onl-timer { height: 3px; background: rgba(150,190,240,.14); overflow: hidden; margin-bottom: 10px; }
 .onl-timer i { display: block; height: 100%; width: 100%; background: var(--oc); box-shadow: 0 0 8px var(--oc);
   transform-origin: left; animation: onlTimer 20s linear forwards; }

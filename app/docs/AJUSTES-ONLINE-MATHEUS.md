@@ -166,7 +166,17 @@ Ciência, Mídia, Política): cada uma tem função definida? Está ligada no on
   detecção/névoa de guerra acompanhar). Risco baixo — simétrico ao que já funciona.
 
 ### #8 — Ataque de um jogador online não afeta o outro; sem tempo de reação; não persiste
-- **Status:** 🔴 a fazer (bloqueado pela causa-raiz 2)
+- **Status:** 🟡 **IMPLEMENTADO (base)** — persistência + janela de reação nuclear. Falta
+  validar em partida com 2 humanos e estender a janela ao ataque terrestre/naval.
+- **8a Persistência (`server/lobby.js` + `net/lobby.js` + `online.js` + `jogo.js`):** o
+  servidor agora ACUMULA os fatos inter-jogador duráveis num `mundoSala` (donos de
+  território, conflitos, frotas no mar) e reenvia via `estado_sala` a quem (re)entra. O boot
+  do convidado chama `onlineCtrl.aplicarEstadoSala()` e reconstrói o mapa — a explosão/
+  conquista que rolou antes dele entrar agora APARECE (cura do "pra ele não tá explodido").
+- **8b Janela de reação (`online.js` + `estilo.css`):** ataque nuclear ao jogador agora
+  mostra uma contagem "☢ OGIVA A CAMINHO — 6s" enquanto a ogiva voa no globo, ANTES do
+  impacto registrar — o "tempo pra ser notificado e reagir" que faltava. Verificado o CSS.
+- **Falta:** estender a janela a guerra/naval (reaprovável) e uma reação ativa (interceptar).
 - **Causa-raiz:** relay efêmero + sem estado autoritativo. O impacto depende de o alvo
   estar conectado NAQUELE instante; quem entra depois não vê a explosão porque o estado
   não foi persistido. O "tempo para reagir" (janela antes do impacto) não existe no

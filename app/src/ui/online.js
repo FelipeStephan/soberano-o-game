@@ -160,11 +160,17 @@ export function ligarOnline(jogo, net, hooks) {
           dados: ev.dados || null,
           onFim: () => hooks.atualizar?.(),
         });
-      } else if (ev.tipo === 'naval' || ev.tipo === 'nuclear') {
-        alertaUrgente({
-          titulo: ev.tipo === 'nuclear' ? '☢ ATAQUE NUCLEAR CONTRA VOCÊ' : 'ATAQUE NAVAL CONTRA VOCÊ',
-          texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: ev.tipo === 'nuclear',
+      } else if (ev.tipo === 'nuclear') {
+        // JANELA DE REAÇÃO: a ogiva voa ~6s com contagem antes do clarão registrar.
+        contagemIncoming({
+          titulo: '☢ OGIVA A CAMINHO',
+          sub: `${ev.deNome || nomeDe(ev.dePais)} lançou uma ogiva contra você. Impacto iminente.`,
+          segundos: 6,
+        }, () => {
+          alertaUrgente({ titulo: '☢ ATAQUE NUCLEAR CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: true });
         });
+      } else if (ev.tipo === 'naval') {
+        alertaUrgente({ titulo: 'ATAQUE NAVAL CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: false });
       } else if (ev.tipo === 'alianca' || ev.tipo === 'comercio') {
         propostaRecebida(ev, est);
       } else {
@@ -220,9 +226,34 @@ export function ligarOnline(jogo, net, hooks) {
   }
 
   let autoFechar = null;
+  let incomingTick = null;
   function fecharAlerta() {
     clearTimeout(autoFechar);
+    clearInterval(incomingTick);
     document.querySelectorAll('.onl-alerta').forEach((e) => e.remove());
+  }
+
+  // ── JANELA DE REAÇÃO (#8): a ameaça CHEGA com contagem ANTES do impacto ──
+  // Era o que faltava: "deveria ter tempo pra eu ser notificado e reagir". Enquanto a ogiva
+  // voa no globo, o defensor vê uma contagem regressiva; ao zerar, o impacto (onFim) resolve.
+  function contagemIncoming({ titulo, sub, segundos = 6, cor = '#ff3b5c' }, onFim) {
+    fecharAlerta();
+    const el = document.createElement('div');
+    el.className = 'onl-alerta urgente incoming';
+    el.style.setProperty('--oc', cor);
+    let restante = segundos;
+    const pinta = () => { el.innerHTML = `
+      <div class="onl-cab">${ico('radiation', 15)} <b>${esc(titulo)}</b></div>
+      <div class="onl-txt">${esc(sub || '')}</div>
+      <div class="onl-contagem">IMPACTO EM <b>${restante}s</b></div>`; };
+    pinta();
+    document.body.appendChild(el);
+    try { tocarEfeito('alerta-nuclear', { volume: 0.5 }); } catch { /* sem áudio */ }
+    incomingTick = setInterval(() => {
+      restante -= 1;
+      if (restante <= 0) { clearInterval(incomingTick); el.remove(); onFim?.(); return; }
+      pinta();
+    }, 1000);
   }
 
   // ── FROTAS DE OUTROS JOGADORES no seu globo ─────────────────────────
@@ -363,6 +394,28 @@ export function ligarOnline(jogo, net, hooks) {
     if (Number.isFinite(d.turno)) { jogo._periodoSala = d.turno; hooks.sincronizarPeriodo?.(d.turno); }
   }
 
+  // ── MEMÓRIA DA SALA (#8): o recém-chegado ADOTA o que já aconteceu ─────
+  // Territórios tomados, conflitos e frotas no mar que rolaram ANTES dele entrar. Aplica em
+  // silêncio (sem alertas/sirene — é histórico, não um ataque acontecendo agora) e reconstrói
+  // o mapa. É o que faz a explosão "existir" pra quem chega depois — e pro próprio dono.
+  function aplicarEstadoSala(dados) {
+    if (!dados) return;
+    const e = jogo.estado;
+    e.donoEstado = e.donoEstado || {};
+    e.conflitosEstado = e.conflitosEstado || {};
+    for (const [id, iso] of Object.entries(dados.donoEstado || {})) e.donoEstado[id] = iso;
+    for (const [id, c] of Object.entries(dados.conflitos || {})) {
+      e.conflitosEstado[id] = { por: c.por, intensidade: c.intensidade ?? 40, turnos: 0 };
+    }
+    for (const f of Object.values(dados.frotas || {})) {
+      if (f?.dados && f.dePais !== meuIso) upsertFrotaHumana({ dePais: f.dePais, deNome: f.deNome, dados: f.dados });
+    }
+    const g = hooks.globoCtrl?.();
+    // carrega em estados os países atingidos, pra as marcas aparecerem no globo de quem chega
+    const atingidos = new Set([meuIso, ...Object.values(dados.donoEstado || {})]);
+    Promise.all([...atingidos].filter(Boolean).map((iso) => g?.carregarPais?.(iso))).then(() => g?.atualizar?.()).catch(() => g?.atualizar?.());
+  }
+
   // Reassume os callbacks da conexão que a home abriu (sem reconectar).
   net.setHandlers({
     onSala: (msg) => { absorverJogadores(msg.jogadores); hooks.onRoster?.(jogadores); },
@@ -376,6 +429,8 @@ export function ligarOnline(jogo, net, hooks) {
     jogadores: () => jogadores.slice(),
     // AUTORIDADE DO MUNDO: quem é host gera o mundo ao vivo e o retransmite; convidado só aplica.
     souHost: () => !!net.estado().host,
+    // MEMÓRIA DA SALA: o boot chama isto com o estado_sala que o servidor entregou no entrar.
+    aplicarEstadoSala,
     relayMundo: (dados) => net.evento('mundo', null, '', dados),
     // A BATIDA do host viaja pra sala (e o servidor a cacheia pro próximo que entrar).
     relayBeat: (dados) => net.evento('beat', null, '', dados),

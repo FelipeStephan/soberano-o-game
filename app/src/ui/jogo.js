@@ -1322,6 +1322,12 @@ export function iniciarJogo(container, jogo, opts = {}) {
       };
       const r = tr?.enfileirar(acao);
       if (r && !r.ok) return;
+      // ONLINE (#4): espionar um HUMANO agora ecoa pra ele — a contra-inteligência detecta a
+      // operação. Antes o botão principal de espionagem era mudo no online (só os cards de
+      // diplomacia avisavam), então espionar um jogador era invisível pra ele.
+      if (onlineCtrl?.ehHumano(code)) {
+        onlineCtrl.notificar('espionagem', code, `A contra-inteligência de ${jogo.ficha.pais || 'uma potência'} detectou uma operação de espionagem contra você.`);
+      }
       fechar(); renderAcoes(); renderTopo();
     });
     modal.querySelector('#pp-nuke')?.addEventListener('click', () => {
@@ -1993,6 +1999,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
   if (jogo.ehOnline && net?.estado?.().mundoAtual) {
     jogo.aplicarMundoCompartilhado(net.estado().mundoAtual);
     renderTopo();
+  }
+  // MEMÓRIA DA SALA (#8): adota os fatos inter-jogador que já rolaram — territórios tomados,
+  // frotas no mar — pra a explosão/conquista APARECER pra quem chega depois (e pro dono).
+  if (jogo.ehOnline && net?.estado?.().estadoSala) {
+    onlineCtrl?.aplicarEstadoSala?.(net.estado().estadoSala);
   }
 
   renderBadge(); renderHud(); renderFeed(); renderAcoes();

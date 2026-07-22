@@ -77,6 +77,30 @@ function difundirEvento(sala, obj, exceto) {
   }
 }
 
+// ESTADO AUTORITATIVO POR SALA (#8): o relay é efêmero — quem não estava conectado quando
+// a bomba caiu nunca via o estrago. Aqui o servidor ACUMULA os fatos inter-jogador que são
+// DURÁVEIS (quem tomou qual território, quais frotas estão no mar) e reenvia a quem (re)entra.
+// Não é simulação: é a memória do que os humanos fizeram uns aos outros.
+function acumularMundoSala(sala, ev) {
+  const ms = sala.mundoSala || (sala.mundoSala = { donoEstado: {}, conflitos: {}, frotas: {} });
+  const atacante = ev.dePais;
+  const d = ev.dados || {};
+  if (!atacante) return;
+  if (ev.tipo === 'guerra_resultado') {
+    for (const id of (d.caem || [])) { ms.donoEstado[id] = atacante; ms.conflitos[id] = { por: atacante, intensidade: 45 }; }
+  } else if (ev.tipo === 'ataque_estado' && d.estadoId) {
+    if (d.tomou) ms.donoEstado[d.estadoId] = atacante;
+    ms.conflitos[d.estadoId] = { por: atacante, intensidade: d.tomou ? 45 : 30 };
+  } else if (ev.tipo === 'frota_pos' && d.id != null) {
+    ms.frotas[`${atacante}_${d.id}`] = { dePais: atacante, deNome: ev.deNome, dados: d };
+  } else if (ev.tipo === 'frota_out') {
+    for (const k of Object.keys(ms.frotas)) if (k.startsWith(`${atacante}_`)) delete ms.frotas[k];
+  } else if (ev.tipo === 'naval_resultado' && d.venceu && ev.alvo) {
+    // frota afundada some da memória da sala também
+    for (const k of Object.keys(ms.frotas)) if (k.startsWith(`${ev.alvo}_`)) delete ms.frotas[k];
+  }
+}
+
 function sairDaSala(ws) {
   const c = clientes.get(ws);
   if (!c?.sala) return;
@@ -136,6 +160,10 @@ export function montarLobby(server) {
           // (mês, Brent, guerras NPC…) — nasce em outubro/2028 se a sala está lá,
           // não em janeiro/2026. O retrato é a última batida que o host transmitiu.
           if (sala.mundoAtual) enviar(ws, { t: 'mundo_atual', dados: sala.mundoAtual });
+          // MEMÓRIA DA SALA: o recém-chegado recebe o que os humanos já fizeram entre si
+          // (territórios tomados, conflitos, frotas no mar) — a explosão que rolou antes
+          // dele entrar agora APARECE pra ele. É a cura do "pra ele não tá explodido".
+          if (sala.mundoSala) enviar(ws, { t: 'estado_sala', dados: sala.mundoSala });
           difundirSala(sala);
           break;
         }
@@ -161,14 +189,17 @@ export function montarLobby(server) {
           if (!sala) break;
           // A BATIDA do host é cacheada: é o que o servidor entrega ao próximo que entrar.
           if (msg.tipo === 'beat' && c.id === sala.hostId && msg.dados) sala.mundoAtual = msg.dados;
-          difundirEvento(sala, {
+          const evt = {
             t: 'evento', de: c.id, deNome: c.nome, dePais: c.pais,
             tipo: nada(msg.tipo, 30) || 'msg',
             alvo: msg.alvo ? nada(msg.alvo, 3).toUpperCase() : null,
             texto: nada(msg.texto, 500),
             dados: msg.dados || null,
             ts: Date.now(),
-          }, ws);
+          };
+          // PERSISTÊNCIA: fatos inter-jogador duráveis vão pra memória da sala (#8).
+          acumularMundoSala(sala, evt);
+          difundirEvento(sala, evt, ws);
           break;
         }
 

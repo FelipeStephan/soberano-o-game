@@ -78,6 +78,8 @@ export function conectarLobby({ nome = 'Anônimo', perfilId = null, onSala, onSa
         case 'pong': registrarPong(msg.tc, msg.ts); break;
         // O retrato do mundo da sala (mês/Brent/NPCs) — guardado pra o jogo adotar no boot.
         case 'mundo_atual': estado.mundoAtual = msg.dados || null; h.onMundoAtual?.(msg.dados); break;
+        // A MEMÓRIA da sala (territórios tomados, frotas) — o jogo adota no boot (#8).
+        case 'estado_sala': estado.estadoSala = msg.dados || null; h.onEstadoSala?.(msg.dados); break;
         case 'entrou':
           estado.sala = msg.codigo; estado.host = !!msg.host; entrou = true;
           break;
