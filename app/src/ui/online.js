@@ -327,25 +327,32 @@ export function ligarOnline(jogo, net, hooks) {
     if (d.venceu && e.frotasInimigas) {
       e.frotasInimigas = e.frotasInimigas.filter((f) => f.id !== `hum_${donoIso}_${d.frotaId}`);
     }
-    // O DONO aplica no próprio estado: afundou (some + tropa perdida) ou baixas
+    // O DONO aplica no próprio estado: afundou (some + tropa perdida) ou baixas — mas o
+    // combate agora DEMORA (#9): ele vê os mísseis chegando na esquadra e só depois o desfecho.
     if (donoIso === meuIso) {
       const fr = (e.frotas || []).find((f) => f.id === d.frotaId);
       if (fr) {
-        if (d.venceu) {
-          if (fr.guarnKey && e.guarnicoes) delete e.guarnicoes[fr.guarnKey];   // a tropa AFUNDOU junto
-          e.frotas = e.frotas.filter((f) => f.id !== fr.id);
-          alertaUrgente({ titulo: 'SUA FROTA FOI AFUNDADA', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} destruiu a sua esquadra.`, tom: 'ataque', comSom: false });
-          jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚓ Marinha', cor: '#ff3b5c', texto: `Perdemos a esquadra em combate contra ${nomeDe(ev.dePais)}. As unidades a bordo afundaram com ela.` }]);
-        } else {
-          const pct = Math.max(0, Math.min(95, d.perdaPct || 30));
-          for (const k of Object.keys(fr.unidades || {})) {
-            fr.unidades[k] = Math.max(0, Math.floor(fr.unidades[k] * (1 - pct / 100)));
-            if (!fr.unidades[k]) delete fr.unidades[k];
+        // JANELA DE REAÇÃO NAVAL: mísseis inbound + contagem antes do resultado registrar.
+        const alvoC = g?.ondeEsta?.(meuIso); const deC = g?.ondeEsta?.(ev.dePais);
+        if (alvoC && deC) { g?.desenharLinha?.(alvoC, 'ataque', 4500, deC); g?.salvaMisseis?.(alvoC, 3, deC, { som: true }); g?.ondaRadar?.(alvoC, { cor: 0x35e0ff, max: 40 }); }
+        contagemIncoming({ titulo: '🚀 COMBATE NAVAL', sub: `${ev.deNome || nomeDe(ev.dePais)} atacou sua esquadra. Mísseis a caminho.`, segundos: 4, cor: '#35e0ff' }, () => {
+          if (d.venceu) {
+            if (fr.guarnKey && e.guarnicoes) delete e.guarnicoes[fr.guarnKey];   // a tropa AFUNDOU junto
+            e.frotas = e.frotas.filter((f) => f.id !== fr.id);
+            alertaUrgente({ titulo: 'SUA FROTA FOI AFUNDADA', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} destruiu a sua esquadra.`, tom: 'ataque', comSom: false });
+            jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚓ Marinha', cor: '#ff3b5c', texto: `Perdemos a esquadra em combate contra ${nomeDe(ev.dePais)}. As unidades a bordo afundaram com ela.` }]);
+          } else {
+            const pct = Math.max(0, Math.min(95, d.perdaPct || 30));
+            for (const k of Object.keys(fr.unidades || {})) {
+              fr.unidades[k] = Math.max(0, Math.floor(fr.unidades[k] * (1 - pct / 100)));
+              if (!fr.unidades[k]) delete fr.unidades[k];
+            }
+            if (fr.guarnKey && e.guarnicoes) e.guarnicoes[fr.guarnKey] = { ...fr.unidades };
+            alertaUrgente({ titulo: 'SUA FROTA FOI ATACADA', texto: `${ev.deNome || nomeDe(ev.dePais)} atacou sua esquadra — ela resistiu com ${pct}% de baixas.`, tom: 'ataque', comSom: false });
           }
-          if (fr.guarnKey && e.guarnicoes) e.guarnicoes[fr.guarnKey] = { ...fr.unidades };
-          alertaUrgente({ titulo: 'SUA FROTA FOI ATACADA', texto: `${ev.deNome || nomeDe(ev.dePais)} atacou sua esquadra — ela resistiu com ${pct}% de baixas.`, tom: 'ataque', comSom: false });
-        }
-        hooks.renderFeed?.();
+          hooks.renderFeed?.();
+          hooks.globoCtrl?.()?.atualizar?.();
+        });
       }
     }
     g?.atualizar?.();
