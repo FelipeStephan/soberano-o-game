@@ -1,5 +1,14 @@
 # BACKLOG LOTE 3 — pedidos do dono (2026-07-18, sessão longa)
 
+> **ENTREGUE na 1ª rodada (commit 9359259):** #1.1 (cascata de alianças),
+> #2.1/#2.2/#2.3/#2.5 (anexação vira província, forças unidas, painel próprio,
+> devolver soberania), #2.4 parcial (hover "ANEXADO POR X"), #8.1 (Fake News).
+> **Bugs graves achados e corrigidos no caminho:** anexar fazia PERDER o petróleo do
+> país anexado; a milícia despedaçava o território anexado estado por estado; o
+> índice mundial nunca contava as reservas conquistadas (NaN).
+> **FALTA:** #3 (defesa/distribuição), #4 (sair da guerra/segredo), #5 (bases),
+> #6 (nuclear/urânio), #7 (ciência-petróleo), #9 (ONU), #10 (blocos), #11 (estudo).
+
 Status: `🔴 a fazer` · `🟡 em execução` · `🟢 feito`
 Complementa `BACKLOG-ONLINE.md` e `METODOLOGIA-ONLINE.md`.
 
