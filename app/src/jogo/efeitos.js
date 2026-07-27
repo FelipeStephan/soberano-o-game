@@ -7,6 +7,13 @@ function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 export function aplicarEfeitos(estado, efeitos) {
   const mudancas = [];
   for (const [chave, valor] of Object.entries(efeitos || {})) {
+    // ── #6.4 · PARTIDA SEM NUCLEARES: O CHOKE POINT ────────────────────
+    // Toda ogiva que entra no jogo entra por aqui — a ação do catálogo, uma carta da
+    // Máquina, um evento futuro que ninguém escreveu ainda. Bloquear a chave NESTE
+    // ponto é o que garante que "sem nucleares" signifique sem nucleares, em vez de
+    // uma lista de gates espalhados que alguém vai esquecer de atualizar amanhã.
+    // Deltas NEGATIVOS passam: gastar/perder ogiva num mundo sem elas é inofensivo.
+    if (chave === 'ogivas' && estado?.semNucleares && Number(valor) > 0) continue;
     if (QUALITATIVOS[chave]) {
       estado[chave] = valor;
       mudancas.push({ chave, delta: 0, valor });

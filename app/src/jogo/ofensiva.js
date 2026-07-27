@@ -33,7 +33,12 @@ export function fatorEscopoOfensiva(nEstados = 0, totalEstados = 0) {
 // sua contra-inteligência (segurança); cresce com o tempo decorrido. Intel alta do alvo =
 // detecta cedo (defesa reforçada); intel baixa = você pega ele de surpresa.
 export function chanceDeteccaoAlvo(estado, op) {
-  const intelAlvo = Number(NACOES[op.alvoIso]?.ficha?.estadoInicial?.inteligencia ?? 30);
+  // ALVO HUMANO usa a inteligência REAL dele (transmitida a cada batida em statsVivos),
+  // não a ficha estática do NPC. É o que faz "investir em Inteligência" comprar de fato
+  // a chance de flagrar a ofensiva antes de ela cair — inclusive contra outro jogador.
+  const intelHumano = Number(estado._statsHumanos?.[op.alvoIso]?.intel);
+  const intelAlvo = Number.isFinite(intelHumano) ? intelHumano
+    : Number(NACOES[op.alvoIso]?.ficha?.estadoInicial?.inteligencia ?? 30);
   const contraIntel = Math.min(0.35, Number(estado.seguranca || 0) / 285);
   const elapsed = 1 - op.restante / Math.max(1, op.total);
   const base = (intelAlvo / 100) * 0.5;

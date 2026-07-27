@@ -941,6 +941,105 @@ button:disabled { opacity: .38; cursor: not-allowed; }
   letter-spacing: .1em; background: linear-gradient(120deg, var(--cyan), #1f9dff); border: none; color: #04121f; font-weight: 700; }
 @media (max-width: 700px) { .fim-grid { grid-template-columns: repeat(2, 1fr); } .fim-imprensa { grid-template-columns: 1fr; } }
 
+/* o tesouro sob congelamento do Conselho: o número continua lá, e é exatamente isso
+   que dói — dinheiro visível e intocável. Risco + gelo, não vermelho de "acabou". */
+.congelado { position: relative; color: #7fc7e8 !important; text-decoration: line-through;
+  text-decoration-color: rgba(53,224,255,.7); text-decoration-thickness: 2px; cursor: help; }
+.congelado::after { content: "❄"; margin-left: 5px; font-size: .72em; color: var(--cyan);
+  text-decoration: none; display: inline-block; animation: piscar 1.6s steps(2) infinite; }
+
+/* ── #6.4 · A REGRA DA PARTIDA, ANTES DE COMEÇAR ──────────────────────────
+   Uma caixa que muda a física do mundo não pode parecer um checkbox de newsletter:
+   ela ocupa espaço, tem o símbolo radioativo e explica a consequência no rótulo. */
+.hm-regra { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 6px; padding: 11px 13px; cursor: pointer;
+  background: rgba(9,15,26,.75); box-shadow: inset 0 0 0 1px var(--borda); transition: box-shadow .15s, background .15s;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.hm-regra:hover { box-shadow: inset 0 0 0 1px rgba(120,230,90,.45); }
+.hm-regra.on { background: rgba(120,230,90,.08); box-shadow: inset 0 0 0 1px #78e65a; }
+.hm-regra input { margin-top: 2px; accent-color: #78e65a; width: 16px; height: 16px; flex: none; cursor: pointer; }
+.hm-regra-txt { display: flex; flex-direction: column; gap: 4px; }
+.hm-regra-txt b { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px;
+  letter-spacing: .09em; color: #a9bcda; }
+.hm-regra.on .hm-regra-txt b { color: #9be15d; }
+.hm-regra-txt small { font-size: 10.5px; line-height: 1.5; color: var(--fraco); }
+.hm-regra-info { display: flex; align-items: center; gap: 8px; margin: 10px 0 6px; padding: 9px 12px;
+  font-size: 11px; color: #9be15d; background: rgba(120,230,90,.07); box-shadow: inset 2px 0 0 #78e65a; }
+
+/* ── #9 · O CONSELHO NO CABEÇALHO ─────────────────────────────────────────
+   Vermelho de tribunal, e um sino que pisca quando há sessão aberta: o jogador tem
+   de saber que estão julgando alguém AGORA, mesmo com a janela fechada. */
+.ta-btn.onu { position: relative; }
+.ta-btn.onu:hover { border-color: var(--perigo); box-shadow: 0 0 18px -8px var(--perigo); }
+.ta-onu-sino { position: absolute; top: 4px; right: 4px; width: 7px; height: 7px; background: var(--perigo);
+  border-radius: 50%; opacity: 0; transition: opacity .2s; }
+.ta-btn.onu.convocado { border-color: var(--perigo); color: #ff9aab; }
+.ta-btn.onu.convocado .ta-onu-sino { opacity: 1; animation: piscar 1s steps(2) infinite; }
+
+/* ── #11 · CAIR NO ONLINE NÃO É SAIR DA SALA ──────────────────────────────
+   Duas saídas na tela de fim, e a hierarquia diz qual é a boa: assumir outra nação
+   é a primária (a sala continua e você continua nela); "sair da sala" é o secundário,
+   apagado, porque é o caminho que fecha a porta atrás de você. */
+.fim-acoes { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.fim-btn.sec { background: transparent; box-shadow: inset 0 0 0 1px var(--borda); color: var(--fraco); font-weight: 600; padding: 14px 24px; font-size: 13px; }
+.fim-btn.sec:hover { box-shadow: inset 0 0 0 1px var(--cyan); color: var(--cyan); }
+.fim-btn.fim-renascer { background: linear-gradient(120deg, var(--verde), #12a173); color: #01120c; }
+
+.rnc-painel { background: var(--painel-solido); width: min(96%, 720px); max-height: 90vh; overflow-y: auto;
+  box-shadow: var(--sombra), 0 0 70px -20px var(--verde);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px)); animation: subir .3s ease; }
+.rnc-cab { display: flex; align-items: center; gap: 13px; padding: 16px 20px;
+  background: linear-gradient(90deg, rgba(34,224,160,.12), transparent 70%); box-shadow: inset 3px 0 0 var(--verde); }
+.rnc-ic { display: grid; place-items: center; width: 42px; height: 42px; color: var(--verde); background: rgba(34,224,160,.1); }
+.rnc-tit h2 { margin: 0; font-size: 18px; letter-spacing: .06em; }
+.rnc-tit span { font-size: 11.5px; color: var(--fraco); }
+.rnc-x { margin-left: auto; }
+.rnc-aviso { display: flex; gap: 9px; align-items: flex-start; margin: 14px 18px 0; padding: 11px 13px;
+  background: rgba(255,176,32,.08); box-shadow: inset 3px 0 0 var(--ambar); font-size: 12px; line-height: 1.6; color: #ffd79a; }
+.rnc-aviso b { color: #fff; }
+.rnc-lista { display: flex; flex-direction: column; gap: 6px; padding: 14px 18px; }
+.rnc-pais { display: flex; align-items: center; gap: 11px; padding: 10px 12px; cursor: pointer; text-align: left;
+  border: 0; background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--borda); color: var(--texto);
+  font-family: var(--corpo); letter-spacing: 0; }
+.rnc-pais:hover { box-shadow: inset 2px 0 0 var(--verde); background: rgba(34,224,160,.06); }
+.rnc-pais.guerra { box-shadow: inset 2px 0 0 var(--perigo); }
+.rnc-flag { width: 40px; height: 27px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--borda); }
+.rnc-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rnc-info b { font-family: var(--disp); font-size: 15px; }
+.rnc-info small { font-family: var(--mono); font-size: 9.5px; color: var(--fraco); }
+.rnc-tags { display: flex; gap: 5px; flex-wrap: wrap; justify-content: flex-end; max-width: 42%; }
+.rnc-tag { font-style: normal; display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px;
+  font-family: var(--mono); font-size: 8px; letter-spacing: .07em; }
+.rnc-tag.guerra { color: var(--perigo); box-shadow: inset 0 0 0 1px rgba(255,59,92,.45); }
+.rnc-tag.perdeu { color: var(--ambar); box-shadow: inset 0 0 0 1px rgba(255,176,32,.45); }
+.rnc-tag.calmo { color: var(--verde); box-shadow: inset 0 0 0 1px rgba(34,224,160,.4); }
+.rnc-go { color: var(--fraco); display: grid; place-items: center; }
+.rnc-vazio { display: flex; gap: 9px; align-items: center; padding: 20px; color: var(--fraco); font-size: 12.5px; }
+.rnc-rodape { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 0 18px 16px; }
+.rnc-espectar { border: 0; cursor: pointer; padding: 10px 16px; font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  background: transparent; box-shadow: inset 0 0 0 1px var(--borda); color: var(--fraco); display: flex; align-items: center; gap: 7px; }
+.rnc-espectar:hover { box-shadow: inset 0 0 0 1px var(--cyan); color: var(--cyan); }
+.rnc-nota { flex: 1; min-width: 180px; font-size: 10px; color: var(--fraco); display: flex; align-items: center; gap: 6px; }
+.rnc-confirma { padding: 30px 24px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.rnc-conf-flag { width: 120px; height: 80px; object-fit: cover; box-shadow: 0 0 0 1px var(--borda), 0 14px 40px -14px #000; }
+.rnc-confirma h2 { margin: 0; font-size: 21px; letter-spacing: .05em; }
+.rnc-confirma p { margin: 0; max-width: 46ch; font-size: 12.5px; line-height: 1.6; color: #c3d4ee; }
+.rnc-conf-acoes { display: flex; gap: 9px; margin-top: 6px; }
+.rnc-conf-nao { border: 0; cursor: pointer; padding: 12px 18px; font-family: var(--mono); font-size: 10px; letter-spacing: .08em;
+  background: transparent; box-shadow: inset 0 0 0 1px var(--borda); color: var(--fraco); }
+.rnc-conf-sim { display: flex; align-items: center; gap: 8px; border: 0; cursor: pointer; padding: 12px 22px;
+  font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .08em; background: var(--verde); color: #01120c; }
+
+/* a faixa permanente do espectador: sem ela, "assistir" é igual a "travou" */
+.esp-faixa { position: fixed; left: 0; right: 0; bottom: 0; z-index: 340; pointer-events: none; }
+.esp-in { pointer-events: auto; display: flex; align-items: center; gap: 11px; margin: 0 auto 12px; width: fit-content;
+  max-width: min(760px, 94vw); padding: 10px 16px; background: rgba(8,13,24,.95);
+  box-shadow: inset 0 0 0 1px rgba(255,176,32,.45), 0 16px 40px -14px #000;
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px)); }
+.esp-ic { color: var(--ambar); display: grid; place-items: center; }
+.esp-txt { font-size: 11.5px; color: #c8d6ef; } .esp-txt b { color: var(--ambar); font-family: var(--mono); letter-spacing: .08em; }
+.esp-btn { border: 0; cursor: pointer; padding: 8px 13px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .08em;
+  background: var(--verde); color: #01120c; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+
 /* ── FICHA DO EQUIPAMENTO ──────────────────────────────────── */
 .acao-chip.equip { padding: 0; overflow: hidden; }
 .acao-chip.equip .ac-foto { position: relative; height: 84px; }
@@ -1664,6 +1763,12 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .bp-ok { display: flex; align-items: center; gap: 8px; background: rgba(34,224,160,.08);
   border: 1px solid var(--verde); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #a8f0d4; }
 .bp-ok.forca { background: rgba(255,150,40,.1); border-color: #ff9628; color: #ffd0a0; }
+/* DIREITO DE BASE POR PACTO MILITAR: ciano de tratado, não verde de negociação nem
+   âmbar de ocupação. A cor separa as três formas de estar no solo alheio. */
+.bp-ok.pacto { background: rgba(53,224,255,.09); border-color: var(--cyan); color: #bfe9ff; }
+.bpc-corte { display: block; font-family: var(--mono); font-size: 8.5px; color: var(--fraco);
+  text-decoration: line-through; font-weight: 400; }
+.bpt-off { font-style: normal; color: var(--verde); }
 .bp-ok .ico { flex: none; }
 .bp-bloqueio { display: flex; gap: 10px; align-items: flex-start; background: rgba(255,59,92,.1);
   border: 1px solid var(--perigo); border-radius: 8px; padding: 12px; margin-top: 6px; }
@@ -2837,6 +2942,9 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .ref-info small { font-size: 9px; color: var(--fraco); font-family: var(--mono); }
 .ref-info small i.rq { font-style: normal; color: var(--ambar); }
 .ref-info small i.ra { font-style: normal; color: var(--cyan); }
+/* #3.4 — os rótulos respondem ao vivo enquanto o campo muda: o que já é a projeção
+   (depois de confirmar) pisca em branco pra separar do que ainda é o retrato de agora. */
+.ref-info small i.mudou { color: #eaf1ff; text-shadow: 0 0 8px rgba(53,224,255,.55); }
 /* STEPPER do reforço: um segmento único − | número | +, unido por fios hairline e
    chanfrado nas pontas. Antes eram três caixinhas soltas com raio, desalinhadas. */
 .ref-ctrl { display: flex; align-items: stretch; flex: none; gap: 1px; height: 30px;
@@ -3864,6 +3972,74 @@ button[data-tip], .tip-q { cursor: pointer; }
 .def-pronto:hover { filter: brightness(1.1); }
 @media (max-width: 640px) { .def-estados { grid-template-columns: 1fr; } }
 
+/* ── MODO DEFESA v2 — o país achatado, pulsando onde dói (#3.1/#3.2) ────────
+   A lista virou mapa. As regras de cor são semânticas: vermelho é alvo confirmado,
+   âmbar é setor provável, ciano é a sua própria guarnição (mapa de calor da defesa). */
+.defesa-painel.v2 { width: min(96%, 1000px); }
+.def-corpo { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; padding: 14px 18px; align-items: start; }
+.def-mapa { background: rgba(6,11,20,.92); box-shadow: inset 0 0 0 1px var(--borda); padding: 8px; position: relative; }
+.def-carregando { display: grid; place-items: center; min-height: 220px; gap: 8px; font-family: var(--mono);
+  font-size: 10px; letter-spacing: .1em; color: var(--fraco); }
+.def-svg { width: 100%; height: auto; display: block; max-height: 46vh; }
+.def-e { fill: rgba(53,224,255,calc(.07 + var(--carga, 0) * .42)); stroke: rgba(120,170,230,.34); stroke-width: .7;
+  cursor: pointer; transition: fill .15s ease, stroke .15s ease; }
+.def-e:hover { stroke: var(--cyan); stroke-width: 1.4; }
+.def-e.perdido { fill: rgba(255,59,92,.16); stroke: rgba(255,59,92,.5); cursor: not-allowed; }
+.def-e.conflito { stroke: var(--ambar); stroke-width: 1.2; stroke-dasharray: 4 3; }
+.def-e.setor { fill: rgba(255,176,32,calc(.16 + var(--carga, 0) * .3)); stroke: var(--ambar); stroke-width: 1.2;
+  animation: defPulsa 2.4s ease-in-out infinite; }
+.def-e.alvo { fill: rgba(255,59,92,calc(.2 + var(--carga, 0) * .3)); stroke: var(--perigo); stroke-width: 1.6;
+  animation: defPulsa 1.5s ease-in-out infinite; }
+.def-e.sel { stroke: #fff; stroke-width: 2; }
+@keyframes defPulsa { 0%, 100% { opacity: .68; } 50% { opacity: 1; } }
+/* o pulso no centro do estado ameaçado: um ponto e duas ondas que abrem devagar */
+.def-pulso circle { fill: none; stroke: var(--ambar); stroke-width: 1.4; }
+.def-pulso.exato circle { stroke: var(--perigo); }
+.def-pulso circle:first-child { fill: currentColor; stroke: none; r: 2.5; opacity: .9; color: var(--ambar); }
+.def-pulso.exato circle:first-child { color: var(--perigo); }
+.def-pulso .onda { animation: defOnda 2.6s ease-out infinite; transform-origin: center; }
+.def-pulso .onda.o2 { animation-delay: 1.3s; }
+@keyframes defOnda { 0% { r: 3; opacity: .8; } 100% { r: 22; opacity: 0; } }
+.def-legenda { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 7px; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fraco); }
+.def-legenda span { display: inline-flex; align-items: center; gap: 5px; }
+.dl { width: 10px; height: 10px; display: inline-block; }
+.dl.alvo { background: rgba(255,59,92,.5); box-shadow: inset 0 0 0 1px var(--perigo); }
+.dl.carga { background: rgba(53,224,255,.42); box-shadow: inset 0 0 0 1px rgba(53,224,255,.7); }
+.dl.conflito { background: transparent; box-shadow: inset 0 0 0 1px var(--ambar); }
+
+.def-lado { display: flex; flex-direction: column; gap: 10px; }
+.defesa-painel.v2 .def-livre { display: block; margin: 0; padding: 11px 13px; background: rgba(9,15,26,.9);
+  box-shadow: inset 3px 0 0 var(--ambar); }
+.dfl-topo { display: flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 9px;
+  letter-spacing: .1em; color: var(--fraco); text-transform: uppercase; }
+.dfl-topo b { margin-left: auto; font-family: var(--disp); font-size: 15px; color: var(--ambar); letter-spacing: 0; }
+.dfl-topo i { font-style: normal; font-size: 9px; color: var(--fraco); }
+.def-forca-barra { margin-top: 10px; }
+.def-forca-barra label { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: .1em; color: var(--fraco); }
+.def-forca-barra label b { font-family: var(--disp); font-size: 14px; color: var(--cyan); letter-spacing: 0; }
+.dfb-un { margin-left: auto; color: #9fb4d4; letter-spacing: .04em; }
+.def-forca-barra input[type=range] { width: 100%; margin-top: 5px; accent-color: var(--cyan); }
+.defesa-painel.v2 .def-quick { margin: 10px 0 0; gap: 6px; flex-direction: column; }
+.defesa-painel.v2 .dq { width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 9px; font-size: 9.5px; }
+.dq.costa { background: rgba(53,224,255,.12); color: var(--cyan); box-shadow: inset 0 0 0 1px rgba(53,224,255,.4); }
+.dq.costa:hover:not(:disabled) { background: var(--cyan); color: #04121f; }
+
+.def-sel { padding: 11px 13px; background: rgba(9,15,26,.9); box-shadow: inset 3px 0 0 var(--cyan); }
+.dfs-cab { display: flex; align-items: center; gap: 7px; font-size: 13px; font-family: var(--disp); }
+.dfs-forca { margin-top: 4px; font-size: 11px; color: var(--fraco); } .dfs-forca b { color: #eaf1ff; font-size: 15px; }
+.dfs-comp { display: flex; gap: 8px; flex-wrap: wrap; margin: 7px 0 9px; font-family: var(--mono); font-size: 10px; color: #9fb4d4; }
+.dfs-comp i { color: var(--fraco); }
+.dfs-go { width: 100%; border: 0; cursor: pointer; padding: 10px; font-family: var(--mono); font-size: 9.5px;
+  font-weight: 700; letter-spacing: .08em; background: var(--cyan); color: #04121f; }
+.dfs-go:disabled { opacity: .4; cursor: not-allowed; }
+.def-dica, .def-ordem { padding: 9px 12px; font-size: 11px; line-height: 1.5; color: #a9bcda;
+  background: rgba(53,224,255,.06); box-shadow: inset 2px 0 0 rgba(53,224,255,.4); display: flex; gap: 7px; align-items: flex-start; }
+.def-ordem { background: rgba(34,224,160,.08); box-shadow: inset 2px 0 0 var(--verde); color: #b9f0d8; }
+.def-ordem.erro { background: rgba(255,59,92,.08); box-shadow: inset 2px 0 0 var(--perigo); color: #ffb3c0; }
+@media (max-width: 860px) { .def-corpo { grid-template-columns: 1fr; } .def-svg { max-height: 34vh; } }
+
 .x-filtro { display: flex; gap: 1px; margin: 8px 10px; background: rgba(150,190,240,.12);
   clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
 .xf { flex: 1; border: 0; cursor: pointer; padding: 7px; font-family: var(--mono); font-size: 9px; font-weight: 600; letter-spacing: .06em;
@@ -4467,6 +4643,43 @@ button[data-tip], .tip-q { cursor: pointer; }
   clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); font-family: var(--mono); letter-spacing: .04em; }
 .pp-paz:hover { box-shadow: inset 0 0 0 1px var(--cyan); }
 .pp-paz i { margin-left: auto; font-style: normal; font-size: 9px; color: var(--fraco); }
+/* #4.1 — SAIR DA GUERRA: mesma família, em âmbar de recuo. Não é a paz (que se
+   negocia) nem o ataque (que se lança) — é a ordem de parar, e parece isso. */
+.pp-sair-guerra { width: 100%; display: flex; align-items: center; gap: 9px; padding: 11px 13px; margin-top: 7px; cursor: pointer;
+  background: rgba(255,176,32,.08); border: 0; box-shadow: inset 0 0 0 1px rgba(255,176,32,.35); color: var(--ambar);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); font-family: var(--mono); letter-spacing: .04em; }
+.pp-sair-guerra:hover { box-shadow: inset 0 0 0 1px var(--ambar); }
+.pp-sair-guerra span { font-size: 11.5px; }
+.pp-sair-guerra i { margin-left: auto; font-style: normal; font-size: 9px; color: var(--fraco); text-align: right; max-width: 46%; line-height: 1.35; }
+/* o painel de confirmação: a conta da retirada antes do sim */
+.sgu-painel { background: var(--painel-solido); width: min(94%, 520px); box-shadow: var(--sombra), 0 0 60px -20px var(--ambar);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px)); animation: subir .28s ease; }
+.sgu-cab { display: flex; align-items: center; gap: 12px; padding: 15px 18px;
+  background: linear-gradient(90deg, rgba(255,176,32,.12), transparent 70%); box-shadow: inset 3px 0 0 var(--ambar); }
+.sgu-ic { display: grid; place-items: center; width: 40px; height: 40px; color: var(--ambar); background: rgba(255,176,32,.1); }
+.sgu-tit h2 { margin: 0; font-size: 17px; letter-spacing: .06em; }
+.sgu-tit span { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--fraco); text-transform: uppercase; }
+.sgu-x { margin-left: auto; }
+.sgu-corpo { padding: 14px 18px; }
+.sgu-lead { margin: 0 0 12px; font-size: 13px; line-height: 1.6; color: #c8d6ef; } .sgu-lead b { color: #fff; }
+.sgu-conta { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.sgu-item { padding: 9px 11px; background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--borda); }
+.sgu-item span { display: block; font-family: var(--mono); font-size: 8.5px; letter-spacing: .09em; color: var(--fraco); text-transform: uppercase; }
+.sgu-item b { font-family: var(--disp); font-size: 18px; }
+.sgu-item.bom { box-shadow: inset 2px 0 0 var(--verde); } .sgu-item.bom b { color: var(--verde); }
+.sgu-item.ruim { box-shadow: inset 2px 0 0 var(--perigo); } .sgu-item.ruim b { color: var(--perigo); }
+.sgu-ops { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; padding: 10px 12px;
+  background: rgba(255,59,92,.08); box-shadow: inset 2px 0 0 var(--perigo); font-size: 11.5px; line-height: 1.5; color: #ffb3c0; }
+.sgu-ops b { color: #fff; }
+.sgu-nota { display: flex; gap: 7px; align-items: flex-start; margin-top: 10px; font-size: 11px; line-height: 1.5; color: var(--fraco); }
+.sgu-nota b { color: #c8d6ef; }
+.sgu-acoes { display: flex; gap: 8px; padding: 0 18px 16px; }
+.sgu-cancelar { flex: 1; background: transparent; box-shadow: inset 0 0 0 1px var(--borda); color: var(--fraco);
+  border: 0; padding: 12px; font-family: var(--mono); font-size: 10px; letter-spacing: .08em; cursor: pointer; }
+.sgu-ok { flex: 1.4; display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; cursor: pointer;
+  padding: 12px; font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: .08em;
+  background: var(--ambar); color: #1a0e00; }
+.sgu-ok:hover { filter: brightness(1.1); }
 /* botão de espionagem (mesma família da paz, em roxo de inteligência) */
 .pp-espiao { width: 100%; display: flex; align-items: center; gap: 9px; padding: 11px 13px; margin-top: 7px; cursor: pointer;
   background: rgba(185,140,255,.08); border: 0; box-shadow: inset 0 0 0 1px rgba(185,140,255,.35); color: #cdb4ff;
@@ -4832,6 +5045,20 @@ button[data-tip], .tip-q { cursor: pointer; }
 .pen-dop:hover { box-shadow: inset 0 0 0 1px rgba(53,224,255,.4); }
 .pen-dop.on { box-shadow: inset 0 0 0 1px var(--cyan), 0 0 16px -8px var(--cyan); background: rgba(53,224,255,.07); }
 .pen-dop.on .pen-dop-ic { color: var(--cyan); } .pen-dop.on .pen-dop-ck { opacity: 1; }
+
+/* #3.3 — TAMANHO DA FORÇA: a barra que decide quanto da reserva sai do quartel.
+   O split "sai × fica" é o coração do aviso — distribuir 100% te deixa sem assalto. */
+.pen-fracao { margin: 8px 0 6px; padding: 9px 11px; background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--cyan); }
+.pen-fracao label { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .1em; color: var(--fraco); text-transform: uppercase; }
+.pen-fracao label b { margin-left: auto; font-family: var(--disp); font-size: 15px; color: var(--cyan); letter-spacing: 0; }
+.pen-fracao input[type=range] { width: 100%; margin: 6px 0 4px; accent-color: var(--cyan); }
+.pen-frac-split { display: flex; justify-content: space-between; gap: 8px; font-family: var(--mono); font-size: 9.5px; color: var(--fraco); }
+.pen-frac-split .sai b { color: var(--cyan); } .pen-frac-split .fica b { color: var(--ambar); }
+.pen-frac-nota { margin-top: 6px; font-size: 9.5px; line-height: 1.45; color: var(--fraco); display: flex; gap: 5px; align-items: flex-start; }
+.pen-descoberto { display: flex; gap: 9px; align-items: flex-start; margin: 0 14px 4px; padding: 10px 13px;
+  background: rgba(255,176,32,.08); box-shadow: inset 3px 0 0 var(--ambar); font-size: 11.5px; line-height: 1.55; color: #ffd79a; }
+.pen-descoberto b { color: #fff; }
 
 .pen-aplicar { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px; margin-top: 2px; cursor: pointer;
   font-family: var(--mono); font-size: 11px; letter-spacing: .06em; color: #04121f; border: 0; font-weight: 700;
@@ -5282,6 +5509,54 @@ button[data-tip], .tip-q { cursor: pointer; }
 .tel-chat-form input { flex: 1; background: #060d18; border: 0; box-shadow: inset 0 0 0 1px var(--borda); color: #eaf1ff; padding: 8px 10px; font-size: 12px; font-family: inherit; }
 .tel-chat-form input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--cyan); }
 .tel-chat-form button { display: grid; place-items: center; width: 36px; cursor: pointer; color: #04121f; background: var(--cyan); border: 0; }
+
+/* ── #10.2 · CHAT DO BLOCO ────────────────────────────────────────────────
+   Mesma família da linha privada (.tel-chat), em VERDE de aliança em vez do ciano
+   do 1:1 — a cor já diz, antes de você ler o cabeçalho, que ali dentro tem mais de
+   uma pessoa ouvindo. As bandeirinhas do topo mostram quem está na sala AGORA:
+   escrever pra bloco vazio não chega a ninguém, e o painel não deixa você descobrir
+   isso depois. */
+.blv-b-chat { width: 100%; display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 8px 10px; cursor: pointer;
+  border: 0; background: rgba(34,224,160,.09); box-shadow: inset 0 0 0 1px rgba(34,224,160,.35); color: var(--verde);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.blv-b-chat:hover { box-shadow: inset 0 0 0 1px var(--verde); }
+.blv-b-chat i { margin-left: auto; font-style: normal; font-size: 8.5px; color: var(--fraco); }
+.blv-b-chat.mudo { color: var(--fraco); box-shadow: inset 0 0 0 1px var(--borda); background: rgba(116,136,173,.07); }
+
+.bloco-chat { position: fixed; right: 14px; bottom: 14px; z-index: 320; width: min(340px, 46vw); display: flex; flex-direction: column;
+  background: rgba(8,13,24,.92); backdrop-filter: blur(6px); box-shadow: inset 0 0 0 1px rgba(34,224,160,.32), 0 20px 50px -16px #000;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); animation: subir .2s both; }
+.bch-cab { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-bottom: 1px solid var(--borda); }
+.bch-ic { display: grid; place-items: center; color: var(--verde); }
+.bch-tit { flex: 1; min-width: 0; } .bch-tit b { display: block; font-size: 12px; color: #eaf1ff; }
+.bch-tit span { font-family: var(--mono); font-size: 7.5px; letter-spacing: .09em; color: var(--fraco); text-transform: uppercase; }
+.bch-membros { display: flex; gap: 4px; flex-wrap: wrap; padding: 7px 11px; border-bottom: 1px solid var(--borda); }
+.bch-m { opacity: .3; filter: grayscale(1); line-height: 0; } .bch-m.on { opacity: 1; filter: none; }
+.bch-flag { width: 20px; height: 14px; object-fit: cover; box-shadow: 0 0 0 1px var(--borda); }
+.bch-so { font-size: 10px; color: var(--fraco); }
+.bch-corpo { max-height: 230px; min-height: 90px; overflow-y: auto; padding: 9px 11px; display: flex; flex-direction: column; gap: 6px; }
+.bch-vazio { display: flex; align-items: center; gap: 6px; font-size: 9.5px; color: var(--fraco); }
+.bch-msg { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.bch-msg.meu { align-items: flex-end; }
+.bch-quem { display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 8px;
+  letter-spacing: .08em; color: var(--fraco); text-transform: uppercase; }
+.bch-quem .bch-flag { width: 14px; height: 10px; }
+.bch-bolha { max-width: 86%; padding: 6px 9px; font-size: 11.5px; line-height: 1.45; color: #dbe6f7;
+  background: #0b1524; box-shadow: inset 0 0 0 1px var(--borda); }
+.bch-msg.meu .bch-bolha { background: rgba(34,224,160,.1); box-shadow: inset 0 0 0 1px rgba(34,224,160,.35); }
+.bch-form { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--borda); }
+.bch-form input { flex: 1; background: #060d18; border: 0; box-shadow: inset 0 0 0 1px var(--borda); color: #eaf1ff; padding: 8px 10px; font-size: 12px; font-family: inherit; }
+.bch-form input:focus { outline: none; box-shadow: inset 0 0 0 1px var(--verde); }
+.bch-form input:disabled { opacity: .45; }
+.bch-form button { display: grid; place-items: center; width: 36px; cursor: pointer; color: #01120c; background: var(--verde); border: 0; }
+.bch-form button:disabled { opacity: .35; cursor: not-allowed; }
+.bch-notif { position: fixed; right: 14px; bottom: 90px; z-index: 330; cursor: pointer; animation: subir .2s both; }
+.bchn-in { display: flex; align-items: center; gap: 9px; padding: 9px 12px; max-width: min(340px, 70vw);
+  background: rgba(8,13,24,.95); color: var(--verde); box-shadow: inset 0 0 0 1px rgba(34,224,160,.45), 0 14px 34px -12px #000;
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)); }
+.bchn-txt { min-width: 0; } .bchn-txt b { display: block; font-size: 11px; color: #eaf1ff; }
+.bchn-txt span { display: block; font-size: 10px; color: var(--fraco); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* POSIÇÃO NAVAL ANCORADA (ui/naval.js .nvp-anc): o cartão do clique-no-mar vive no
    ponto clicado e gira com o globo — reusa a âncora .nva-flut, só que mais largo. */

@@ -82,10 +82,18 @@ function difundirEvento(sala, obj, exceto) {
 // DURÁVEIS (quem tomou qual território, quais frotas estão no mar) e reenvia a quem (re)entra.
 // Não é simulação: é a memória do que os humanos fizeram uns aos outros.
 function acumularMundoSala(sala, ev) {
-  const ms = sala.mundoSala || (sala.mundoSala = { donoEstado: {}, conflitos: {}, frotas: {} });
+  const ms = sala.mundoSala || (sala.mundoSala = { donoEstado: {}, conflitos: {}, frotas: {}, anexacoes: {} });
+  if (!ms.anexacoes) ms.anexacoes = {};   // salas criadas antes deste campo existir
   const atacante = ev.dePais;
   const d = ev.dados || {};
   if (!atacante) return;
+  // ANEXAÇÃO É O FATO MAIS DURÁVEL QUE EXISTE AQUI — um país deixou de existir. E era
+  // justamente o que NÃO estava sendo guardado: quem entrava depois (ou renascia na
+  // sala com outra nação, ver #11) recebia territórios e frotas, mas via a província
+  // anexada como uma nação soberana no mapa. Guardamos o par país→anexador; a
+  // devolução de soberania apaga o registro, que é a operação inversa exata.
+  if (ev.tipo === 'anexacao' && d.iso) { ms.anexacoes[d.iso] = { por: atacante, nome: d.nome || d.iso }; return; }
+  if (ev.tipo === 'devolucao' && d.iso) { delete ms.anexacoes[d.iso]; return; }
   if (ev.tipo === 'guerra_resultado') {
     for (const id of (d.caem || [])) { ms.donoEstado[id] = atacante; ms.conflitos[id] = { por: atacante, intensidade: 45 }; }
   } else if (ev.tipo === 'ataque_estado' && d.estadoId) {

@@ -24,9 +24,10 @@ import { abrirDistribuir } from './distribuir.js';
 import { abrirIntervencao } from './intervencao.js';
 import { abrirPandemia } from './pandemia.js';
 import { abrirPaz } from './paz.js';
+import { previsaoSaidaGuerra, sairDaGuerra, chanceContraAtaque } from '../jogo/paz.js';
 import { nivelEsp } from '../jogo/espionagem.js';
 import { abrirEnvio } from './envio.js';
-import { donoDe as donoDeEstado } from '../jogo/territorio.js';
+import { donoDe as donoDeEstado, paisAnexado } from '../jogo/territorio.js';
 import { abrirPosicaoNaval } from './naval.js';
 import { alvosDeAjuda } from '../jogo/ajuda.js';
 import { abrirGuerra, desfechoCarrossel } from './guerra.js';
@@ -39,6 +40,9 @@ import { statsVivos } from '../jogo/indiceMundial.js';
 import { diagnosticoQueda, obituarioDaQueda } from './relatorioQueda.js';
 import { abrirFakeNews } from './fakeNews.js';
 import { abrirBlocosVisor } from './blocos.js';
+import { montarChatBloco } from './blocoChat.js';
+import { abrirRenascer, faixaEspectador } from './renascer.js';
+import { montarONU, caixaCongelado } from './onu.js';
 import { montarTelefonia } from './telefone.js';
 import { abrirMercado } from './mercado.js';
 import { abrirEquipamento } from './equipamento.js';
@@ -145,6 +149,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <button class="ta-btn mercado" id="btn-mercado" ${tipAttr('Onde se compra material de guerra: caça, tanque, navio, satélite. Preço e prazo mudam com o bloco a que você pertence e com o clima do mundo — em tempo de tensão, tudo fica mais caro.', { t: 'Mercado', k: 'COMPRA DE ARMAS', cor: 'ambar' })}>${ico('store', 15)}<span>MERCADO</span></button>
           <button class="ta-btn blocos" id="btn-blocos" ${tipAttr('O tabuleiro das alianças: todos os blocos ativos — militares e econômicos — com membros, poder somado, PIB e intensidade. É onde você funda e acompanha a sua própria aliança.', { t: 'Blocos', k: 'ALIANÇAS GLOBAIS', cor: 'cyan' })}>${ico('handshake', 15)}<span>BLOCOS</span></button>
           <button class="ta-btn indice" id="btn-indice" ${tipAttr('O placar do planeta — o mesmo pra todos os jogadores. Veja quem lidera em PIB, poder militar, petróleo e território, e onde VOCÊ está no ranking.', { t: 'Índice Mundial', k: 'RANKING GLOBAL', cor: 'cyan' })}>${ico('trophy', 15)}<span>ÍNDICE</span></button>
+          ${online ? `<button class="ta-btn onu" id="btn-onu" ${tipAttr('A mesa coletiva da sala: convoque uma sessão, ponha um país no banco dos réus e vote a pena. Congelar o caixa, embargar armas, suspender o comércio — punição que a sala inteira assina, e que dói de verdade.', { t: 'Conselho de Segurança', k: 'SÓ NO ONLINE', cor: 'perigo' })}>${ico('gavel', 15)}<span>CONSELHO</span><i class="ta-onu-sino"></i></button>` : ''}
         </div>
         <span class="badge" id="badge-modo">–</span>
         <span class="online-badge" id="online-badge" data-tip="Jogadores online"></span>
@@ -229,6 +234,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // rola os mesmos dados na mesma batida (ver motor.beatMundo + jogo/rng.js).
   jogo._seedSala = (online && opts.sala?.codigo) ? opts.sala.codigo : null;
   let telefonia = null;   // linha direta entre presidentes (chamada de voz + DM)
+  let chatBloco = null;   // canal fechado dos membros de um bloco (#10.2)
+  let removerFaixaEsp = null;   // faixa do MODO ESPECTADOR, quando o país cai (#11)
+  let onuCtrl = null;     // Conselho de Segurança — a mesa coletiva da sala (#9)
   if (online && net) {
     onlineCtrl = ligarOnline(jogo, net, {
       container,
@@ -239,6 +247,21 @@ export function iniciarJogo(container, jogo, opts = {}) {
       // A BATIDA DO HOST chegou: o convidado roda o beat local em sincronia (seed da
       // sala = mesmos dados) e aplica o mundo compartilhado por cima. UM calendário.
       aoBeatHost: (dados) => tr?.beatExterno(dados),
+      // #9 — o Conselho de Segurança vive nos MESMOS eventos da sala. Ele responde
+      // `true` quando consumiu o bilhete, e aí o fluxo normal nem toca no assunto.
+      aoEventoExtra: (ev) => !!onuCtrl?.aoEvento(ev),
+      // #6.2 — a ogiva caiu em CIMA de você. Não é derrota por aprovação nem por
+      // dívida: o país deixou de existir. Encerramos a partida como fim de reinado
+      // (com o motivo certo) e caímos direto na porta do #11 — a sala segue viva.
+      aoSerApagado: (m) => {
+        if (jogo.fase === 'fim') return;
+        jogo.fase = 'fim';
+        tr?.parar();
+        mostrarFim({
+          tipo: 'derrota', causa: 'nuclear', titulo: 'Apagado do mapa',
+          texto: `${m.porNome || 'Uma potência'} detonou uma ogiva nuclear sobre a sua nação. Não há governo para depor, oposição para culpar nem eleição para perder — há uma cicatriz radioativa onde ficava o seu país.`,
+        });
+      },
     });
     // Canal de saída pra qualquer módulo (naval, nuclear, envio, frota) ecoar a ação
     // na sala sem depender do onlineCtrl no escopo: jogo._relayOnline(tipo, alvo, texto, dados).
@@ -250,8 +273,13 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // TELEFONE VERMELHO: escuta o canal `direto` (que ligarOnline não usa — setHandlers
     // faz merge, então onDireto entra sem atropelar onSala/onEvento).
     telefonia = montarTelefonia(jogo, net, { globoCtrl: () => globoCtrl });
+    // #10.2 — o canal fechado do bloco divide o MESMO transporte `direto` com a
+    // telefonia (não há broadcast por grupo no servidor; ver ui/blocoChat.js). Por
+    // isso o roteamento é por tentativa: quem reconhece o tipo consome a mensagem.
+    chatBloco = montarChatBloco(jogo, net, { ehHumano: (iso) => !!onlineCtrl?.ehHumano(iso) });
+    onuCtrl = montarONU(jogo, net, { onlineCtrl, globoCtrl: () => globoCtrl });
     net.setHandlers({
-      onDireto: (m) => telefonia.aoDireto(m),
+      onDireto: (m) => { if (chatBloco.aoDireto(m)) return; telefonia.aoDireto(m); },
       onDiretoFalhou: (m) => { /* alvo saiu da sala no meio: a UI da chamada resolve pelo timeout */ },
     });
   }
@@ -273,7 +301,12 @@ export function iniciarJogo(container, jogo, opts = {}) {
   });
   // ÍNDICE MUNDIAL: o ranking global — pode abrir a qualquer hora (é só leitura).
   container.querySelector('#btn-indice')?.addEventListener('click', () => abrirIndiceMundial(jogo));
-  container.querySelector('#btn-blocos')?.addEventListener('click', () => abrirBlocosVisor(jogo));
+  // CONSELHO: com mesa aberta entra na sessão; sem mesa, abre a convocação.
+  container.querySelector('#btn-onu')?.addEventListener('click', () => onuCtrl?.abrir());
+  container.querySelector('#btn-blocos')?.addEventListener('click', () => abrirBlocosVisor(jogo, {
+    onChat: chatBloco ? (bloco) => chatBloco.abrir(bloco) : null,
+    ehHumano: (isoAlvo) => !!onlineCtrl?.ehHumano(isoAlvo),
+  }));
   // BRENT: clicar abre o histórico de impactos no barril (alta/baixa + motivo).
   container.querySelector('#t-brent-stat')?.addEventListener('click', (ev) => {
     ev.stopPropagation();
@@ -516,6 +549,13 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const turnoExibido = (jogo.ehOnline && Number.isFinite(jogo._periodoSala)) ? jogo._periodoSala : jogo.turno;
     el.turno.textContent = mesAnoDoJogo(turnoExibido).label;
     el.tesouro.textContent = dinheiro(jogo.estado.tesouro);
+    // #9 — CAIXA CONGELADO PELO CONSELHO. A pena não some com o dinheiro: ela tira o
+    // acesso. Sem marca no topo, o jogador olharia pro tesouro cheio e concluiria que
+    // o jogo travou toda vez que uma ordem fosse recusada. O número fica lá, riscado.
+    const gelo = caixaCongelado(jogo.estado);
+    el.tesouro.classList.toggle('congelado', gelo.bloqueado);
+    if (gelo.bloqueado) el.tesouro.title = `Caixa congelado pelo Conselho de Segurança — ${gelo.restante} mês(es) restantes.`;
+    else el.tesouro.removeAttribute('title');
     // O cabeçalho estava com espaço ocioso — agora carrega o pulso do mundo:
     const dst = container.querySelector('#t-destino');
     if (dst) { dst.textContent = `${jogo.destino}`; dst.style.color = jogo.banda?.cor || 'var(--texto)'; }
@@ -1050,6 +1090,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
     animarEventosVivos(res.eventosVivos);   // arcos/conflitos no globo
     avisarMobilizacoes();                   // a inteligência detectou um ataque se montando?
     avisarOperacoesDetectadas();            // o ALVO detectou a MINHA ofensiva se montando?
+    onuCtrl?.aplicarPenasNoBeat();          // #9 — as penas do Conselho sangram e expiram
+    const sino = container.querySelector('#btn-onu');
+    if (sino) sino.classList.toggle('convocado', !!onuCtrl?.temReuniaoAtiva());
     if (res.desbloqueios?.length) popupDesbloqueio(res.desbloqueios, () => {});
     if (res.invasao) cenaInvasaoTempo(res.invasao); // a batida pausa enquanto a cena está aberta
     else if (res.ofensivas?.length) cenaOfensivasResolvidas(res.ofensivas.slice()); // minhas ofensivas amadureceram
@@ -1057,13 +1100,31 @@ export function iniciarJogo(container, jogo, opts = {}) {
   }
 
   // O ALVO flagrou minha ofensiva em preparo → aviso (ele vai reforçar a defesa).
+  //
+  // #4.2 — E É AQUI QUE O SEGREDO CAI. Enquanto ninguém detecta, a operação não existe
+  // pro mundo. No instante em que a inteligência do alvo a flagra, o sigilo acabou: o
+  // fato vira PÚBLICO na sala (o mapa de todos ganha a linha de intenção "X prepara
+  // ofensiva contra Y") e o alvo entra em Modo Defesa com o eixo real do avanço. É a
+  // recompensa concreta de investir em Inteligência — sua e dos outros.
   function avisarOperacoesDetectadas() {
     const novos = (jogo.estado.operacoes || []).filter((o) => o.novoAviso);
     if (!novos.length) return;
     novos.forEach((o) => { o.novoAviso = false; });
+    for (const o of novos) {
+      if (!jogo.ehOnline || !o._online) continue;
+      onlineCtrl?.notificar('ofensiva_detectada', o.alvoIso,
+        `INTELIGÊNCIA: ${PAISES[jogo.estado.iso]?.nome || jogo.ficha.pais} tem uma ofensiva contra ${o.alvoNome} em preparação — lançamento estimado em ${Math.max(1, o.restante)} ${Math.max(1, o.restante) > 1 ? 'meses' : 'mês'}.`,
+        {
+          de: o._de || globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA') || null,
+          para: o._para || globoCtrl?.ondeEsta?.(o.alvoIso) || null,
+          prioridades: o._prioridades || null,
+          alvoEstado: (o._prioridades || [])[0] || null,
+          restante: Math.max(1, o.restante), total: o.total,
+        });
+    }
     if (document.querySelector('.carta-wrap .cena') || document.querySelector('.lg-barra')) return;
     const o = novos[0];
-    alertaUrgente({ titulo: 'OPERAÇÃO COMPROMETIDA', texto: `${o.alvoNome} detectou nossa mobilização — espere resistência reforçada quando o ataque chegar.`, tom: 'alerta', comSom: false });
+    alertaUrgente({ titulo: 'OPERAÇÃO COMPROMETIDA', texto: `${o.alvoNome} detectou nossa mobilização — o sigilo caiu e o mundo já sabe. Espere resistência reforçada quando o ataque chegar.`, tom: 'alerta', comSom: false });
   }
 
   // Minhas ofensivas que amadureceram resolvem AGORA (com a feature real do globo), tocam
@@ -1074,6 +1135,20 @@ export function iniciarJogo(container, jogo, opts = {}) {
       if (!o || o.tipo !== 'guerra') { if (o) proxima(); return; }
       const feature = (globoCtrl?.features || []).find((f) => iso(f) === o.alvoIso);
       if (!feature) { renderHud(); renderFeed(); renderTopo(); proxima(); return; }
+      // #4.2 — O SOCO CHEGA AGORA. Este é o instante em que a ofensiva deixa de ser
+      // segredo para todo mundo: o evento público sai aqui, com os mísseis. Quem foi
+      // detectado antes já teve a chance de reforçar; quem não foi, descobre assim.
+      if (jogo.ehOnline && o._online) {
+        jogo._relayOnline?.('guerra', o.alvoIso,
+          `${jogo.ficha.presidente || jogo.ficha.pais} LANÇOU a ofensiva contra ${o.alvoNome} — a operação estava em preparação há ${o.total} ${o.total > 1 ? 'meses' : 'mês'}.`,
+          {
+            de: o._de || globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA') || null,
+            para: o._para || globoCtrl?.ondeEsta?.(o.alvoIso) || null,
+            prioridades: o._prioridades || null,
+            alvoEstado: (o._prioridades || [])[0] || null,
+            impacto: true, surpresa: !o.detectado,
+          });
+      }
       const m = multiplicadoresOfensiva(o);
       const res = resolverGuerra(jogo.estado, feature, o.deploy, {
         multPoder: o.multPoder, custo: o.custo, origem: o.origem, prioridade: o.prioridade,
@@ -1107,7 +1182,20 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const m = novos[0];
     novos.forEach((x) => { x.novoAviso = false; });
     if (document.querySelector('.carta-wrap .cena') || document.querySelector('.lg-barra')) return;
-    alertaUrgente({ titulo: 'AMEAÇA DETECTADA', texto: `${m.nome} mobiliza forças contra você — ataque em ~${Math.max(1, m.restante)} ${Math.max(1, m.restante) > 1 ? 'meses' : 'mês'}. Reforce a defesa enquanto há tempo.`, tom: 'alerta', comSom: false });
+    // #3.3 — A TROPA AGORA COMEÇA TODA NO QUARTEL (semearGuarnicoes não semeia mais
+    // sozinho). Isso é o pedido do dono e é melhor design, mas cria um jeito novo de
+    // perder feio: chegar na primeira invasão com o exército inteiro sem endereço. Se
+    // for esse o caso, o aviso de ameaça diz isso na cara — é o único momento em que o
+    // jogador está garantidamente olhando.
+    const semPosicao = !Object.keys(jogo.estado.guarnicoes || {}).some((id) => !id.startsWith('MAR_'));
+    const meses = Math.max(1, m.restante);
+    alertaUrgente({
+      titulo: 'AMEAÇA DETECTADA',
+      texto: semPosicao
+        ? `${m.nome} mobiliza forças contra você — ataque em ~${meses} ${meses > 1 ? 'meses' : 'mês'}. E o seu exército inteiro ainda está no QUARTEL, sem posição: um quartel não segura fronteira. Abra o Estado-Maior e distribua agora.`
+        : `${m.nome} mobiliza forças contra você — ataque em ~${meses} ${meses > 1 ? 'meses' : 'mês'}. Reforce a defesa enquanto há tempo.`,
+      tom: 'alerta', comSom: false,
+    });
   }
 
   // VOCÊ FOI INVADIDO, no tempo real: alerta urgente + a mesma página de invasão do turno,
@@ -1147,9 +1235,29 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const code = iso(feature);
     // ANEXADO É MEU: o país incorporado entra no ramo "SUA NAÇÃO" — sem planejar
     // ofensiva contra si mesmo, sem espionar a própria província, sem nuke em casa.
-    const meuAnexado = !!jogo.estado.ocupacoes?.[code]?.anexado;
+    // ANEXADO POR MIM — não por qualquer um. `ocupacoes` guarda as anexações da sala
+    // inteira; ler só o `.anexado` abria o painel "SUA NAÇÃO" (com o botão de devolver
+    // a soberania!) em cima de uma província que outro jogador conquistou.
+    const meuAnexado = paisAnexado(jogo.estado, code);
     const ehJogador = souEu(code) || meuAnexado;
     const oc = ocupacaoDe(jogo.estado, code);
+
+    // ── #4.1 · SAIR DA GUERRA, DIRETO ────────────────────────────────
+    // `sairDaGuerra()` existia inteiro em jogo/paz.js e não tinha porta: a única saída
+    // era o painel de negociação, que é sobre CONVENCER o outro. Recuar não depende de
+    // ninguém aceitar — é uma ordem sua, e tem de estar a um clique de onde a guerra é
+    // olhada. O botão aparece nos dois painéis (país em guerra e território ocupado),
+    // porque foi exatamente lá que ele fez falta: no painel da ocupação só havia
+    // "MANTER A ORDEM" — dava pra pagar a conta da guerra, não pra encerrá-la.
+    const emGuerraCom = !ehJogador && (jogo.estado.emGuerra || []).includes(code);
+    const prevSaida = emGuerraCom ? previsaoSaidaGuerra(jogo.estado, code) : null;
+    const botaoSairGuerra = emGuerraCom
+      ? `<button class="pp-sair-guerra" id="pp-sair-guerra">${ico('flag-off', 15)}
+          <span>SAIR DA GUERRA COM ${esc((PAISES[code]?.nome || code).toUpperCase())}</span>
+          <i>${prevSaida.vencendo ? 'você está vencendo — vão chamar de covardia'
+            : prevSaida.impopular ? 'a guerra está impopular — o país respira'
+              : 'encerra o desgaste, sem pedir licença'} · ${prevSaida.aprovacao >= 0 ? '+' : ''}${prevSaida.aprovacao} aprovação</i></button>`
+      : '';
 
     // BASES: parceiro (rel ≥ 40) aceita negociar; território ocupado não é consultado.
     // O botão só existe onde a jogada é real — nada de oferecer o que não dá pra fazer.
@@ -1215,7 +1323,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
             <span><b>${petro.reservas} bi de barris</b> em reservas provadas · extraindo ${
               (jogo.estado.petroleo_espolio || []).find((e) => e.iso === code)?.extraido ?? 0
             } de ${petro.producao} Mb/d.<br><i>${esc(petro.nota)}</i></span></div>` : ''}
-        </div>${botaoBase}`;
+        </div>${botaoSairGuerra}${botaoBase}`;
     } else if (ehJogador) {
       // ── SUA PRÓPRIA NAÇÃO: nada de "acordo comercial consigo mesmo" ──
       acoes = [];
@@ -1286,7 +1394,8 @@ export function iniciarJogo(container, jogo, opts = {}) {
       const jogadas = `<div class="gp2-jogadas">
         ${onlineCtrl?.ehHumano(code) ? `<button class="pp-contato" id="pp-contato">${ico('phone', 15)} <span>ENTRAR EM CONTATO</span><i>msg ou ligação</i></button>` : ''}
         <button class="pp-guerra" id="pp-guerra">${ico('swords', 15)} <span>PLANEJAR OFENSIVA MILITAR</span></button>
-        ${emGuerra ? `<button class="pp-paz" id="pp-paz">${ico('handshake', 16)} <span>NEGOCIAR SAÍDA DA GUERRA</span><i>em guerra</i></button>` : ''}
+        ${emGuerra ? `<button class="pp-paz" id="pp-paz">${ico('handshake', 16)} <span>NEGOCIAR SAÍDA DA GUERRA</span><i>propor cessar-fogo ou devolver território</i></button>` : ''}
+        ${botaoSairGuerra}
         ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 15)} <span>ESPIONAR ESTE PAÍS</span><i>US$ 40 bi · rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
         ${botaoBase}
         ${alvosDeAjuda(jogo.estado).some((a) => a.iso === code) ? `<button class="pp-ajuda" id="pp-ajuda">${ico('heart-handshake', 16)} <span>APOIAR NESTA GUERRA</span><i>em conflito</i></button>` : ''}
@@ -1321,14 +1430,17 @@ export function iniciarJogo(container, jogo, opts = {}) {
         origemCasa: globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA'),
         onFim: atualizarTudo,
         onLancar: (info) => {
-          // MUNDO ÚNICO: TODA ofensiva ecoa na sala — todos veem a linha e os mísseis
-          // no globo. Se o alvo for humano, ele ainda entra em MODO DEFESA na hora.
-          if (jogo.ehOnline) {
-            const de = globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA');
-            const para = globoCtrl?.ondeEsta?.(code);
-            onlineCtrl?.notificar('guerra', code,
-              `${jogo.ficha.presidente || jogo.ficha.pais} lançou uma ofensiva militar contra ${PAISES[code]?.nome || code}!`,
-              { alvoEstado: info?.alvoEstado || null, de, para });
+          // #4.2 — A OFENSIVA NASCE EM SIGILO. Antes o evento público saía no mesmo
+          // instante do clique: a sala inteira via a linha e os mísseis MESES antes de a
+          // primeira bomba cair, e "ataque surpresa" não existia no jogo. Agora nada sai
+          // daqui. O eixo fica GUARDADO na operação e o mundo só descobre por dois
+          // caminhos: a inteligência do alvo flagra o preparo (avisarOperacoesDetectadas)
+          // ou a ofensiva amadurece e o soco chega (cenaOfensivasResolvidas).
+          if (info?.op) {
+            info.op._online = jogo.ehOnline;
+            info.op._prioridades = info.prioridades || (info.alvoEstado ? [info.alvoEstado] : null);
+            info.op._de = globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA') || null;
+            info.op._para = globoCtrl?.ondeEsta?.(code) || null;
           }
         },
       });
@@ -1337,6 +1449,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
       fechar();
       globoCtrl?.focar?.(feature);
       abrirPaz(feature, jogo, { tr, onFim: atualizarTudo });
+    });
+    // #4.1 — SAIR DA GUERRA: unilateral, imediato, com a conta na cara antes do sim.
+    modal.querySelector('#pp-sair-guerra')?.addEventListener('click', () => {
+      fechar();
+      confirmarSaidaGuerra(code);
     });
     // ESPIONAR: injeta agentes contra o país (sobe a rede). Cada leva de espionagem custa
     // tempo e dinheiro e VAI raising o nível — quanto maior, maior a chance de vazamentos.
@@ -1440,6 +1557,69 @@ export function iniciarJogo(container, jogo, opts = {}) {
         fechar(); renderAcoes(); renderTopo();
       }
     }));
+  }
+
+  // ── #4.1 · SAIR DA GUERRA (unilateral) ───────────────────────────────
+  // Recuar não se negocia: você manda parar. Mas tem preço, e o preço aparece ANTES —
+  // aprovação, o que a oposição vai chamar disso, quantas ofensivas suas morrem na
+  // fila (a tropa volta), e o risco de ele ler a retirada como fraqueza e avançar.
+  function confirmarSaidaGuerra(code) {
+    const nome = PAISES[code]?.nome || code;
+    const prev = previsaoSaidaGuerra(jogo.estado, code);
+    const risco = Math.round(chanceContraAtaque(jogo.estado, code, { negociado: false }) * 100);
+    const opsCanceladas = (jogo.estado.operacoes || []).filter((o) => o.alvoIso === code);
+    const modal = document.createElement('div');
+    modal.className = 'modal-fundo';
+    modal.innerHTML = `<div class="sgu-painel">
+      <div class="sgu-cab">
+        <div class="sgu-ic">${ico('flag-off', 22)}</div>
+        <div class="sgu-tit"><h2>SAIR DA GUERRA</h2><span>retirada unilateral · ${esc(nome)}</span></div>
+        <button class="pp-fechar sgu-x">${ico('x', 16)}</button>
+      </div>
+      <div class="sgu-corpo">
+        <p class="sgu-lead">${prev.vencendo
+          ? `Você está <b>VENCENDO</b>. Retirar as tropas agora entrega o que já custou sangue — e a oposição vai chamar isso pelo nome que quiser.`
+          : prev.impopular
+            ? `Esta guerra já ficou <b>impopular</b>. Encerrar agora é o que o país está pedindo em voz alta.`
+            : `Nem vitória nem paz: só o fim do desgaste. ${esc(nome)} não precisa concordar — e não vai.`}</p>
+        <div class="sgu-conta">
+          <div class="sgu-item ${prev.aprovacao >= 0 ? 'bom' : 'ruim'}"><span>Aprovação</span><b>${prev.aprovacao >= 0 ? '+' : ''}${prev.aprovacao}</b></div>
+          <div class="sgu-item"><span>Clima de guerra</span><b>−6</b></div>
+          <div class="sgu-item ${risco >= 35 ? 'ruim' : ''}"><span>Ele avançar mesmo assim</span><b>${risco}%</b></div>
+          ${prev.vencendo ? `<div class="sgu-item ruim"><span>Poder militar</span><b>−6</b></div>` : ''}
+        </div>
+        ${opsCanceladas.length ? `<div class="sgu-ops">${ico('triangle-alert', 13)}
+          <span><b>${opsCanceladas.length} ofensiva(s) em preparo contra ${esc(nome)} morrem aqui.</b> A força volta pro quartel — mas os meses de preparo, não.</span></div>` : ''}
+        <div class="sgu-nota">${ico('info', 12)} A retirada é imediata. Territórios que você já tomou <b>continuam seus</b> — sair da guerra não devolve mapa. Para devolver, use <b>Negociar saída</b>.</div>
+      </div>
+      <div class="sgu-acoes">
+        <button class="sgu-cancelar" id="sgu-nao">CONTINUAR A GUERRA</button>
+        <button class="sgu-ok" id="sgu-sim">${ico('flag-off', 15)} RETIRAR AS TROPAS</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+    const fechar = () => modal.remove();
+    modal.querySelector('.sgu-x').addEventListener('click', fechar);
+    modal.querySelector('#sgu-nao').addEventListener('click', fechar);
+    modal.addEventListener('click', (ev) => { if (ev.target === modal) fechar(); });
+    modal.querySelector('#sgu-sim').addEventListener('click', () => {
+      const r = sairDaGuerra(jogo.estado, code);
+      fechar();
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Chancelaria', cor: '#ffb020', texto: r.manchete }]);
+      // ONLINE: a retirada não pode ser um segredo do meu cliente. O outro lado
+      // precisa saber que as minhas tropas pararam — e decidir se para também.
+      if (jogo.ehOnline) {
+        onlineCtrl?.notificar('saida_guerra', code,
+          `${jogo.ficha.presidente || jogo.ficha.pais} ENCERROU unilateralmente a guerra contra ${nome} e retirou as tropas.`,
+          { iso: jogo.estado.iso || 'USA', nome: jogo.ficha.pais, vencendo: !!r.prev?.vencendo });
+      }
+      dispararBreaking(jogo, {
+        assunto: `${jogo.ficha.pais} sai da guerra com ${nome}`,
+        contexto: r.manchete,
+        tom: prev.vencendo ? 'frio' : 'quente', iso: code,
+      });
+      renderHud(); renderFeed(); renderAcoes(); renderTopo(); globoCtrl?.atualizar?.();
+    });
   }
 
   // ── Investimento de valor livre (você define quanto) ─────────────────
@@ -2049,9 +2229,30 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <div class="fim-hist">${jogo.historico.slice(-4).reverse().map((h) => `
             <div class="fim-h"><span class="fh-t">Turno ${h.turno}</span><span class="fh-c">${esc(h.carta)}</span><span class="fh-e">${esc(h.escolha)}</span></div>`).join('')}</div>` : ''}
 
-          <button class="fim-btn" onclick="location.reload()">${ico('rotate-ccw', 16)} NOVO REINADO</button>
+          <div class="fim-acoes">
+            ${jogo.ehOnline ? `<button class="fim-btn fim-renascer" id="fim-renascer">${ico('users-round', 16)} ASSUMIR OUTRA NAÇÃO</button>` : ''}
+            <button class="fim-btn ${jogo.ehOnline ? 'sec' : ''}" id="fim-novo">${ico('rotate-ccw', 16)} ${jogo.ehOnline ? 'SAIR DA SALA' : 'NOVO REINADO'}</button>
+          </div>
         </div>
       </div>`);
+
+    // ── #11 · A SALA CONTINUA SEM VOCÊ (e você pode voltar a ela) ────────
+    // Offline, cair é o fim da história e recarregar a página é a resposta certa.
+    // Online, não: os outros humanos seguem jogando, e sair da partida deles porque
+    // o SEU governo caiu é punir a mesa inteira pelo seu erro. Aqui a queda vira dois
+    // fatos separados — o seu país passa à Máquina (público, todos veem no mapa) e
+    // VOCÊ vira espectador com direito a assumir outra nação livre. Ver ui/renascer.js
+    // para a decisão de produto por trás disto (opção B).
+    container.querySelector('#fim-novo')?.addEventListener('click', () => { window.location.reload(); });
+    container.querySelector('#fim-renascer')?.addEventListener('click', () => {
+      container.querySelector('.fim-fundo')?.remove();
+      entrarEmEspectador();
+    });
+    if (jogo.ehOnline) {
+      onlineCtrl?.notificar('queda', null,
+        `${jogo.ficha.presidente || jogo.ficha.pais} CAIU: ${fim.titulo}. A Máquina assumiu o comando de ${jogo.ficha.pais}.`,
+        { iso: jogo.estado.iso || 'USA', nome: jogo.ficha.pais, motivo: fim.titulo });
+    }
 
     // O OBITUÁRIO chega depois (a IA escreve enquanto o jogador lê os números). Se a
     // IA estiver desligada, o fallback escrito à mão entra no lugar — nunca fica vazio.
@@ -2060,6 +2261,33 @@ export function iniciarJogo(container, jogo, opts = {}) {
       if (!alvo) return;
       alvo.innerHTML = String(texto).split(/\n{2,}/).map((p) => `<p>${esc(p.trim())}</p>`).join('');
     }).catch(() => {});
+  }
+
+  // ── #11 · MODO ESPECTADOR → ASSUMIR OUTRA NAÇÃO ─────────────────────
+  // O relógio local PARA (você não comanda mais nada), mas a conexão com a sala fica
+  // de pé: os eventos dos outros continuam chegando e o mundo continua se mexendo na
+  // sua tela. É a diferença entre "assistir" e "o jogo travou".
+  function entrarEmEspectador() {
+    tr?.parar();
+    removerFaixaEsp?.();
+    removerFaixaEsp = faixaEspectador(jogo.ficha.pais, escolherNovaNacao);
+    escolherNovaNacao();
+  }
+  function escolherNovaNacao() {
+    // Os países travados na sala vêm do roster do servidor — é a única fonte que sabe
+    // quem pegou o quê. O meu (que acabou de cair) é excluído dentro do abrirRenascer.
+    const ocupados = (onlineCtrl?.jogadores() || []).map((j) => j.pais).filter(Boolean);
+    abrirRenascer(jogo, {
+      ocupados,
+      onEscolher: (novoIso) => {
+        removerFaixaEsp?.(); removerFaixaEsp = null;
+        // trava o país na sala ANTES de reconstruir a partida: se dois espectadores
+        // clicarem no mesmo país, o servidor recusa o segundo (case 'pais' do lobby).
+        net?.escolherPais?.(novoIso);
+        opts.renascer?.(novoIso);
+      },
+      onEspectar: () => { /* a faixa continua na tela com o botão de voltar */ },
+    });
   }
 
   // MODO TEMPO REAL: cria o relógio (fila + batida do mundo) e o liga. Sem "passar turno".
@@ -2077,6 +2305,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
     jogo.aplicarMundoCompartilhado(net.estado().mundoAtual);
     renderTopo();
   }
+  // O HOST PUBLICA O RETRATO NA PARTIDA, NÃO NA PRIMEIRA BATIDA. Sem isto havia uma
+  // janela de 30s (o intervalo até o primeiro beat) em que a regra da sala ainda não
+  // tinha viajado — e num jogo "sem nucleares" o convidado passava esse meio minuto
+  // com o arsenal da ficha na mão. Meio minuto é tempo de sobra pra apertar um botão.
+  if (jogo.ehOnline && onlineCtrl?.souHost()) onlineCtrl.relayBeat(jogo.snapshotMundo());
   // MEMÓRIA DA SALA (#8): adota os fatos inter-jogador que já rolaram — territórios tomados,
   // frotas no mar — pra a explosão/conquista APARECER pra quem chega depois (e pro dono).
   if (jogo.ehOnline && net?.estado?.().estadoSala) {

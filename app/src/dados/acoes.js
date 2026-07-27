@@ -65,9 +65,14 @@ export const ACOES = [
   // nuclear, não espionagem; fica ao lado da ogiva que o consome). Id preservado.
   { id: 'uranio', categoria: 'Arsenal', icone: '⛏️', nome: 'Enriquecer Urânio', custo: 0.06, custoPA: 1, prob: 0.9,
     descricao: 'Combustível da dissuasão nuclear.', efeitos: { uranio: 10 }, efeitos_falha: { uranio: 3, risco_exposicao: 'medio' } },
+  // BUG que permitia ogiva infinita: o desbloqueio exigia uranio >= 60, mas nada
+  // consumia o estoque — o mesmo urânio destravava a ação pra sempre. Toda ogiva
+  // de verdade queima combustível físsil; agora `uranio: -60` sai do estoque no
+  // sucesso (aplicarEfeitos clampa em 0 — nunca fica negativo) e o jogador precisa
+  // voltar pra 'Enriquecer Urânio' antes da próxima bomba.
   { id: 'ogiva', categoria: 'Arsenal', icone: '☢️', nome: 'Construir Ogiva Nuclear', custo: 0.35, custoPA: 2, prob: 0.8,
     descricao: 'A carta da dissuasão absoluta.', desbloqueio: { uranio: '>=60', capacidade_ind: '>=55' }, dica: 'Acumule Urânio ≥60 e Cap. Industrial ≥55.',
-    efeitos: { ogivas: 1, seguranca: 12, soft_power: -6, temp_guerra: 5 }, efeitos_falha: { soft_power: -8, risco_exposicao: 'alto' }, politico: { autoridade: 6 } },
+    efeitos: { ogivas: 1, uranio: -60, seguranca: 12, soft_power: -6, temp_guerra: 5 }, efeitos_falha: { soft_power: -8, risco_exposicao: 'alto' }, politico: { autoridade: 6 } },
   { id: 'triade', categoria: 'Arsenal', icone: '🛡️', nome: 'Escudo Antimísseis', custo: 0.4, custoPA: 2, prob: 0.85,
     descricao: 'Interceptação de mísseis balísticos.', desbloqueio: { capacidade_ind: '>=65', inteligencia: '>=60' }, dica: 'Cap. Industrial ≥65 e Inteligência ≥60.',
     efeitos: { seguranca: 16, poder_militar: 6 }, efeitos_falha: { seguranca: 2 }, politico: { autoridade: 3 } },
@@ -131,6 +136,16 @@ export const ACOES = [
   { id: 'quantico', categoria: 'Ciência', icone: '⚛️', nome: 'Computação Quântica', custo: 0.6, custoPA: 2, prob: 0.75,
     descricao: 'Quebra qualquer criptografia inimiga.', desbloqueio: { inteligencia: '>=80', capacidade_ind: '>=55' }, dica: 'Leve a Inteligência a 80 com Cap. Industrial 55 — mentes de elite com laboratório à altura.',
     efeitos: { inteligencia: 14, seguranca: 8 }, efeitos_falha: { inteligencia: 3 } },
+  // Dupla de Ciência → petróleo (tec_petroleo, ver vars.js e sincronizarPetroleo em
+  // jogo/petroleo.js): pedido do dono foi "cara com salto grande" + "barata com aumento
+  // sutil" — o jogador escolhe entre queimar caixa por um pulo forte ou cutucar aos poucos.
+  { id: 'recuperacao_terciaria', categoria: 'Ciência', icone: '🪨', nome: 'Recuperação Terciária (EOR)', custo: 0.65, custoPA: 2, prob: 0.6,
+    descricao: 'Injeta CO₂ e polímero no poço maduro pra arrancar o barril que ficaria pra trás.',
+    desbloqueio: { capacidade_ind: '>=60' }, dica: 'Cap. Industrial ≥60 — EOR é engenharia pesada, não gambiarra de sonda.',
+    efeitos: { tec_petroleo: 24, capacidade_ind: 2 }, efeitos_falha: { tec_petroleo: 5 }, politico: { economico: 3 } },
+  { id: 'sismica_4d', categoria: 'Ciência', icone: '⛽', nome: 'Sísmica 4D & Digitalização de Campo', custo: 0.09, custoPA: 1, prob: 0.95,
+    descricao: 'Sensores e imageamento time-lapse mostram onde o poço ainda tem óleo.',
+    efeitos: { tec_petroleo: 4 }, efeitos_falha: { tec_petroleo: 1 } },
 
   // ── MÍDIA ───────────────────────────────────────────────────────────
   // FAKE NEWS: não entra na fila — abre a tela onde o JOGADOR escreve a mentira

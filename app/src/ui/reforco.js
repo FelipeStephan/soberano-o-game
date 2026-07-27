@@ -120,7 +120,7 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
 
       <div class="ref-topo-linha">
         ${fc > 0
-          ? `<span>${ico('shield', 12)} <b>${totalAqui.toLocaleString('pt-BR')}</b> unidades guarnecendo — os números "aqui" estão em cada linha</span>
+          ? `<span>${ico('shield', 12)} <b>${totalAqui.toLocaleString('pt-BR')}</b> unidades guarnecendo — cada campo abaixo mostra <b>quanto já está aqui</b>. Mude o número: para cima puxa do quartel, para baixo devolve.</span>
              <button class="ref-recolher-tudo" id="ref-recall" data-tip="Recolher toda a guarnição de volta ao quartel">${ico('undo-2', 12)} recolher tudo</button>`
           : `<span>${ico('info', 12)} Nenhuma tropa designada aqui — puxe do quartel nas linhas abaixo</span>`}
       </div>
@@ -139,12 +139,12 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
                 <span class="ref-foto">${foto ? `<img src="${foto}" alt="" loading="lazy" onerror="this.parentElement.innerHTML='${u.icone}'">` : u.icone}</span>
                 <span class="ref-info">
                   <b>${esc(eq?.nome || u.nome)}</b>
-                  <small><i class="rq">${noQuartel.toLocaleString('pt-BR')}</i> no quartel · <i class="ra">${aqui.toLocaleString('pt-BR')}</i> aqui</small>
+                  <small><i class="rq" data-u="${u.id}">${noQuartel.toLocaleString('pt-BR')}</i> no quartel · <i class="ra" data-u="${u.id}">${aqui.toLocaleString('pt-BR')}</i> aqui</small>
                 </span>
                 <div class="ref-ctrl">
-                  <button class="ref-btn" data-d="-1" data-tip="Trazer de volta ao quartel central">−</button>
-                  <input class="ref-qtd" data-u="${u.id}" type="number" value="0" step="${u.passo}">
-                  <button class="ref-btn" data-d="1" data-tip="Enviar tropa para cá">+</button>
+                  <button class="ref-btn" data-d="-1" data-tip="Tirar desta região (volta ao quartel)">−</button>
+                  <input class="ref-qtd" data-u="${u.id}" data-aqui="${aqui}" data-max="${aqui + noQuartel}" type="number" value="${aqui}" min="0" max="${aqui + noQuartel}" step="${u.passo}" data-tip="Quantas unidades ficam NESTA região. O que sobrar volta pro quartel.">
+                  <button class="ref-btn" data-d="1" data-tip="Trazer mais para cá (sai do quartel)">+</button>
                 </div>
               </div>`;
             }).join('')}
@@ -189,12 +189,21 @@ export function abrirReforco(feature, jogo, { onFim, globoCtrl } = {}) {
         const u = inp.dataset.u;
         const aqui = g[u] || 0;
         const noQuartel = livre[u] || 0;
-        // trava nos dois sentidos: não mando o que não tenho, não trago o que não está lá
+        // O INPUT É O ESTOQUE DESTA REGIÃO, não o movimento. Era o bug #3.4: o campo
+        // nascia em 0 mesmo com 40 mil soldados no estado, então o jogador não tinha
+        // como saber ONDE estão os caças dele — só podia somar às cegas. Agora o número
+        // é a VERDADE do lugar; o delta (o que entra ou sai) é derivado.
         let v = Math.round(Number(inp.value) || 0);
-        v = Math.max(-aqui, Math.min(v, noQuartel));
+        v = Math.max(0, Math.min(v, aqui + noQuartel));   // 0 = esvazia · teto = tudo o que existe
         inp.value = v;
-        envio[u] = v;
-        if (v > 0) manda += v; else traz += -v;
+        const delta = v - aqui;
+        envio[u] = delta;
+        if (delta > 0) manda += delta; else traz += -delta;
+        // os rótulos respondem ao vivo: "no quartel" e "aqui" já mostram o depois
+        const elA = modal.querySelector(`.ra[data-u="${u}"]`);
+        const elQ = modal.querySelector(`.rq[data-u="${u}"]`);
+        if (elA) { elA.textContent = v.toLocaleString('pt-BR'); elA.classList.toggle('mudou', delta !== 0); }
+        if (elQ) { elQ.textContent = (noQuartel - delta).toLocaleString('pt-BR'); elQ.classList.toggle('mudou', delta !== 0); }
       }
       const simulada = { ...g };
       for (const [u, v] of Object.entries(envio)) simulada[u] = Math.max(0, (simulada[u] || 0) + v);

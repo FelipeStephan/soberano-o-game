@@ -8,7 +8,7 @@
 // custa manutenção todo turno, o anfitrião se ressente, e a imprensa te chama de
 // imperialista. Em troca, os seus ataques passam a sair de 800 km do alvo em vez
 // de atravessar um oceano.
-import { TIPOS_BASE, podeInstalarBase, instalarBase, basesEm, sitioDe, removerBase, distanciaKm } from '../dados/bases.js';
+import { TIPOS_BASE, podeInstalarBase, instalarBase, basesEm, sitioDe, removerBase, distanciaKm, custoInstalacao, DESCONTO_BASE_ALIADO } from '../dados/bases.js';
 import { aplicarEfeitos } from '../jogo/efeitos.js';
 import { aplicarPolitico } from '../jogo/politico.js';
 import { bandeira, ISO2_DE } from '../dados/imagens.js';
@@ -27,6 +27,10 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
   const jaTem = basesEm(jogo.estado, code);
   let sel = sitio ? TIPOS_BASE[sitio.tipo] : TIPOS_BASE.aerea;
   let confirmado = null;   // recibo da última instalação, pro jogador VER que funcionou
+  // O preço AQUI, não o de tabela: em aliado militar o acordo já vem assinado no
+  // tratado e a instalação sai mais barata. Uma função só, usada na prévia e no
+  // débito — preço na tela diferente do preço pago é bug que o jogador chama de roubo.
+  const custoAqui = (t) => custoInstalacao(t.id, { viaAlianca: !!eleg.viaAlianca });
 
   const modal = document.createElement('div');
   modal.className = 'modal-fundo';
@@ -68,7 +72,7 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
 
       ${!eleg.pode
         ? `<div class="bp-bloqueio">${ico('ban', 16)}<div><b>Não é possível instalar aqui</b><span>${esc(eleg.motivo)}</span></div></div>`
-        : `<div class="bp-ok ${eleg.viaOcupacao ? 'forca' : ''}">${ico(eleg.viaOcupacao ? 'flag' : 'handshake', 15)} ${esc(eleg.motivo)}</div>
+        : `<div class="bp-ok ${eleg.viaOcupacao ? 'forca' : ''} ${eleg.viaAlianca ? 'pacto' : ''}">${ico(eleg.viaOcupacao ? 'flag' : eleg.viaAlianca ? 'shield' : 'handshake', 15)} ${esc(eleg.motivo)}</div>
 
         ${sitio ? `<div class="bp-sitio">
           <div class="bps-cab">${ico('map-pin', 13)} <b>${esc(sitio.nome)}</b><span>sítio histórico</span></div>
@@ -82,7 +86,7 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
         <div class="bp-tipos">${Object.values(TIPOS_BASE).map((t) => cardTipo(t)).join('')}</div>
 
         <div class="bp-custos">
-          <div class="bpc"><span>Instalação</span><b class="${jogo.estado.tesouro < sel.custo ? 'ruim' : ''}">${dinheiro(sel.custo)}</b></div>
+          <div class="bpc"><span>Instalação</span><b class="${jogo.estado.tesouro < custoAqui(sel) ? 'ruim' : ''}">${dinheiro(custoAqui(sel))}${eleg.viaAlianca ? `<small class="bpc-corte">de ${dinheiro(sel.custo)}</small>` : ''}</b></div>
           <div class="bpc"><span>Manutenção</span><b class="amb">${dinheiro(sel.manutencao)}<small>/turno</small></b></div>
           <div class="bpc"><span>Alcance</span><b>${sel.alcance.toLocaleString('pt-BR')} km</b></div>
           <div class="bpc"><span>Bônus de ataque</span><b class="bom">+${Math.round((sel.poder - 1) * 100)}%</b></div>
@@ -91,12 +95,17 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
         <div class="bp-preco-pol">${ico('triangle-alert', 12)}
           ${eleg.viaOcupacao
             ? 'Base em território ocupado alimenta a narrativa de ocupação permanente: <b>a insurgência acelera</b>.'
-            : `Tropa estrangeira no solo é ferida aberta em qualquer país. <b>A relação com ${esc(nome)} cai</b> e o mundo chama de imperialismo.`}
+            : eleg.viaAlianca
+              // Aliado também cobra um preço — só que político, e menor: a oposição
+              // local vai gritar "soberania" e a relação cede um pouco. O que ele NÃO
+              // faz é te barrar na porta, e é essa a diferença que a aliança compra.
+              ? `O pacto autoriza, mas a rua não vota tratado: a oposição em ${esc(nome)} vai gritar soberania e <b>a relação cede um pouco</b>. Se ${esc(eleg.viaAlianca.nome)} acabar, <b>a base é expulsa junto</b>.`
+              : `Tropa estrangeira no solo é ferida aberta em qualquer país. <b>A relação com ${esc(nome)} cai</b> e o mundo chama de imperialismo.`}
         </div>
 
         <div class="bp-bloqueio" id="bp-erro" style="display:none"></div>
-        <button class="bp-instalar" id="bp-go" ${jogo.estado.tesouro < sel.custo || jogo.estado.pontos_acao < PA ? 'disabled' : ''}>
-          ${ico(sel.ic, 17)} <span>INSTALAR ${sel.nome.toUpperCase()} — ${dinheiro(sel.custo)} + 1 PA</span>
+        <button class="bp-instalar" id="bp-go" ${jogo.estado.tesouro < custoAqui(sel) || jogo.estado.pontos_acao < PA ? 'disabled' : ''}>
+          ${ico(sel.ic, 17)} <span>INSTALAR ${sel.nome.toUpperCase()} — ${dinheiro(custoAqui(sel))} + 1 PA</span>
         </button>
         ${jogo.estado.pontos_acao < PA ? `<div class="bp-bloqueio pequeno">${ico('ban', 13)} Sem pontos de ação neste turno.</div>` : ''}`}
     </div>`;
@@ -116,7 +125,11 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
       // BUG QUE ISTO CONSERTA: `if (r.falha) return;` fazia o botão falhar EM SILÊNCIO.
       // O jogador clicava, nada acontecia, e não havia como saber por quê. Falha
       // silenciosa é o pior tipo de bug de UI: parece que o jogo travou.
-      const r = instalarBase(jogo.estado, { iso: code, nome, lat: coord.lat, lng: coord.lng, tipo: sel.id, viaOcupacao: eleg.viaOcupacao });
+      const r = instalarBase(jogo.estado, {
+        iso: code, nome, lat: coord.lat, lng: coord.lng, tipo: sel.id,
+        viaOcupacao: eleg.viaOcupacao,
+        viaAlianca: eleg.viaAlianca ? (eleg.viaAlianca._aliancaId || eleg.viaAlianca.nome) : null,
+      });
       if (r.falha) {
         const el = modal.querySelector('#bp-erro');
         if (el) { el.style.display = ''; el.innerHTML = `${ico('ban', 14)} ${esc(r.falha)}`; }
@@ -129,6 +142,13 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
         const oc = (jogo.estado.conquistados || []).find((c) => c.iso === code);
         if (oc) oc.insurgencia = Math.min(100, oc.insurgencia + 12);
         aplicarEfeitos(jogo.estado, { seguranca: 4, soft_power: -6 });
+      } else if (eleg.viaAlianca) {
+        // Aliado militar: o desgaste é político e pequeno (−3 em vez de −10), e o
+        // soft power SOBE — projetar poder a partir de um pacto legítimo é o oposto
+        // de ocupar. É a diferença entre Ramstein e Bagdá, e o jogo tem de dizê-la.
+        const relKey = chaveRel(jogo.estado, code);
+        if (relKey) jogo.estado[relKey] = Math.max(-100, (jogo.estado[relKey] || 0) - 3);
+        aplicarEfeitos(jogo.estado, { seguranca: 6, soft_power: 2 });
       } else {
         const relKey = chaveRel(jogo.estado, code);
         if (relKey) jogo.estado[relKey] = Math.max(-100, (jogo.estado[relKey] || 0) - 10);
@@ -139,7 +159,7 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
       // A HUD vive FORA deste modal — sem avisar, o PA e o caixa lá em cima ficavam
       // congelados até fechar o painel, e parecia que nada tinha acontecido.
       onAtualizar?.();
-      confirmado = { base: r.base, tipo: r.tipo, custo: r.tipo.custo };
+      confirmado = { base: r.base, tipo: r.tipo, custo: r.custo ?? r.tipo.custo };
       render();
     });
     // O recibo: some sozinho, mas o jogador VIU que a jogada aconteceu.
@@ -152,7 +172,7 @@ export function abrirBases(feature, jogo, { relValor, nome, onFim, onAtualizar }
       <span class="bpt-ic">${ico(t.ic, 18)}</span>
       <span class="bpt-nome">${esc(t.nome)}${recomendado ? '<i>sítio existente</i>' : ''}</span>
       <span class="bpt-desc">${esc(t.desc)}</span>
-      <span class="bpt-meta">${dinheiro(t.custo)} · ${t.alcance.toLocaleString('pt-BR')} km · +${Math.round((t.poder - 1) * 100)}%</span>
+      <span class="bpt-meta">${dinheiro(custoAqui(t))}${eleg.viaAlianca ? ` <i class="bpt-off">−${Math.round(DESCONTO_BASE_ALIADO * 100)}%</i>` : ''} · ${t.alcance.toLocaleString('pt-BR')} km · +${Math.round((t.poder - 1) * 100)}%</span>
     </button>`;
   }
 

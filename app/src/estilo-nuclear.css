@@ -1,0 +1,85 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   NUCLEAR — os blocos novos do painel e do desfecho
+   ═══════════════════════════════════════════════════════════════════════
+   Arquivo à parte de propósito: o estilo nuclear antigo mora no estilo.css e
+   está sendo mexido por outra mão. Aqui só entra o que nasceu com a partida
+   sem nucleares (#6.4) e com a zona morta permanente (#6.1/#6.2).
+
+   Identidade: cabine militar. Chanfro no canto em vez de raio, cor semântica
+   (--perigo é o irreversível, --ambar é o aviso, --cyan é a regra da casa),
+   rótulo em mono caixa-alta e corpo em display. Nada de cartão arredondado. */
+
+/* ── A REGRA DA MESA: ESTA PARTIDA NÃO TEM A BOMBA ──────────────────────
+   Ciano, não vermelho. Não é uma recusa nem um erro do jogador: é a regra do
+   mundo, escrita como quem lê um informe de comando. Vermelho aqui faria
+   parecer que ele fez algo errado ao clicar. */
+.nk-sem-nuke {
+  padding: 15px 17px; margin-bottom: 4px;
+  background: linear-gradient(150deg, rgba(53,224,255,.09), transparent 70%);
+  border: 1px solid rgba(53,224,255,.45);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+}
+.nk-sem-cab {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--cyan); margin-bottom: 10px;
+}
+.nk-sem-nuke p {
+  font-family: var(--disp); font-size: 13.5px; line-height: 1.55;
+  color: #cfe6f5; margin: 0 0 8px;
+}
+.nk-sem-nuke p:last-child { margin-bottom: 0; color: var(--fraco); }
+.nk-sem-nuke b { color: #fff; }
+
+/* ── O QUE NÃO TEM VOLTA ────────────────────────────────────────────────
+   Separado da grade de medidores por decisão de leitura: número que cai volta
+   a subir, cratera não. Verde-nuclear na borda esquerda — a mesma cor que o
+   globo usa pra pulsar a zona morta, pra o jogador ligar as duas coisas. */
+.nkd-permanente {
+  text-align: left; padding: 12px 14px; margin-bottom: 10px;
+  background: rgba(120,230,90,.05);
+  border: 1px solid rgba(120,230,90,.32); border-left: 3px solid #78e65a;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.nkd-perm-cab {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: .12em;
+  text-transform: uppercase; color: #9be15d; margin-bottom: 9px;
+}
+.nkd-permanente ul { margin: 0; padding-left: 16px; display: grid; gap: 6px; }
+.nkd-permanente li { font-size: 12.5px; line-height: 1.5; color: #d6e8cf; }
+.nkd-permanente b { color: #fff; }
+.nkd-perm-nota {
+  margin: 10px 0 0; font-family: var(--mono); font-size: 10.5px;
+  letter-spacing: .04em; color: var(--fraco);
+}
+
+/* ── HAVIA GENTE ALI ────────────────────────────────────────────────────
+   O bloco mais pesado da tela, e é pra ser. No online a ogiva não derrota um
+   adversário: tira uma pessoa da mesa. Vermelho cheio, sem transparência
+   simpática, e uma pulsação lenta pra ele não conseguir só passar o olho. */
+.nkd-apagado {
+  display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  padding: 13px 15px; margin-bottom: 12px;
+  background: rgba(255,59,92,.14); border: 1px solid var(--perigo);
+  color: #ffd0d8; font-size: 12.5px; line-height: 1.55;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: nkdApagadoPulso 2.4s ease-in-out infinite;
+}
+.nkd-apagado b { color: #fff; }
+@keyframes nkdApagadoPulso {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,59,92,0); }
+  50%      { box-shadow: 0 0 26px -6px rgba(255,59,92,.75); }
+}
+
+/* ── A OGIVA ABATIDA: O ALÍVIO, DITO EM VOZ BAIXA ───────────────────────
+   Contraparte do bloco acima. Verde porque é a única boa notícia da tela — e
+   discreto porque ela é pequena perto da conta que ele já pagou. */
+.nkd-reversivel {
+  display: flex; gap: 8px; align-items: center; text-align: left;
+  padding: 10px 12px; margin-bottom: 10px;
+  background: rgba(34,224,160,.06); border: 1px solid rgba(34,224,160,.4);
+  color: #a8f0d4; font-size: 12px; line-height: 1.5;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+}
+.nkd-reversivel b { color: #fff; }

@@ -12,6 +12,12 @@
 //
 // Os sítios abaixo são reais (Ramstein, Kadena, Al Udeid, Diego Garcia...) com
 // coordenadas reais — é o que faz o arco no globo sair do lugar certo.
+//
+// A dependência de blocos.js é de mão única (bases → blocos → paises), sem ciclo: é o
+// que permite o DIREITO DE BASE por aliança militar viver aqui, junto do resto da
+// regra, em vez de espalhado pela UI.
+import { blocosDoIso } from './blocos.js';
+import { jogadorIso } from './paises.js';
 
 // ── TIPOS DE INSTALAÇÃO ────────────────────────────────────────────────
 // alcance: raio de projeção em km · poder: multiplicador de força efetiva
@@ -75,11 +81,48 @@ export const SITIOS = {
 
 // Relação mínima pra o país aceitar tropa estrangeira no solo dele.
 export const REL_MINIMA_BASE = 40;
+// ── DIREITO DE BASE POR ALIANÇA MILITAR ────────────────────────────────
+// O QUE ISTO CONSERTA: fundar uma aliança militar não dava NADA de concreto no mapa.
+// O jogador criava o pacto, convencia três países a entrar, ligava a Defesa Mútua — e
+// continuava sem poder pousar um avião na casa deles. Para atacar longe seguia
+// atravessando o oceano de casa, que é exatamente o que uma aliança existe pra evitar.
+// Basear tropa no território do aliado é o benefício mais antigo e mais real de um
+// pacto militar: é a OTAN inteira, é Ramstein, é Kadena.
+//
+// MAS SÓ PACTO MILITAR. Bloco econômico não abre base — isso não é detalhe, é a regra
+// que impede o direito de base de virar sopa: entrar num acordo de livre comércio não
+// autoriza ninguém a instalar um comando regional no seu quintal. O gate tem três
+// travas, e as três precisam passar:
+//   1. o bloco tem de conter VOCÊ e o país (ser aliado é de mão dupla);
+//   2. o bloco tem de ser MILITAR (`militar: true` — nas alianças do jogador isso
+//      emerge da regra Defesa Mútua, ver jogo/aliancas.js › ehMilitar);
+//   3. o compromisso tem de ser real (`intensidade >= INTENSIDADE_MINIMA_BASE`) — a
+//      mesma régua que o resto do jogo usa pra separar pacto de fachada.
+// Além disso a relação não pode estar no negativo: aliado que já te detesta não assina
+// acordo de status de forças, assina nota de repúdio.
+export const INTENSIDADE_MINIMA_BASE = 55;
+export const REL_MINIMA_BASE_ALIADO = 0;
+// O acordo com um aliado é formalidade, não negociação: instalar sai mais barato.
+export const DESCONTO_BASE_ALIADO = 0.25;
 
 export function sitioDe(isoCode) { return SITIOS[isoCode] || null; }
 
+// O pacto militar que me dá direito de base NESTE país (ou null). Fonte única: quem
+// quiser saber "posso basear aqui por aliança?" pergunta aqui, não reimplementa.
+export function aliancaMilitarComigo(isoCode) {
+  const eu = jogadorIso();
+  if (!isoCode || isoCode === eu) return null;
+  return blocosDoIso(isoCode).find((b) => (
+    b.militar === true
+    && (b.intensidade || 0) >= INTENSIDADE_MINIMA_BASE
+    && (b.isos || []).includes(eu)
+  )) || null;
+}
+
 // ── ELEGIBILIDADE ──────────────────────────────────────────────────────
-// Retorna { pode, motivo, viaOcupacao } — por que você pode (ou não) instalar aqui.
+// Retorna { pode, motivo, viaOcupacao, viaAlianca } — por que você pode (ou não)
+// instalar aqui. A ordem das checagens é a ordem da vida real: ocupação (não se pede
+// licença), aliança militar (a licença já está no tratado), parceria (negocia-se).
 export function podeInstalarBase(estado, isoCode, relValor) {
   if (isoCode === (estado.iso || 'USA')) return { pode: false, motivo: 'Já é seu território.' };
   if (basesEm(estado, isoCode).length >= 2) {
@@ -87,12 +130,32 @@ export function podeInstalarBase(estado, isoCode, relValor) {
   }
   const ocupado = (estado.conquistados || []).some((c) => c.iso === isoCode);
   if (ocupado) return { pode: true, viaOcupacao: true, motivo: 'Território sob ocupação — você não pede licença.' };
-  if (relValor >= REL_MINIMA_BASE) {
-    return { pode: true, viaOcupacao: false, motivo: `Parceiro (relação ${relValor}). Aceitam negociar o acordo de status de forças.` };
+
+  const pacto = aliancaMilitarComigo(isoCode);
+  if (pacto) {
+    if (relValor < REL_MINIMA_BASE_ALIADO) {
+      return {
+        pode: false, viaOcupacao: false, viaAlianca: null, pacto,
+        motivo: `${pacto.nome} prevê o direito de base, mas a relação está em ${relValor}. Um aliado que te detesta não assina acordo de status de forças — recomponha a relação antes.`,
+      };
+    }
+    return {
+      pode: true, viaOcupacao: false, viaAlianca: pacto, pacto,
+      motivo: `Aliado militar em ${pacto.nome}. O direito de base já está no pacto: o acordo de status de forças é assinado sem negociação, e a instalação sai ${Math.round(DESCONTO_BASE_ALIADO * 100)}% mais barata.`,
+    };
   }
+
+  if (relValor >= REL_MINIMA_BASE) {
+    return { pode: true, viaOcupacao: false, viaAlianca: null, motivo: `Parceiro (relação ${relValor}). Aceitam negociar o acordo de status de forças.` };
+  }
+  // A dica de saída importa: sem ela o jogador lê "não pode" e não descobre que fundar
+  // uma aliança militar com este país é o caminho — que é justamente a jogada boa.
+  const blocoNaoMilitar = blocosDoIso(isoCode).find((b) => (b.isos || []).includes(jogadorIso()));
   return {
-    pode: false, viaOcupacao: false,
-    motivo: `Relação ${relValor} — insuficiente. É preciso ${REL_MINIMA_BASE}+ (parceiro) ou tomar o país à força.`,
+    pode: false, viaOcupacao: false, viaAlianca: null,
+    motivo: blocoNaoMilitar
+      ? `Vocês dividem ${blocoNaoMilitar.nome}, mas ${blocoNaoMilitar.militar ? 'o compromisso do bloco é fraco demais' : 'é um bloco sem cláusula militar'} — acordo econômico não abre quartel. É preciso um pacto com DEFESA MÚTUA, relação ${REL_MINIMA_BASE}+ (parceiro), ou tomar o país à força.`
+      : `Relação ${relValor} — insuficiente. É preciso ${REL_MINIMA_BASE}+ (parceiro), uma aliança militar com este país, ou tomá-lo à força.`,
   };
 }
 
@@ -100,12 +163,23 @@ export function podeInstalarBase(estado, isoCode, relValor) {
 export function todasBases(estado) { return estado.bases || []; }
 export function basesEm(estado, isoCode) { return (estado.bases || []).filter((b) => b.iso === isoCode); }
 
-export function instalarBase(estado, { iso, nome, lat, lng, tipo, viaOcupacao }) {
+// O custo real de instalar UM tipo aqui: o aliado militar cobra menos porque não há
+// o que negociar — o direito de base já veio no tratado. Fonte única pra a UI mostrar
+// o mesmo número que o caixa vai debitar (o preço na tela e o preço pago divergirem é
+// o tipo de bug que o jogador chama de roubo).
+export function custoInstalacao(tipo, { viaAlianca = false } = {}) {
+  const t = TIPOS_BASE[tipo];
+  if (!t) return 0;
+  return round2(t.custo * (viaAlianca ? 1 - DESCONTO_BASE_ALIADO : 1));
+}
+
+export function instalarBase(estado, { iso, nome, lat, lng, tipo, viaOcupacao, viaAlianca }) {
   const t = TIPOS_BASE[tipo];
   if (!t) return { falha: 'Tipo de instalação inválido.' };
-  if (estado.tesouro < t.custo) return { falha: `Sem caixa: a instalação custa US$ ${t.custo} tri.` };
+  const custo = custoInstalacao(tipo, { viaAlianca: !!viaAlianca });
+  if (estado.tesouro < custo) return { falha: `Sem caixa: a instalação custa US$ ${custo} tri.` };
 
-  estado.tesouro = round2(estado.tesouro - t.custo);
+  estado.tesouro = round2(estado.tesouro - custo);
   estado.bases = estado.bases || [];
   const sitio = SITIOS[iso];
   const base = {
@@ -114,10 +188,33 @@ export function instalarBase(estado, { iso, nome, lat, lng, tipo, viaOcupacao })
     nome: sitio?.nome || `Instalação ${nome}`,
     lat: sitio?.lat ?? lat, lng: sitio?.lng ?? lng,
     nota: sitio?.nota || null,
-    desde: estado.turno || 0, prontidao: 100, viaOcupacao: Boolean(viaOcupacao),
+    desde: estado.turno || 0, prontidao: 100,
+    viaOcupacao: Boolean(viaOcupacao),
+    // guardado na base: se a aliança ROMPER, é por aqui que o jogo sabe quais
+    // instalações perderam a base legal de existir (ver expulsarBasesSemPacto).
+    viaAlianca: viaAlianca ? String(viaAlianca) : null,
   };
   estado.bases.push(base);
-  return { base, tipo: t };
+  return { base, tipo: t, custo };
+}
+
+// ── QUANDO O PACTO CAI, A BASE CAI JUNTO ───────────────────────────────
+// Uma base instalada por direito de aliança existe porque o tratado existe. Se o
+// aliado sai do bloco (ou te trai), aquele quartel deixa de ter amparo e o anfitrião
+// manda embora — é o que aconteceu com todas as bases americanas nas Filipinas em 92.
+// Sem isto, romper uma aliança não teria custo nenhum no mapa e o direito de base
+// viraria uma porta que abre e nunca mais fecha.
+export function expulsarBasesSemPacto(estado) {
+  const antes = (estado.bases || []).length;
+  if (!antes) return { expulsas: [] };
+  const expulsas = [];
+  estado.bases = estado.bases.filter((b) => {
+    if (!b.viaAlianca) return true;
+    if (aliancaMilitarComigo(b.iso)) return true;
+    expulsas.push(b);
+    return false;
+  });
+  return { expulsas };
 }
 
 export function removerBase(estado, baseId) {

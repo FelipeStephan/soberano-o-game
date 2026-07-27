@@ -37,6 +37,9 @@ import { planoDeCampanha } from '../jogo/campanha.js';
 import { iso as isoDe } from '../dados/paises.js';
 import { abrirMapaEstados } from './mapaEstados.js';
 import { dispararBreaking } from './breaking.js';
+// CSS isolado da penalidade de distância/contraste de bases — não mexe em estilo.css
+// (outros agentes editam aquele arquivo em paralelo; ver comentário no topo do CSS).
+import '../estilo-bases.css';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const espera = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -46,44 +49,46 @@ const PA_GUERRA = 2;
 // os despachos chegam com intervalo de noticiário, e a tensão acumula.
 const DUR_VOO = 58000;
 
-// ── SUSPENSE DA OFENSIVA (roda DURANTE o preparo de N meses) ───────────
+// ── O PREPARO DA OFENSIVA (roda DURANTE os N meses de montagem) ────────
 // O dono: "inicio o ataque, espero 3 meses na fila e não vejo animação nenhuma — só
-// o resultado". Agora, ao lançar, o front ganha vida: ondas de mísseis/esquadrilhas
-// no globo + boletins subindo no feed, esticados pelo tempo real da operação. Termina
-// pouco antes de a operação amadurecer (o resultado tem a própria cena). É autolimpante.
+// o resultado". Então o preparo ganhou cena.
+//
+// ── #4.2 — MAS O PREPARO É SEGREDO ─────────────────────────────────────
+// A versão anterior soltava SALVAS DE MÍSSEIS e esquadrilhas durante a montagem, e o
+// evento público saía no mesmo instante do clique. Ou seja: não existia ataque
+// surpresa — o alvo via a chuva de mísseis meses antes de a primeira bomba cair, e o
+// `chanceDeteccaoAlvo` do motor virava enfeite (detectar o quê, se já estava na tela
+// de todo mundo?). Agora, durante o preparo:
+//   • só o ATACANTE vê, e vê uma LINHA VERMELHA DE PREPARAÇÃO (tracejada, muda) com
+//     boletins de mobilização — nada de ferro no ar;
+//   • os mísseis e as esquadrilhas só existem quando a operação amadurece (o soco);
+//   • quem descobre antes é a INTELIGÊNCIA do alvo (ver avisarOperacoesDetectadas
+//     em ui/jogo.js), e aí sim o mundo inteiro fica sabendo da intenção.
 const BEAT_MS_SUSPENSE = 30000;   // uma batida do mundo = 30s (BEAT_S em tempoReal.js)
-const FASES_OFENSIVA = [
-  'Colunas blindadas rompem a fronteira e avançam em cunha.',
-  'A aviação estabelece superioridade aérea sobre o teatro.',
-  'Artilharia e mísseis de cruzeiro amolecem as defesas.',
-  'Fuzileiros desembarcam e firmam a cabeça de praia.',
-  'Inteligência confirma os alvos prioritários no interior.',
-  'Logística sustenta o avanço — combustível e munição na linha.',
+const FASES_PREPARO = [
+  'Comboios de material saem dos depósitos rumo às áreas de concentração.',
+  'Reservistas convocados em silêncio — nenhuma nota à imprensa.',
+  'Inteligência fecha o pacote de alvos prioritários no teatro.',
+  'Combustível e munição posicionados nos pontos de partida.',
+  'Ordem de operações selada e distribuída aos comandos.',
+  'Rádios em silêncio. A janela de lançamento se aproxima.',
 ];
-function iniciarSuspenseOfensiva(jogo, feature, origem, deploy, totalBeats, alvoNome) {
+function iniciarPreparoOfensiva(jogo, feature, origem, totalBeats, alvoNome) {
   const g = window.__globo;
   if (!g || !feature) return;
   const durMs = Math.max(12000, (totalBeats || 2) * BEAT_MS_SUSPENSE - 4000);
-  g.focar?.(feature);
-  const disparar = () => {
-    if (!window.__globo) return;
-    g.desenharLinha?.(feature, 'ataque', 9000, origem);
-    const nMis = deploy?.misseis ? Math.min(6, Math.ceil(deploy.misseis / 60)) : 3;
-    g.salvaMisseis?.(feature, nMis, origem);   // som toca (ofensiva DO jogador)
-    if (deploy?.cacas || deploy?.bombardeiros) g.lancarEsquadrilha?.(feature, 'ataque', origem);
-    if (deploy?.navios) g.lancarEsquadrilha?.(feature, 'naval', origem);
-    if (deploy?.submarinos) g.lancarEsquadrilha?.(feature, 'submarino', origem);
-  };
-  disparar();
+  // a linha de PREPARAÇÃO: o eixo existe no seu mapa, mas nada voa por ele ainda
+  const linha = () => { if (window.__globo) g.desenharLinha?.(feature, 'preparacao', 11000, origem); };
+  linha();
   jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Estado-Maior', cor: '#ff8c42',
-    texto: `Ofensiva contra ${alvoNome || 'o alvo'} EM CURSO — preparo estimado de ${totalBeats} ${totalBeats > 1 ? 'meses' : 'mês'}. O front reporta a cada avanço.` }]);
+    texto: `Ofensiva contra ${alvoNome || 'o alvo'} EM PREPARAÇÃO — ${totalBeats} ${totalBeats > 1 ? 'meses' : 'mês'} até a janela de lançamento. Mantida em SIGILO: enquanto ninguém detectar, o inimigo não sabe que você vem.` }]);
   let i = 0;
   const t = setInterval(() => {
     if (!window.__globo) { clearInterval(t); return; }
-    disparar();
-    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Front', cor: '#ffb020', texto: FASES_OFENSIVA[i % FASES_OFENSIVA.length] }]);
+    linha();
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Preparo', cor: '#ffb020', texto: FASES_PREPARO[i % FASES_PREPARO.length] }]);
     i += 1;
-  }, 8000);
+  }, 10000);
   setTimeout(() => clearInterval(t), durMs);
 }
 
@@ -111,8 +116,13 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
     const r = alcanceDoDeploy(d);
     return { ok: distAlvo <= r, via: 'casa', reach: r, dist: Math.round(distAlvo) };
   };
+  // Multiplicador de custo por sair de casa pra ESTE alvo (fixo — não muda com o ponto
+  // escolhido, é geografia). É contra ELE que o desconto de cada base é comparado nos
+  // cards (ver cardPonto) e no rodapé (ver atualizar).
+  const multDistCasa = multiplicadorDistanciaCasa(distAlvo);
   const pontos = [
-    { id: 'casa', nome: 'Território Nacional', sub: 'Travessia completa · sem bônus',
+    { id: 'casa', nome: 'Território Nacional',
+      sub: multDistCasa > 1 ? 'Travessia longa · logística mais cara' : 'Vizinhança · sem penalidade de distância',
       ic: 'home', poder: 1, desconto: 0, coord: null },
     ...bases.map((b) => ({
       id: b.id, nome: b.nome, iso: b.iso,
@@ -123,6 +133,14 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
   ];
   // A melhor base já vem escolhida — ninguém ataca de casa tendo base ao lado.
   let ponto = pontos[1] || pontos[0];
+  // ÚNICA fórmula de custo do plano de ofensiva — usada em atualizar() e no clique de
+  // #gp-lancar. Antes o custo era calculado duas vezes e podia divergir (o jogador via
+  // um preço no painel e pagava outro no clique). A penalidade de distância só entra
+  // saindo de casa: a base já embute sua própria logística no `desconto`.
+  function custoFinalDeploy(dep, pt) {
+    const mult = pt.id === 'casa' ? multDistCasa : 1;
+    return round2(custoDeploy(dep) * (1 - pt.desconto) * mult);
+  }
   // ALVO PRIORITÁRIO: os estados do país-alvo, pra o jogador definir a estratégia no
   // MAPA — quais estados tomar primeiro. Só existe se os estados já foram carregados.
   const estadosAlvo = estadosDe(isoDe(feature));
@@ -235,6 +253,7 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
         <div class="gpr-item"><span>Seu caixa</span><b>${dinheiro(jogo.estado.tesouro)}</b></div>
         <div class="gpr-item"><span>Previsão</span><b id="gp-prog">—</b></div>
       </div>
+      <div class="gp-dist-pen" id="gp-dist-pen"></div>
       <div class="gp-previa" id="gp-previa"></div>
       <div class="gp-oleo" id="gp-oleo"></div>
       ${semPA ? `<div class="gp-bloqueio">${ico('ban', 14)} Sem pontos de ação — a ofensiva custa ${PA_GUERRA} PA.</div>` : ''}
@@ -265,14 +284,27 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
   modal.addEventListener('click', (ev) => { if (ev.target === modal) sair(); });
 
   function cardPonto(p, i) {
-    const bonus = p.poder > 1;
+    const ehBase = p.poder > 1;
+    const ehCasa = p.id === 'casa';
+    let extra = '';
+    if (ehBase) {
+      // CONTRASTE: quanto ESTA base custa comparado a sair de casa pro MESMO alvo — é
+      // o número que justifica o que você pagou pela instalação. Sem ele o desconto da
+      // base era só um percentual solto, sem nada pra comparar (ver custoFinalDeploy).
+      const custoRelBase = 1 - p.desconto;
+      const economiaPct = Math.round((1 - custoRelBase / multDistCasa) * 100);
+      extra = `<span class="gpp-bonus">+${Math.round((p.poder - 1) * 100)}% força<br><i>−${Math.round(p.desconto * 100)}% custo</i>${
+        economiaPct > 0 ? `<br><em>−${economiaPct}% vs. casa</em>` : ''}</span>`;
+    } else if (ehCasa && multDistCasa > 1) {
+      extra = `<span class="gpp-penal">${ico('trending-up', 10)} +${Math.round((multDistCasa - 1) * 100)}%<br><i>${Math.round(distAlvo).toLocaleString('pt-BR')} km</i></span>`;
+    }
     return `<button class="gp-ponto ${i === pontos.indexOf(ponto) ? 'sel' : ''}" data-i="${i}">
       <span class="gpp-ic">${ico(p.ic, 16)}</span>
       <span class="gpp-txt">
         <b>${esc(p.nome)}</b>
         <small>${esc(p.sub)}</small>
       </span>
-      ${bonus ? `<span class="gpp-bonus">+${Math.round((p.poder - 1) * 100)}% força<br><i>−${Math.round(p.desconto * 100)}% custo</i></span>` : ''}
+      ${extra}
     </button>`;
   }
 
@@ -287,8 +319,8 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
 
   function atualizar() {
     const poderBruto = poderDeploy(deploy);
-    const poder = Math.round(poderBruto * ponto.poder);            // a base multiplica
-    const custo = round2(custoDeploy(deploy) * (1 - ponto.desconto)); // e desconta a logística
+    const poder = Math.round(poderBruto * ponto.poder);   // a base multiplica o poder
+    const custo = custoFinalDeploy(deploy, ponto);         // ela desconta OU a distância encarece
 
     // COMBUSTÍVEL: fatura que escala com o Brent (ver jogo/guerra.js).
     const comb = combustivelDaGuerra(jogo.estado, deploy, custo);
@@ -324,6 +356,26 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
 
     modal.querySelector('#gp-poder').textContent = poder;
     modal.querySelector('#gp-custo').textContent = dinheiro(custo);
+
+    // A PENALIDADE (ou o desconto) EM PALAVRAS — o jogador não devia precisar fazer
+    // conta de cabeça pra entender por que o custo mudou quando ele troca o ponto de
+    // lançamento. Casa: quanto a travessia encarece. Base: quanto ela economiza vs. casa.
+    const elDist = modal.querySelector('#gp-dist-pen');
+    if (elDist) {
+      if (ponto.id === 'casa' && multDistCasa > 1) {
+        elDist.style.display = '';
+        elDist.className = 'gp-dist-pen ruim';
+        elDist.innerHTML = `${ico('route', 13)} Travessia de <b>${Math.round(distAlvo).toLocaleString('pt-BR')} km</b> partindo de casa · <b>+${Math.round((multDistCasa - 1) * 100)}%</b> de logística`;
+      } else if (ponto.id !== 'casa') {
+        const economiaPct = Math.round((1 - (1 - ponto.desconto) / multDistCasa) * 100);
+        if (economiaPct > 0) {
+          elDist.style.display = '';
+          elDist.className = 'gp-dist-pen bom';
+          elDist.innerHTML = `${ico('route', 13)} Lançando de <b>${esc(ponto.nome)}</b> você economiza <b>${economiaPct}%</b> de logística frente a sair de casa${multDistCasa > 1 ? ` (que custaria +${Math.round((multDistCasa - 1) * 100)}%)` : ''}`;
+        } else elDist.style.display = 'none';
+      } else elDist.style.display = 'none';
+    }
+
     const elC = modal.querySelector('#gp-comb');
     elC.textContent = comb.custoExtra > 0 ? dinheiro(comb.custoExtra) : '—';
     elC.className = comb.estrangulado ? 'ruim' : comb.importador ? 'amb' : 'bom';
@@ -428,7 +480,7 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
   });
 
   modal.querySelector('#gp-lancar')?.addEventListener('click', () => {
-    const custoFinal = round2(custoDeploy(deploy) * (1 - ponto.desconto));
+    const custoFinal = custoFinalDeploy(deploy, ponto);
     // OFENSIVA COM TEMPO: não resolve na hora — vira uma OPERAÇÃO que se monta em N batidas.
     // O alvo pode detectar e reforçar; a batalha resolve quando o preparo amadurece (motor).
     const r = iniciarOperacaoGuerra(jogo.estado, feature, deploy, {
@@ -441,13 +493,19 @@ export function abrirGuerra(feature, jogo, { onFim, onLancar, origemCasa } = {})
     if (r.falha) {
       const e = modal.querySelector('#gp-erro'); e.style.display = ''; e.innerHTML = `${ico('ban', 14)} ${esc(r.falha)}`; return;
     }
-    onLancar?.({ op: r.op, alvoEstado: null, duracaoTotal: r.op.total });
+    // O EIXO DE AVANÇO VIAJA COM A OPERAÇÃO. Antes ia `alvoEstado: null` cravado no
+    // código — e era daí que nascia o "ALVO PROVÁVEL" mentiroso do Modo Defesa, que
+    // apontava sempre o primeiro estado da lista do defensor. Agora vai a escolha real.
+    onLancar?.({
+      op: r.op, duracaoTotal: r.op.total,
+      alvoEstado: prioridades[0] || null,
+      prioridades: prioridades.length ? [...prioridades] : null,
+    });
     onFim?.();   // atualiza HUD (caixa/forças debitados)
     fechar();
-    // SUSPENSE: a ofensiva não é mais um número silencioso na fila. Assim que lança,
-    // o front ganha vida — mísseis, esquadrilhas e boletins subindo ao longo dos
-    // "meses" de preparo, até o resultado chegar quando a operação amadurece (motor).
-    iniciarSuspenseOfensiva(jogo, feature, ponto.coord || origemCasa || null, deploy, r.op.total, av.nome);
+    // PREPARO EM SIGILO (#4.2): só a linha de preparação e os boletins de mobilização,
+    // no SEU mapa. O ferro só voa quando a operação amadurece.
+    iniciarPreparoOfensiva(jogo, feature, ponto.coord || origemCasa || null, r.op.total, av.nome);
   });
 
   // ── A CINEMÁTICA ────────────────────────────────────────────────────
@@ -549,6 +607,28 @@ function distanciaKmSimples(a, b) {
   const dLat = rad(b.lat - a.lat); const dLng = rad(b.lng - a.lng);
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+}
+
+// ── PENALIDADE DE DISTÂNCIA PARA QUEM ATACA DE CASA ─────────────────────
+// Antes, sair de casa NUNCA custava mais por estar longe — só a base dava desconto.
+// Resultado: EUA→México e EUA→Japão saíam pelo mesmo preço, e instalar base virava
+// enfeite (o bônus dela nunca competia com nada). Esta curva é o outro lado da moeda:
+// até ~2.000 km (vizinhança — dá pra abastecer por terra/trem/caminhão) não há
+// penalidade nenhuma. Dali em diante ela SOBE e ACELERA: o custo logístico real não
+// cresce linear com o km, cresce com o tempo em trânsito e a proteção do comboio
+// (escolta naval, reabastecimento aéreo em voo) — coisas que só pioram quando o
+// trajeto vira travessia oceânica de verdade. Por isso é uma curva QUADRÁTICA
+// (ease-in), não uma reta: dobrar a distância perto de casa quase não dói, dobrar já
+// em alto-mar dói o dobro do dobro. No teto (~15.000 km — o tamanho de um EUA→Japão
+// ou Brasil→Índia) o multiplicador chega a 2,2×, e não sobe mais depois disso: é
+// esse teto que faz a base valer o preço da instalação (ver custoFinalDeploy).
+const KM_SEM_PENALIDADE_CASA = 2000;
+const KM_TRAVESSIA_TOTAL = 15000;
+const MULT_MAX_CASA = 2.2;
+function multiplicadorDistanciaCasa(distKm) {
+  if (!distKm || distKm <= KM_SEM_PENALIDADE_CASA) return 1;
+  const frac = Math.min(1, (distKm - KM_SEM_PENALIDADE_CASA) / (KM_TRAVESSIA_TOTAL - KM_SEM_PENALIDADE_CASA));
+  return 1 + frac * frac * (MULT_MAX_CASA - 1);
 }
 
 async function animarBatalha(alvo, res, av) {

@@ -10,7 +10,7 @@ import { reservaInicial } from '../dados/efetivoMilitar.js';
 // bloqueia nada e não aparece mais na UI. (Ver decisão em soberano-tempo-real.)
 export const PA_POR_TURNO = 9999;
 
-export function criarEstado(ficha) {
+export function criarEstado(ficha, opcoes = {}) {
   const estado = {};
   for (const k of Object.keys(VARS)) {
     estado[k] = ficha.estadoInicial[k] ?? padrao(k);
@@ -34,6 +34,24 @@ export function criarEstado(ficha) {
   estado.crescimentoRival = 1;   // o mundo rearma com o tempo
   estado.bases = [];             // projeção de poder: instalações no exterior
   estado.zonasRadioativas = [];  // territórios apagados por ogiva (cicatriz permanente)
+
+  // ── REGRA DE PARTIDA: O MUNDO SEM A BOMBA ───────────────────────────
+  // Ligada ao criar a sala, esta flag apaga a arma nuclear do jogo INTEIRO — não
+  // só do seu inventário. Precisa morar no estado (e não numa constante de módulo)
+  // por dois motivos: entra no save junto com tudo, e viaja no snapshot do host pro
+  // convidado no online. Quem lê isto NUNCA lê `estado.ogivas` pra decidir: a ficha
+  // dos NPCs é estática e não sabe nada da sua partida — a fonte única é
+  // partidaSemNucleares() em jogo/nuclear.js.
+  estado.semNucleares = !!opcoes.semNucleares;
+  if (estado.semNucleares) estado.ogivas = 0;   // ninguém começa armado, nem você
+
+  // ── QUEM SAIU DO MAPA ───────────────────────────────────────────────
+  // `nacoesMortas` é a lista de países apagados por ogiva — a UI consulta pra parar
+  // de oferecer diplomacia, guerra e comércio a um cemitério. `nacaoMorta` é o caso
+  // que dói: VOCÊ foi apagado. É o registro (não a tela) de que esta partida acabou
+  // pra você; quem desenha a derrota e a volta ao jogo é a UI. Ver jogo/nuclear.js.
+  estado.nacoesMortas = [];
+  estado.nacaoMorta = null;
 
   // ── TERRITÓRIO EM NÍVEL DE ESTADO ───────────────────────────────────
   // Onde as tropas ESTÃO, não só quantas são. Guarnição por estado (chave = id do

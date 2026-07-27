@@ -1,0 +1,46 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   BASES MILITARES COM SENTIDO — a penalidade de distância de casa e o
+   contraste que ela cria com o desconto das bases (ver ui/guerra.js).
+   Import isolado (não mexe em estilo.css) pra não colidir com quem mais
+   edita aquele arquivo. Chanfro em vez de raio, cor semântica, terminal
+   de cabine — a mesma identidade visual do resto do painel de ofensiva.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Card de ponto de lançamento: penalidade de sair de casa (mesmo desenho do
+   .gpp-bonus das bases, só que em vermelho — é o espelho do que a base evita). */
+.gpp-penal {
+  font-family: var(--mono); font-size: 9px; color: var(--perigo);
+  text-align: right; line-height: 1.4;
+}
+.gpp-penal i { color: var(--fraco); font-style: normal; }
+
+/* Dentro do bônus de uma base, a linha extra de contraste ("−62% vs. casa") —
+   é o número que justifica ter pago pela instalação. */
+.gpp-bonus em { color: var(--verde); font-style: normal; font-weight: 600; }
+
+/* Linha do rodapé do planejador: mostra a conta em palavras — quanto a
+   travessia encarece (casa) ou quanto a base escolhida economiza (base).
+   Some quando não há nada a dizer (vizinhança, sem base com desconto). */
+.gp-dist-pen {
+  display: none;
+  align-items: center; gap: 8px;
+  padding: 8px 12px; margin: 2px 0 10px;
+  font-size: 11.5px; line-height: 1.4;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+}
+.gp-dist-pen .ico { flex: none; }
+.gp-dist-pen b { color: #fff; }
+
+.gp-dist-pen.ruim {
+  background: rgba(255, 59, 92, .09);
+  box-shadow: inset 2px 0 0 var(--perigo);
+  color: #ffb3bf;
+}
+.gp-dist-pen.ruim .ico { color: var(--perigo); }
+
+.gp-dist-pen.bom {
+  background: rgba(34, 224, 160, .08);
+  box-shadow: inset 2px 0 0 var(--verde);
+  color: #a8f0d4;
+}
+.gp-dist-pen.bom .ico { color: var(--verde); }

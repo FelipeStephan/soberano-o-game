@@ -20,6 +20,7 @@ import { tocarEfeito } from './audio.js';
 import { offsetServidor } from '../net/lobby.js';
 import { estadosDe } from '../jogo/territorio.js';
 import { aliancaCom, ehAliadoMilitar, quebrarPorTraicao, sincronizarBlocos, aliancaDe, registrarAliancaConhecida, ehMilitar } from '../jogo/aliancas.js';
+import { aplicarZonaMorta, marcarNacaoMorta } from '../jogo/nuclear.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -28,6 +29,8 @@ const nomeDe = (iso) => PAISES[iso]?.nome || iso;
 const ESTILO = {
   guerra:     { cor: '#ff3b5c', urgente: true,  rot: 'DECLAROU GUERRA', ic: 'swords' },
   ataque_estado: { cor: '#ff3b5c', urgente: true, rot: 'ATACOU SEU TERRITÓRIO', ic: 'crosshair' },
+  // #4.2 — a intenção descoberta pela inteligência, ANTES do primeiro tiro
+  ofensiva_detectada: { cor: '#ff6a45', urgente: true, rot: 'PREPARA UMA OFENSIVA', ic: 'radar' },
   naval:      { cor: '#35e0ff', urgente: true,  rot: 'ATAQUE NAVAL', ic: 'ship' },
   nuclear:    { cor: '#ff3b5c', urgente: true,  rot: 'LANÇAMENTO NUCLEAR', ic: 'radiation' },
   sancao:     { cor: '#ffb020', urgente: false, rot: 'IMPÔS SANÇÕES', ic: 'ban' },
@@ -43,6 +46,13 @@ export function ligarOnline(jogo, net, hooks) {
   const meuIso = jogo.estado.iso || jogo.ficha?.iso;
   let jogadores = [];                 // [{ id, nome, pais, host }]
   const porPais = new Map();          // iso → jogador (quem é humano)
+  // #11 — países cujo GOVERNO HUMANO CAIU. Continuam no mapa, mas voltam a ser NPC:
+  // é a opção B da decisão de produto (ver ui/renascer.js) — o país não some nem
+  // congela, a Máquina assume. Enquanto o servidor não souber disso (o socket do
+  // jogador segue aberto até ele escolher outra nação), somos nós que temos de
+  // subtraí-los do roster de humanos — senão a simulação continua pulando aquele país
+  // e ele vira um buraco morto no mundo: não age, não reage, não pode ser jogado.
+  const caidos = new Set();
 
   const badge = hooks.container?.querySelector('#online-badge');
 
@@ -55,7 +65,7 @@ export function ligarOnline(jogo, net, hooks) {
     // por país controlado por OUTRO humano. Stampamos os ISOs humanos no estado (inclui o
     // local) — os módulos do motor leem `estado._humanos` e pulam esses países. Offline
     // fica undefined → comportamento single-player intacto.
-    jogo.estado._humanos = jogadores.map((j) => j.pais).filter(Boolean);
+    jogo.estado._humanos = jogadores.map((j) => j.pais).filter(Boolean).filter((iso) => !caidos.has(iso));
     pintarBadge();
   }
 
@@ -79,11 +89,18 @@ export function ligarOnline(jogo, net, hooks) {
   // ── EVENTO CHEGANDO de outro humano ────────────────────────────────
   function receber(ev) {
     if (!ev || ev.dePais === meuIso) return;   // ignora eco do próprio
+    // MÓDULOS QUE FALAM PELA SALA (hoje: o Conselho de Segurança). Eles têm o próprio
+    // vocabulário de eventos; se um deles reconhece o bilhete, o assunto é dele e o
+    // fluxo genérico abaixo não precisa nem saber que existiu.
+    if (hooks.aoEventoExtra?.(ev)) return;
     // #10 — CONSEQUÊNCIA DURÁVEL: sofrer uma ação hostil de outro humano REBAIXA a sua
     // relação com ele. Sem isto, você afundava a frota de um país e ele seguia te tratando
     // como "parceiro" — a postura (Aliado/Parceiro/Tenso/Hostil) deriva desse número.
     // Só o ALVO rebaixa (via paraVoce/alvo); persiste no autosave.
-    const QUEDA_REL = { guerra: 60, nuclear: 60, guerra_resultado: 50, ataque_estado: 40, naval: 30, naval_resultado: 30, sancao: 20, espionagem: 15 };
+    // `ofensiva_detectada` entra aqui de propósito: descobrir que alguém está montando
+    // uma invasão contra você É um fato diplomático — e, se ele era seu aliado, é
+    // TRAIÇÃO antes do primeiro tiro (quebrarPorTraicao rompe o pacto na hora).
+    const QUEDA_REL = { guerra: 60, nuclear: 60, guerra_resultado: 50, ataque_estado: 40, ofensiva_detectada: 25, naval: 30, naval_resultado: 30, sancao: 20, espionagem: 15 };
     if ((ev.paraVoce || ev.alvo === meuIso) && QUEDA_REL[ev.tipo]) {
       const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
       jogo.estado[k] = Math.max(-100, Math.min(100, (jogo.estado[k] || 0) - QUEDA_REL[ev.tipo]));
@@ -204,6 +221,57 @@ export function ligarOnline(jogo, net, hooks) {
     if (ev.tipo === 'mediacao' && ev.dados?.conflitoId && net.estado().host) {
       try { tentarIntervencao(jogo.estado, ev.dados.conflitoId, ev.dados.frente || 'mediar'); } catch { /* conflito já acabou */ }
     }
+    // #4.2 — A INTENÇÃO DESCOBERTA. A ofensiva estava em segredo; a inteligência do
+    // alvo a flagrou e o fato virou público. O mapa de TODOS ganha a linha de
+    // preparação (intenção, sem ferro no ar) e o alvo entra em Modo Defesa AGORA —
+    // esta é a janela de reação, não o instante do impacto.
+    if (ev.tipo === 'ofensiva_detectada') { intencaoDeAtaque(ev); return; }
+    // ── #6.1/#6.2 · A CRATERA É A MESMA EM TODO MAPA ───────────────────
+    // Antes, `dispararOgiva` marcava a zona radioativa SÓ no cliente de quem lançou:
+    // o resto da sala continuava vendo um país normal, negociando com um cemitério e
+    // planejando ofensiva contra escombros. O evento traz tudo pronto (iso, quem
+    // lançou), então cada cliente aplica a MESMA função do motor — uma verdade só.
+    // Sem `return`: o fluxo normal abaixo ainda precisa desenhar a ogiva no globo e
+    // alertar o alvo, que é outra coisa.
+    if (ev.tipo === 'nuclear' && ev.dados?.zonaMorta && ev.dados?.iso) {
+      const alvoIso = ev.dados.iso;
+      const porIso = ev.dePais || ev.dados.porIso || null;
+      const porNome = ev.deNome || ev.dados.porNome || null;
+      const zona = aplicarZonaMorta(jogo.estado, alvoIso, { porIso, porNome });
+      const morte = marcarNacaoMorta(jogo.estado, alvoIso, { porIso, porNome });
+      if (zona.inedito) {
+        jogo._empilharFeed?.([...(zona.linhas || []), ...(morte.linhas || [])].map((t) => ({
+          tipo: 'sistema', handle: '☢ ZONA MORTA', texto: t, cor: '#78e65a',
+        })));
+        hooks.renderFeed?.();
+      }
+      const gz = hooks.globoCtrl?.();
+      Promise.resolve(gz?.carregarPais?.(alvoIso)).then(() => gz?.atualizar?.()).catch(() => gz?.atualizar?.());
+      hooks.atualizar?.();
+    }
+    // #4.1 — O OUTRO LADO SAIU DA GUERRA. Retirada é decisão dele, mas o fim da guerra
+    // é decisão dos dois: as tropas dele pararam, as suas não pararam sozinhas. Você
+    // escolhe encerrar (o conflito some do seu mapa) ou continuar em cima de um inimigo
+    // que já recuou — que é uma jogada legítima, e cara na reputação.
+    if (ev.tipo === 'saida_guerra') { retiradaRecebida(ev); return; }
+    // #11 — UM GOVERNO CAIU. O país não sai do mapa: passa à Máquina, e quem o
+    // derrubou (ou quem só assistiu) precisa VER isso acontecer — inclusive porque a
+    // partir daqui aquele país volta a agir sozinho contra todo mundo.
+    if (ev.tipo === 'queda' && ev.dados?.iso) {
+      const iso = ev.dados.iso;
+      caidos.add(iso);
+      porPais.delete(iso);
+      jogo.estado._humanos = (jogo.estado._humanos || []).filter((i) => i !== iso);
+      jogo.estado._caidos = [...caidos];
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Chancelaria', cor: '#ffb020',
+        texto: `O governo de ${nomeDe(iso)} CAIU — ${esc(ev.dados.motivo || 'fim do reinado')}. O país segue no mapa, agora conduzido pela Máquina.` }]);
+      hooks.renderFeed?.();
+      const g = hooks.globoCtrl?.();
+      g?.ondaRadar?.(g.ondeEsta?.(iso), { cor: 0xffb020, max: 50 });
+      g?.balao?.(g.ondeEsta?.(iso), 'GOVERNO CAIU', 'aviso');
+      g?.atualizar?.();
+      return;
+    }
     // Ataque a UM estado: o território atingido marca no mapa de todos (e segue
     // para o fluxo normal — alerta/Modo Defesa se o alvo for você).
     if (ev.tipo === 'ataque_estado' && ev.dados?.estadoId) {
@@ -237,12 +305,25 @@ export function ligarOnline(jogo, net, hooks) {
     // 3) se a bomba é COM VOCÊ, alerta urgente — e, se for guerra/ataque, MODO DEFESA
     if (ev.paraVoce || ev.alvo === meuIso) {
       if (ev.tipo === 'guerra' || ev.tipo === 'ataque_estado') {
-        alertaUrgente({ titulo: 'VOCÊ ESTÁ SOB ATAQUE', texto: `${ev.deNome || nomeDe(ev.dePais)} lançou uma ofensiva contra você.`, tom: 'ataque', comSom: ev.tipo === 'guerra' });
-        abrirDefesa(jogo, {
-          agressor: { iso: ev.dePais, nome: ev.deNome || nomeDe(ev.dePais) },
-          dados: ev.dados || null,
-          onFim: () => hooks.atualizar?.(),
+        const surpresa = ev.dados?.impacto && ev.dados?.surpresa;
+        alertaUrgente({
+          titulo: surpresa ? 'ATAQUE SURPRESA' : 'VOCÊ ESTÁ SOB ATAQUE',
+          texto: surpresa
+            ? `${ev.deNome || nomeDe(ev.dePais)} montou esta ofensiva em segredo e a sua inteligência não viu nada. A bomba chegou antes do aviso.`
+            : `${ev.deNome || nomeDe(ev.dePais)} lançou uma ofensiva contra você.`,
+          tom: 'ataque', comSom: true,
         });
+        // #4.2 — O MODAL DE DEFESA É A JANELA DE REAÇÃO, e ela vem ANTES do soco (no
+        // `ofensiva_detectada`). No IMPACTO não há mais o que posicionar: abrir a tela
+        // aqui seria pedir pro jogador arrumar a casa depois do incêndio. Quem não
+        // detectou a tempo paga com a surpresa — é esse o preço de não ter inteligência.
+        if (!ev.dados?.impacto) {
+          abrirDefesa(jogo, {
+            agressor: { iso: ev.dePais, nome: ev.deNome || nomeDe(ev.dePais) },
+            dados: ev.dados || null,
+            onFim: () => hooks.atualizar?.(),
+          });
+        }
       } else if (ev.tipo === 'nuclear') {
         // JANELA DE REAÇÃO: a ogiva voa ~6s com contagem antes do clarão registrar.
         contagemIncoming({
@@ -251,9 +332,31 @@ export function ligarOnline(jogo, net, hooks) {
           segundos: 6,
         }, () => {
           alertaUrgente({ titulo: '☢ ATAQUE NUCLEAR CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: true });
+          // #6.2 — VOCÊ FOI APAGADO. O motor já zerou tudo (forças, guarnições, guerras)
+          // e gravou `estado.nacaoMorta` com o retrato do que você era. Aqui a UI precisa
+          // PARAR de fingir que você ainda governa: quem toma essa decisão é o ui/jogo.js,
+          // que tem o relógio e a tela de fim na mão. É a mesma porta do #11 — a sala
+          // continua, e você pode assumir outra nação nela.
+          if (ev.dados?.zonaMorta && jogo.estado.nacaoMorta) {
+            hooks.aoSerApagado?.({
+              por: ev.dePais, porNome: ev.deNome || nomeDe(ev.dePais),
+              registro: jogo.estado.nacaoMorta,
+            });
+          }
         });
       } else if (ev.tipo === 'naval') {
         alertaUrgente({ titulo: 'ATAQUE NAVAL CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: false });
+        // #3.2 — ATAQUE PELO MAR PEDE OUTRA DEFESA. Não houve declaração nem fronteira
+        // rompida: veio uma esquadra. O Modo Defesa abre no modo naval — a ameaça é o
+        // LITORAL mais perto da frota, e a ação rápida é cobrir a costa, não a fronteira.
+        // Bombardeio de esquadra contra esquadra não abre nada (não há solo a defender).
+        if (!ev.dados?.alvoFrota) {
+          abrirDefesa(jogo, {
+            agressor: { iso: ev.dePais, nome: ev.deNome || nomeDe(ev.dePais) },
+            dados: ev.dados || null, via: 'naval',
+            onFim: () => hooks.atualizar?.(),
+          });
+        }
       } else if (ev.tipo === 'resposta' && ev.dados?.sobre === 'alianca') {
         // O CONVIDADO RESPONDEU: se aceitou, ele entra na MINHA aliança de verdade.
         if (ev.dados.aceito) {
@@ -277,6 +380,88 @@ export function ligarOnline(jogo, net, hooks) {
         alertaIncoming(origem, est, ev.texto);
       }
     }
+  }
+
+  // ── #4.2 · A INTENÇÃO DE ATAQUE, DESCOBERTA ──────────────────────────
+  // Enquanto a ofensiva está em preparo ela não existe pra ninguém — é esse o ataque
+  // surpresa que o jogo não tinha. Quando a inteligência do alvo flagra a montagem, o
+  // segredo cai PARA TODOS: o mapa da sala inteira ganha a linha de preparação
+  // (intenção — nenhum míssil voa ainda) e o alvo entra em Modo Defesa com o eixo real
+  // do avanço na mão. É a diferença entre saber que vem e saber POR ONDE vem.
+  function intencaoDeAtaque(ev) {
+    const g = hooks.globoCtrl?.();
+    const de = ev.dados?.de || g?.ondeEsta?.(ev.dePais);
+    const para = ev.dados?.para || (ev.alvo ? g?.ondeEsta?.(ev.alvo) : null);
+    if (g && de && para) {
+      g.desenharLinha?.(para, 'preparacao', 15000, de);
+      g.ondaRadar?.(para, { cor: 0xff6a45, max: 40 });
+    }
+    jogo._empilharFeed?.([{
+      tipo: 'jogador', handle: `🛰 ${ev.deNome || nomeDe(ev.dePais)}`, paisOrigem: ev.dePais, paisAlvo: ev.alvo || null,
+      texto: ev.texto || `${nomeDe(ev.dePais)} prepara uma ofensiva contra ${nomeDe(ev.alvo)}.`, cor: '#ff6a45',
+    }]);
+    hooks.renderFeed?.();
+    if (!(ev.paraVoce || ev.alvo === meuIso)) return;
+    // O ALARME É SAGRADO (METODOLOGIA, princípio 3): mobilização detectada é faixa
+    // vermelha MUDA. O som fica reservado pro momento em que a bomba realmente cai.
+    const meses = Math.max(1, Number(ev.dados?.restante) || 1);
+    alertaUrgente({
+      titulo: '🛰 OFENSIVA DETECTADA CONTRA VOCÊ',
+      texto: `A sua inteligência interceptou a mobilização de ${ev.deNome || nomeDe(ev.dePais)}. Lançamento estimado em ${meses} ${meses > 1 ? 'meses' : 'mês'} — você ainda tem tempo de posicionar a defesa.`,
+      tom: 'ataque', comSom: false,
+    });
+    abrirDefesa(jogo, {
+      agressor: { iso: ev.dePais, nome: ev.deNome || nomeDe(ev.dePais) },
+      dados: ev.dados || null,
+      onFim: () => hooks.atualizar?.(),
+    });
+  }
+
+  // ── #4.1 · A RETIRADA DO OUTRO LADO ──────────────────────────────────
+  function retiradaRecebida(ev) {
+    const quem = ev.deNome || nomeDe(ev.dePais);
+    jogo._empilharFeed?.([{
+      tipo: 'jogador', handle: quem, paisOrigem: ev.dePais, paisAlvo: ev.alvo || null,
+      texto: ev.texto || `${nomeDe(ev.dePais)} retirou as tropas e encerrou a guerra.`, cor: '#ffb020',
+    }]);
+    hooks.renderFeed?.();
+    if (!(ev.paraVoce || ev.alvo === meuIso)) return;
+    if (!(jogo.estado.emGuerra || []).includes(ev.dePais)) return;   // já não estávamos em guerra
+    fecharAlerta();
+    const el = document.createElement('div');
+    el.className = 'onl-alerta proposta';
+    el.style.setProperty('--oc', '#ffb020');
+    el.innerHTML = `
+      <div class="onl-cab">${ico('flag-off', 15)} <b>${esc(quem)}</b> <span>RETIROU AS TROPAS</span></div>
+      <div class="onl-txt">${esc(ev.dados?.vencendo
+        ? `${nomeDe(ev.dePais)} estava vencendo e recuou mesmo assim. A guerra acabou para ele — acaba para você?`
+        : `${nomeDe(ev.dePais)} encerrou a guerra unilateralmente. Você pode aceitar o fim ou continuar avançando sobre quem já recuou.`)}</div>
+      <div class="onl-acoes">
+        <button class="onl-sim">${ico('check', 14)} ENCERRAR TAMBÉM</button>
+        <button class="onl-nao">${ico('swords', 14)} A GUERRA CONTINUA</button>
+      </div>`;
+    document.body.appendChild(el);
+    const decidir = (encerrar) => {
+      if (encerrar) {
+        jogo.estado.emGuerra = (jogo.estado.emGuerra || []).filter((i) => i !== ev.dePais);
+        const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
+        jogo.estado[k] = Math.min(-20, (jogo.estado[k] || 0) + 15);   // trégua não é amizade
+        jogo.estado.temp_guerra = Math.max(0, (jogo.estado.temp_guerra || 0) - 10);
+        jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Chancelaria', cor: '#22e0a0',
+          texto: `Armas silenciadas com ${nomeDe(ev.dePais)}. Não há tratado, não há confiança — há um mapa que parou de se mexer.` }]);
+        net.evento('resposta', ev.dePais, 'Encerrou a guerra também.', { sobre: 'saida_guerra', aceito: true });
+      } else {
+        jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚔ Estado-Maior', cor: '#ff3b5c',
+          texto: `${nomeDe(ev.dePais)} recuou e nós NÃO paramos. O mundo está vendo — e vai lembrar de quem seguiu atirando.` }]);
+        jogo.estado.soft_power = Math.max(0, (jogo.estado.soft_power || 0) - 6);
+        net.evento('resposta', ev.dePais, 'Recusou encerrar — a guerra continua.', { sobre: 'saida_guerra', aceito: false });
+      }
+      hooks.renderFeed?.(); hooks.atualizar?.(); hooks.globoCtrl?.()?.atualizar?.();
+      fecharAlerta();
+    };
+    el.querySelector('.onl-sim').addEventListener('click', () => decidir(true));
+    el.querySelector('.onl-nao').addEventListener('click', () => decidir(false));
+    autoFechar = setTimeout(() => decidir(false), 25000);   // não decidir É continuar a guerra
   }
 
   // ── PROPOSTA recebida (aliança/comércio) — aceitar/recusar com timer ──
@@ -570,6 +755,17 @@ export function ligarOnline(jogo, net, hooks) {
     for (const [id, iso] of Object.entries(dados.donoEstado || {})) e.donoEstado[id] = iso;
     for (const [id, c] of Object.entries(dados.conflitos || {})) {
       e.conflitosEstado[id] = { por: c.por, intensidade: c.intensidade ?? 40, turnos: 0 };
+    }
+    // ANEXAÇÕES QUE JÁ ROLARAM. Sem isto, quem chega tarde (ou renasce na sala com
+    // outra nação, #11) via as províncias conquistadas como países soberanos: o
+    // servidor mandava territórios e frotas, mas nunca "este país deixou de existir".
+    // `donoDe` resolve a posse estado a estado a partir daqui, mesmo que o catálogo
+    // daquele país só carregue muito depois.
+    e.ocupacoes = e.ocupacoes || {};
+    for (const [iso, a] of Object.entries(dados.anexacoes || {})) {
+      if (iso === meuIso) continue;                       // a minha própria queda tem outro caminho
+      e.ocupacoes[iso] = { ...(e.ocupacoes[iso] || {}), anexado: true, por: a.por };
+      for (const est of estadosDe(iso)) e.donoEstado[est.id] = a.por;
     }
     for (const f of Object.values(dados.frotas || {})) {
       if (f?.dados && f.dePais !== meuIso) upsertFrotaHumana({ dePais: f.dePais, deNome: f.deNome, dados: f.dados });

@@ -14,6 +14,7 @@ import { PAISES } from '../dados/paises.js';
 import { PETROLEO } from '../dados/petroleo.js';
 import { MUNDO_STATS } from '../dados/mundoStats.js';
 import { forcaDe } from './forcasMundo.js';
+import { forcaGuarnicao } from './territorio.js';
 import { reservasControladas } from './petroleo.js';
 
 function pool(estado) {
@@ -46,7 +47,33 @@ export function statsVivos(estado) {
     mil: Math.round(forcaDe(estado, eu)),
     petro: Math.round((PETROLEO[eu]?.reservas || 0) + controlado(estado)),
     area: MUNDO_STATS[eu] ? Math.round((MUNDO_STATS[eu].area + Math.max(0, (estado.territorio || 1) - 1) * 0.2) * 100) / 100 : null,
+    // ── O QUE FAZ O MODO DEFESA IMPORTAR NO ONLINE ────────────────────────
+    // A batalha resolve no cliente de QUEM ATACA. Sem estes dois campos, o atacante
+    // enxergava o defensor humano como um NPC: força total espalhada por importância
+    // de população. Ou seja, o humano podia empilhar o exército inteiro no estado
+    // certo e não mudava UM ponto no resultado — o Modo Defesa era teatro.
+    //   guarn → a força REAL guarnecendo cada estado meu (é o mapa que o atacante
+    //           consulta em forcaDefensivaNPC);
+    //   intel → a minha Inteligência de verdade, pra a chance de eu FLAGRAR a
+    //           ofensiva dele em preparo sair do meu investimento, não de uma
+    //           tabela estática de NPC (ver chanceDeteccaoAlvo).
+    guarn: guarnicoesResumo(estado),
+    intel: Math.round(estado.inteligencia ?? 0),
   };
+}
+
+// Só os estados que ainda são MEUS, e só o escalar de força — é o suficiente pro
+// combate e mantém o pacote leve o bastante pra viajar a cada batida.
+function guarnicoesResumo(estado) {
+  const eu = estado.iso || 'USA';
+  const out = {};
+  for (const [id, g] of Object.entries(estado.guarnicoes || {})) {
+    if (id.startsWith('MAR_')) continue;
+    if ((estado.donoEstado?.[id] || id.split('-')[0]) !== eu) continue;
+    const f = forcaGuarnicao(g);
+    if (f > 0) out[id] = f;
+  }
+  return out;
 }
 // BUG QUE ISTO CONSERTA: reservasControladas devolve um OBJETO {total, conquistadas} —
 // Number(objeto) dava NaN e as reservas conquistadas nunca entravam no índice.

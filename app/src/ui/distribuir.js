@@ -46,6 +46,11 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
   let aba = meuIso;                 // aba ativa: meu país ou um país conquistado
   let ordenar = 'ameaca';          // ameaca | forca | nome
   let confirmandoReset = false;    // 2 cliques pro "recolher tudo"
+  // #3.3 — TAMANHO DA FORÇA. `distribuirAuto` sempre aceitou `fracao`, mas nada na
+  // tela deixava o jogador mexer: a doutrina cuspia 100% da reserva e ele descobria
+  // depois que não sobrou navio pra frota nem tropa pra invasão. Agora o quanto é
+  // decisão, não efeito colateral — 65% deixa um terço guardado por padrão.
+  let fracao = 0.65;
 
   const modal = document.createElement('div');
   modal.className = 'modal-fundo pen-modal';
@@ -176,6 +181,10 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
         </div>
       </div>
 
+      ${posic === 0 ? `<div class="pen-descoberto">${ico('triangle-alert', 15)}
+        <span><b>Nenhuma tropa posicionada.</b> Seu exército inteiro está no quartel — e um quartel não defende fronteira.
+        Escolha a doutrina, ajuste o tamanho da força e aplique. O que ficar na reserva segue disponível pro mar e pra ofensiva.</span></div>` : ''}
+
       <div class="pen-corpo">
         <div class="pen-col-esq">
           <div class="pen-sec">${ico('radar', 11)} VETORES DE AMEAÇA</div>
@@ -195,8 +204,18 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
               <i class="pen-dop-ck">${ico('check', 13)}</i>
             </button>`).join('')}
           </div>
+          <div class="pen-fracao">
+            <label>${ico('gauge', 11)} TAMANHO DA FORÇA
+              <b id="pen-frac-v">${Math.round(fracao * 100)}%</b></label>
+            <input type="range" id="pen-frac" min="5" max="100" step="5" value="${Math.round(fracao * 100)}" ${reserva <= 0 ? 'disabled' : ''}>
+            <div class="pen-frac-split">
+              <span class="sai">sai <b id="pen-frac-sai">${fmt(Math.floor(reserva * fracao))}</b></span>
+              <span class="fica">fica na reserva <b id="pen-frac-fica">${fmt(reserva - Math.floor(reserva * fracao))}</b></span>
+            </div>
+            <div class="pen-frac-nota">${ico('info', 10)} O que fica na reserva é o que sobra pra frota no mar e pra ofensiva. Distribuir 100% deixa você sem assalto.</div>
+          </div>
           <button class="pen-aplicar" id="pen-go" ${reserva <= 0 ? 'disabled' : ''}>
-            ${ico('send', 14)} <span>${reserva > 0 ? `APLICAR DOUTRINA · ${fmt(reserva)} em reserva` : 'RESERVA VAZIA'}</span>
+            ${ico('send', 14)} <span>${reserva > 0 ? `APLICAR DOUTRINA · ${fmt(Math.floor(reserva * fracao))} unidades` : 'RESERVA VAZIA'}</span>
           </button>
         </div>
 
@@ -263,6 +282,16 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
       render();
     }));
     modal.querySelectorAll('.pen-dop').forEach((b) => b.addEventListener('click', () => { modo = b.dataset.modo; render(); }));
+    // o slider atualiza só os números — re-render aqui roubaria o foco no meio do arrasto
+    modal.querySelector('#pen-frac')?.addEventListener('input', (ev) => {
+      fracao = Math.max(0.05, Number(ev.target.value) / 100);
+      const sai = Math.floor(reserva * fracao);
+      modal.querySelector('#pen-frac-v').textContent = `${Math.round(fracao * 100)}%`;
+      modal.querySelector('#pen-frac-sai').textContent = fmt(sai);
+      modal.querySelector('#pen-frac-fica').textContent = fmt(reserva - sai);
+      const go = modal.querySelector('#pen-go span');
+      if (go && reserva > 0) go.textContent = `APLICAR DOUTRINA · ${fmt(sai)} unidades`;
+    });
     modal.querySelectorAll('.pen-aba').forEach((b) => b.addEventListener('click', () => { aba = b.dataset.aba; render(); }));
     modal.querySelectorAll('.pen-ord button').forEach((b) => b.addEventListener('click', () => { ordenar = b.dataset.ord; render(); }));
     modal.querySelector('#pen-go')?.addEventListener('click', aplicarDoutrina);
@@ -306,7 +335,7 @@ export function abrirDistribuir(jogo, { onFim, globoCtrl } = {}) {
 
   function aplicarDoutrina() {
     const r = distribuirAuto(estado, {
-      modo, ondeEsta,
+      modo, ondeEsta, fracao,
       frotasInimigas: estado.frotasInimigas || [],
       conflitos: estado.conflitosEstado || {},
     });

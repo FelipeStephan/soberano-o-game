@@ -22,7 +22,10 @@ function caraterBloco(b) {
   return { rot: 'ECONÔMICO', cor: 'var(--verde)', tipo: 'economico', ic: 'coins' };
 }
 
-export function abrirBlocosVisor(jogo) {
+// `onChat` só chega no online (ui/jogo.js só passa a função quando há sala): é o que
+// abre o canal fechado do bloco. Fora do online o botão nem existe — não há com quem
+// falar, e um botão morto é pior que botão nenhum.
+export function abrirBlocosVisor(jogo, { onChat, ehHumano } = {}) {
   if (document.querySelector('.blv-modal')) return;
   const estado = jogo.estado;
   sincronizarBlocos(estado);   // saves carregados: garante que as alianças estejam no registro
@@ -78,6 +81,17 @@ export function abrirBlocosVisor(jogo) {
               <span title="Membros">${ico('users', 11)} <b>${b.isos.length}</b></span>
             </div>
             <div class="blv-b-barra"><i style="width:${b.intensidade}%"></i></div>
+            ${sou && onChat ? (() => {
+              // #10.2 — O CANAL FECHADO DO BLOCO. Só aparece em bloco de que EU faço
+              // parte: falar com aliados é privilégio de membro. O contador de quem
+              // está na sala AGORA fica no rótulo porque é a única coisa que decide
+              // se vale a pena escrever — mensagem pra bloco vazio não chega a ninguém.
+              const outros = b.isos.filter((i) => i !== eu);
+              const online = outros.filter((i) => ehHumano?.(i));
+              return `<button class="blv-b-chat ${online.length ? '' : 'mudo'}" data-bl="${esc(b._aliancaId || b.id || b.nome)}">
+                ${ico('message-square', 12)} <span>FALAR COM O BLOCO</span>
+                <i>${online.length ? `${online.length} na sala` : 'ninguém na sala'}</i></button>`;
+            })() : ''}
           </div>`;
         }).join('')}
         ${lista.length ? '' : `<div class="blv-vazio">${ico('info', 15)} Nenhum bloco ${filtro === 'militar' ? 'militar' : 'econômico'} ativo.</div>`}
@@ -86,6 +100,13 @@ export function abrirBlocosVisor(jogo) {
 
     modal.querySelector('.blv-x').addEventListener('click', fechar);
     modal.querySelectorAll('.blv-fil').forEach((b) => b.addEventListener('click', () => { filtro = b.dataset.fil; render(); }));
+    modal.querySelectorAll('.blv-b-chat').forEach((btn) => btn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const alvo = lista.find(({ b }) => String(b._aliancaId || b.id || b.nome) === btn.dataset.bl);
+      if (!alvo) return;
+      fechar();
+      onChat({ id: String(alvo.b._aliancaId || alvo.b.id || alvo.b.nome), nome: alvo.b.nome, membros: [...alvo.b.isos] });
+    }));
   }
 
   render();

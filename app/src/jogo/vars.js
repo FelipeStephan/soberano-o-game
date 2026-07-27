@@ -25,6 +25,13 @@ export const VARS = {
   inteligencia:   { rotulo: 'Inteligência',    grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#35e0ff', dica: 'A força dos seus espiões: descobrir segredos, sabotar, prever golpes.' },
   capacidade_ind: { rotulo: 'Indústria',       grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#ffa94f', dica: 'A capacidade das suas fábricas — produzir armas, equipamentos e bens em escala.' },
   uranio:         { rotulo: 'Urânio',          grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#9be15d', dica: 'Combustível do programa nuclear. Sem urânio, não há ogiva.' },
+  // Existia efeito `petroleo_producao` em ações antigas que NUNCA aplicava nada — a
+  // chave não estava registrada aqui, e chaveValida() descarta silenciosamente qualquer
+  // efeito fora do registro. Em vez de reviver aquela chave (sincronizarPetroleo() a
+  // recalcula do zero todo turno, então setá-la direto seria apagado na batida seguinte),
+  // a alavanca de Ciência agora é tec_petroleo: um multiplicador de eficiência de extração
+  // que sincronizarPetroleo() lê e aplica — sobrevive ao turno porque é insumo, não resultado.
+  tec_petroleo:   { rotulo: 'Tecnologia de Extração', grupo: 'capacidade', min: 0, max: 100, cap: 25, cor: '#e0b84f', dica: 'Fraturamento, recuperação terciária, sísmica 4D — quanto mais fundo a ciência enxerga o poço, mais barril sai do mesmo campo.' },
 
   // ── Poder territorial / arsenal ─────────────────────────────────────
   territorio: { rotulo: 'Territórios', grupo: 'poder', min: 0, max: 999, cap: 2, dica: 'Quantos territórios você controla — o seu, mais os que conquistou.' },

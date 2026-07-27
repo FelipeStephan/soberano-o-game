@@ -7,39 +7,11 @@
 // avanço" do modal de ofensiva, agora tátil.
 import { ico } from './icones.js';
 import { PAISES } from '../dados/paises.js';
+// A projeção mora em `projecao.js` desde que o MODO DEFESA passou a desenhar o MEU
+// país com a mesma matemática. Duas cópias = duas verdades sobre a forma do mapa.
+import { projetar, geoParaPath, carregarMalha } from './projecao.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-// Projeta as coordenadas geográficas do país num viewBox 2D. Correção de aspecto por
-// cos(lat) pra o país não sair esticado na horizontal (mais perto do polo, mais
-// estreito o grau de longitude).
-function projetar(feats, W = 680, pad = 16) {
-  let minLng = Infinity; let maxLng = -Infinity; let minLat = Infinity; let maxLat = -Infinity;
-  const anelBBox = (anel) => { for (const [lng, lat] of anel) { if (lng < minLng) minLng = lng; if (lng > maxLng) maxLng = lng; if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat; } };
-  const varrer = (g) => {
-    if (!g) return;
-    if (g.type === 'Polygon') g.coordinates.forEach(anelBBox);
-    else if (g.type === 'MultiPolygon') g.coordinates.forEach((p) => p.forEach(anelBBox));
-  };
-  feats.forEach((f) => varrer(f.geometry));
-  const midLat = (minLat + maxLat) / 2;
-  const kx = Math.max(0.15, Math.cos((midLat * Math.PI) / 180));
-  const gw = (maxLng - minLng) * kx || 1; const gh = (maxLat - minLat) || 1;
-  const escala = (W - pad * 2) / gw;
-  const H = gh * escala + pad * 2;
-  const toXY = (lng, lat) => [pad + (lng - minLng) * kx * escala, pad + (maxLat - lat) * escala];
-  return { toXY, W, H, minLng, maxLng, minLat, maxLat };
-}
-
-function anelParaPath(anel, toXY) {
-  return anel.map(([lng, lat], i) => `${i ? 'L' : 'M'}${toXY(lng, lat).map((n) => n.toFixed(1)).join(' ')}`).join('') + 'Z';
-}
-function geoParaPath(g, toXY) {
-  if (!g) return '';
-  if (g.type === 'Polygon') return g.coordinates.map((a) => anelParaPath(a, toXY)).join('');
-  if (g.type === 'MultiPolygon') return g.coordinates.map((p) => p.map((a) => anelParaPath(a, toXY)).join('')).join('');
-  return '';
-}
 
 export async function abrirMapaEstados(iso, nomePais, { atual = [], dominados = [], onConfirmar } = {}) {
   const jaMeus = new Set(dominados);   // estados que já conquistei num ataque anterior
@@ -50,11 +22,7 @@ export async function abrirMapaEstados(iso, nomePais, { atual = [], dominados = 
   const fechar = () => modal.remove();
   modal.addEventListener('click', (ev) => { if (ev.target === modal) fechar(); });
 
-  let feats = [];
-  try {
-    const geo = await fetch(`/estados/${iso}.geojson`).then((r) => r.json());
-    feats = geo?.features || [];
-  } catch { feats = []; }
+  const feats = await carregarMalha(iso);
 
   if (!feats.length) {
     modal.querySelector('.mest-painel').innerHTML = `<div class="mest-vazio">${ico('info', 18)} ${esc(nomePais)} não tem estados mapeados — a ofensiva avança pela fronteira mais próxima.</div>

@@ -47,20 +47,51 @@ export function estadoPorId(id) { return PORID.get(id) || null; }
 export function todosEstados() { return CATALOGO; }
 
 // ── DE QUEM É ESTE TERRITÓRIO ─────────────────────────────────────────
+// A ORDEM DAS PERGUNTAS IMPORTA:
+//   1. exceção explícita em `donoEstado` (conquista estado a estado);
+//   2. o país inteiro foi ANEXADO? então todo estado dele é do anexador;
+//   3. senão, é de quem nasceu dono (o prefixo do id).
+//
+// O passo 2 é novo e conserta uma promessa que o código fazia e não cumpria: o
+// comentário de `acaoAnexar` (jogo/manutencao.js) dizia que "a posse por estado é
+// resolvida por donoDe quando o catálogo chegar" — e `donoDe` nunca olhou para a
+// anexação. Enquanto a anexação só acontecia depois de conquistar estado por estado
+// (com o catálogo já carregado), ninguém percebeu. O caminho que expõe o furo é o
+// ONLINE: quem recebe o evento `anexacao` de OUTRO jogador quase sempre nunca abriu
+// aquele país, então `estadosDe(alvo)` volta vazio e nada é gravado em `donoEstado`.
+// Quando o catálogo daquele país finalmente chega, o mapa volta a pintar a província
+// como uma nação soberana. Com o renascimento na mesma sala (#11), um cliente novo
+// nasce sempre nesse estado — o furo deixou de ser teórico.
 export function donoDe(estado, idEstado) {
   const excecao = estado.donoEstado?.[idEstado];
   if (excecao) return excecao;
-  return PORID.get(idEstado)?.pais || idEstado.split('-')[0];
+  const nativo = PORID.get(idEstado)?.pais || idEstado.split('-')[0];
+  const anexador = anexadoPor(estado, nativo);
+  return anexador || nativo;
 }
 export function ehMeu(estado, idEstado) { return donoDe(estado, idEstado) === (estado.iso || 'USA'); }
 
 // ── ANEXAÇÃO: o país virou PROVÍNCIA, não é mais ocupação ─────────────
-// Um país anexado não tem insurgência, não tem upkeep e os estados dele são MEUS
-// para todos os efeitos (distribuir tropa, defender, contar no domínio). Estas duas
-// funções são a fonte única dessa verdade — o motor inteiro pergunta aqui.
-export function paisAnexado(estado, iso) { return !!estado?.ocupacoes?.[iso]?.anexado; }
+// Um país anexado não tem insurgência, não tem upkeep e os estados dele são do
+// ANEXADOR para todos os efeitos (distribuir tropa, defender, contar no domínio).
+// Estas funções são a fonte única dessa verdade — o motor inteiro pergunta aqui.
+//
+// `ocupacoes` guarda anexações de TODO MUNDO, não só as minhas: o handler de
+// `anexacao` em ui/online.js grava `{ anexado: true, por: <quem anexou> }` para que o
+// mapa de todos mude junto. Por isso a distinção abaixo não é preciosismo — sem ela,
+// `estadosSobMeuComando` devolvia os estados de um país anexado pela RÚSSIA como se
+// fossem meus, e a doutrina de distribuição tentava guarnecer província alheia.
+export function anexadoPor(estado, iso) {
+  const o = estado?.ocupacoes?.[iso];
+  if (!o?.anexado) return null;
+  return o.por || estado?.iso || 'USA';   // sem `por` gravado, a anexação é minha (caminho local)
+}
+export function paisAnexado(estado, iso) {
+  return anexadoPor(estado, iso) === (estado?.iso || 'USA');
+}
 export function paisesAnexados(estado) {
-  return Object.entries(estado?.ocupacoes || {}).filter(([, o]) => o?.anexado).map(([iso]) => iso);
+  const eu = estado?.iso || 'USA';
+  return Object.keys(estado?.ocupacoes || {}).filter((iso) => anexadoPor(estado, iso) === eu);
 }
 // TODOS os estados sob o meu comando: os do meu país + os dos países que anexei.
 // Substitui `estadosDe(eu)` em tudo que significa "meu domínio" (distribuir, defender).
@@ -157,6 +188,16 @@ export function forcaDefensivaNPC(estado, iso, idEstado) {
   if (!alvos.length) return 0;
   const alvo = alvos.find((e) => e.id === idEstado);
   if (!alvo) return 0;
+  // ── O DEFENSOR HUMANO NÃO É UM NPC ────────────────────────────────────
+  // Se o dono deste território é outro JOGADOR, ele transmite a cada batida a força
+  // que realmente guarnece cada estado dele (statsVivos.guarn). Use esse número: é a
+  // decisão que ele tomou no Modo Defesa. Sem isto, empilhar o exército inteiro no
+  // estado certo não mudava nada — o atacante seguia enxergando a distribuição
+  // sintética por população, e defender-se era encenação.
+  const relatado = estado._statsHumanos?.[iso]?.guarn;
+  if (relatado && typeof relatado === 'object') {
+    return Math.round((Number(relatado[idEstado]) || 0) * 100) / 100;
+  }
   const soma = alvos.reduce((a, e) => a + pesoImportancia(e), 0) || 1;
   const total = forcaDe(estado, iso);   // escalar do país, mesma unidade de forcaGuarnicao
   const share = pesoImportancia(alvo) / soma;
@@ -346,11 +387,17 @@ export function aplicarAtaqueAoEstado(estado, res, isoAtacante) {
 }
 
 // ── DISTRIBUIÇÃO INICIAL ──────────────────────────────────────────────
-// Nenhum país deixa o exército inteiro num pátio. Espalhamos parte das forças
-// pelos estados no começo da partida, com peso na capital — que é o que todo
-// Estado-maior do mundo faz. O resto fica no quartel central pra o jogador
-// posicionar como quiser.
-export function semearGuarnicoes(estado, { fracao = 0.55 } = {}) {
+// #3.3 — O JOGO NÃO POSICIONA MAIS POR VOCÊ. Antes 55% do exército já nascia
+// espalhado pelos estados, e o jogador chegava no Pentágono com metade das decisões
+// tomadas por um `for` — sem entender de onde veio, sem saber o que mudar. Agora a
+// tropa começa TODA na reserva, visível, e a primeira ordem de verdade da partida é
+// escolher a DOUTRINA e o TAMANHO DA FORÇA. Custa um passo a mais; compra a única
+// coisa que importa aqui, que é o jogador saber que a defesa dele é escolha dele.
+//
+// O semeador continua existindo (chamadas com `fracao > 0` seguem funcionando) —
+// só deixou de ser o comportamento padrão.
+export function semearGuarnicoes(estado, { fracao = 0 } = {}) {
+  if (fracao <= 0) return;
   if (estado.guarnicoes && Object.keys(estado.guarnicoes).length) return;
   const eu = estado.iso || 'USA';
   const meus = estadosDe(eu);

@@ -216,9 +216,13 @@ async function executarAtaqueNucleo({ fr, a, selecao, defesa, jogo, helpers, pal
 
   // MUNDO ÚNICO: o ataque naval ecoa na sala — todos veem os mísseis no globo,
   // e se o alvo for um jogador humano, ele é alertado na hora.
+  // `via: naval` e `estadoId` (#3.2): o alvo humano precisa saber que o golpe veio do
+  // MAR — a resposta defensiva é outra (litoral, não fronteira) e o Modo Defesa abre no
+  // modo naval, com a esquadra como origem da ameaça.
   jogo._relayOnline?.('naval', codigoAlvo,
     `${meuNome} ${res.venceu ? (a.tipo === 'frota' ? 'afundou a esquadra de' : 'bombardeou') : 'atacou (e foi repelido por)'} ${iniNome}.`,
-    { de: origem, para: coordAlvo, venceu: res.venceu });
+    { de: origem, para: coordAlvo, venceu: res.venceu, via: 'naval',
+      estadoId: a.tipo === 'estado' ? a.estado.id : null, alvoFrota: a.tipo === 'frota' });
 
   jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Marinha', cor: res.venceu ? '#22e0a0' : '#ff3b5c',
     texto: res.venceu

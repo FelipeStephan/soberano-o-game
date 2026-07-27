@@ -20,6 +20,12 @@ function cumpreAcaoFeita(cond, estado) {
 }
 
 export function estaDesbloqueada(acao, estado) {
+  // ── #6.4 · NUMA PARTIDA SEM NUCLEARES, A OGIVA NÃO EXISTE ─────────────
+  // `aplicarEfeitos` já ignora a chave `ogivas` (é a trava dura, no motor), mas deixar
+  // "Construir Ogiva Nuclear" no catálogo seria vender uma ação que não faz nada: o
+  // jogador enfileira, paga, espera, e não recebe bomba nenhuma — e chama de bug, com
+  // razão. Se a arma está fora da partida, ela some também do cardápio.
+  if (estado?.semNucleares && (acao?.efeitos?.ogivas > 0 || acao?.forcas?.ogivas > 0)) return false;
   if (!acao.desbloqueio) return true;
   const { _acao, ...atributos } = acao.desbloqueio;
   if (!cumpreAcaoFeita(_acao, estado)) return false;

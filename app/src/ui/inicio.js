@@ -34,6 +34,11 @@ export function mostrarInicio(container, onStart) {
   let sala = null;              // { codigo, host, jogadores, max }
   let salasAbertas = [];        // lista de partidas abertas
   let erroLobby = '';
+  // #6.4 — MUNDO SEM ARMAS NUCLEARES. Offline é escolha do jogador; online é regra da
+  // SALA e só o host decide (o convidado recebe a regra pelo retrato do mundo — ver
+  // motor.snapshotMundo). Marcar isto muda o jogo inteiro: sem o guarda-chuva nuclear,
+  // a guerra convencional deixa de ser impensável entre potências.
+  let semNucleares = false;
 
   container.innerHTML = `
     <div class="hm" id="hm">
@@ -136,6 +141,7 @@ export function mostrarInicio(container, onStart) {
           placeholder="${esc(c.lider)}" spellcheck="false" autocomplete="off">
         <small>É este nome que a Máquina cita nas manchetes, nos boletins e nos xingamentos.</small>
       </div>
+      ${regraSemNuke('hmf-semnuke')}
       <button class="hmf-assumir" id="hmf-assumir">${ico('crown', 17)} <span>ASSUMIR ${esc(c.nome.toUpperCase())}</span></button>
     </div>`;
   }
@@ -204,6 +210,7 @@ export function mostrarInicio(container, onStart) {
         <input type="text" id="lb-nome" maxlength="38" value="${esc(nomeJogador || cartaoDe(sel)?.lider || '')}"
           placeholder="${esc(cartaoDe(sel)?.lider || 'Seu nome')}" spellcheck="false" autocomplete="off">
       </div>
+      ${euHost ? regraSemNuke('lb-semnuke') : (semNucleares ? `<div class="hm-regra-info">${ico('radiation', 13)} O host abriu esta sala <b>SEM ARMAS NUCLEARES</b>.</div>` : '')}
       ${euHost
         ? `<button class="hmf-assumir" id="lb-iniciar" ${podeIniciar ? '' : 'disabled'}>${ico('play', 16)} <span>${podeIniciar ? 'INICIAR PARTIDA' : rotBloqueio}</span></button>`
         : `<div class="lb-aguardando">${ico('loader', 14)} Aguardando o host iniciar…</div>
@@ -245,6 +252,16 @@ export function mostrarInicio(container, onStart) {
   }
 
   // ── SAÍDA CINEMÁTICA ────────────────────────────────────────────────
+  // A caixa da regra, com a consequência escrita no rótulo — quem marca precisa saber
+  // que não está desligando um botão, está mudando a física do mundo.
+  function regraSemNuke(id) {
+    return `<label class="hm-regra ${semNucleares ? 'on' : ''}" for="${id}">
+      <input type="checkbox" id="${id}" ${semNucleares ? 'checked' : ''}>
+      <span class="hm-regra-txt"><b>${ico('radiation', 12)} PARTIDA SEM ARMAS NUCLEARES</b>
+        <small>Nenhum país começa com ogivas e ninguém consegue construir. Sem o guarda-chuva nuclear, a guerra entre potências deixa de ser impensável — e a diplomacia perde o freio de emergência.</small></span>
+    </label>`;
+  }
+
   function partir(args) {
     if (saindo) return;
     saindo = true;
@@ -337,6 +354,12 @@ export function mostrarInicio(container, onStart) {
       else net?.listar();
     }));
 
+    // REGRA DA PARTIDA (as duas telas usam a mesma caixa; só o id muda)
+    container.querySelectorAll('#hmf-semnuke, #lb-semnuke').forEach((cb) => cb.addEventListener('change', () => {
+      semNucleares = cb.checked;
+      render();
+    }));
+
     // FICHA (offline)
     const campo = container.querySelector('#hmf-presidente');
     campo?.addEventListener('input', () => { nomeJogador = campo.value.trim(); });
@@ -344,7 +367,7 @@ export function mostrarInicio(container, onStart) {
     container.querySelector('#hmf-assumir')?.addEventListener('click', () => {
       const nome = (campo?.value || '').trim() || cartaoDe(sel).lider;
       localStorage.setItem('soberano_nome', nome === cartaoDe(sel).lider ? '' : nome);
-      partir({ pais: sel, ano: '2026', presidente: nome });
+      partir({ pais: sel, ano: '2026', presidente: nome, semNucleares });
     });
 
     // LOBBY (online)
@@ -374,7 +397,7 @@ export function mostrarInicio(container, onStart) {
       }
       const nome = (nomeLb?.value || '').trim() || cartaoDe(sel)?.lider || 'Comandante';
       localStorage.setItem('soberano_nome', nome);
-      partir({ pais: sel, ano: '2026', presidente: nome, online: true, net, sala, jogadores: sala?.jogadores || [] });
+      partir({ pais: sel, ano: '2026', presidente: nome, online: true, net, sala, jogadores: sala?.jogadores || [], semNucleares });
     });
   }
 

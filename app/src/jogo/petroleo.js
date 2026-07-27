@@ -12,6 +12,7 @@ import { PRECO_BASE, PETROLEO, ehPetroestado, ESTREITOS } from '../dados/petrole
 import { EMPRESAS_POR_PAIS } from '../dados/empresas.js';
 import { rand } from './rng.js';
 import { PAISES } from '../dados/paises.js';
+import { paisesAnexados } from './territorio.js';
 
 // Produção ORIGINAL de uma empresa (do catálogo, imutável). Serve de régua pra
 // medir o quanto ela cresceu por investimento — o objeto em jogo é uma cópia mutável.
@@ -50,18 +51,34 @@ export function sincronizarPetroleo(estado, empresas) {
     original += basePetroleoDaEmpresa(iso, e.id) || e.petroleo;
   }
   const fator = original > 0 ? atual / original : 1;
-  let producao = base * fator;
+
+  // FATOR DE TECNOLOGIA (tec_petroleo, ver vars.js): fraturamento, recuperação
+  // terciária, sísmica 4D e digitalização de campo arrancam mais barril do MESMO
+  // poço — não abrem poço novo (isso é o `fator` de investimento acima). Escala
+  // de 1x a 1.45x (tec 100 = +45% na produção): perceptível — quase metade a mais
+  // de barril num campo maduro é o que operações reais de EOR entregam — mas sem
+  // deixar um país médio virar Arábia Saudita só de ciência.
+  const fatorTec = 1 + (estado.tec_petroleo || 0) / 100 * 0.45;
+  let producao = base * fator * fatorTec;
 
   // O saque dos territórios ocupados: você não fica com tudo — a insurgência
   // sabota dutos e o campo não bombeia sob fogo. Quanto mais revolta, menos petróleo.
   const espolio = [];
-  // ANEXADO BOMBEIA 100%: sem insurgência sabotando duto, o campo é seu de verdade.
-  for (const iso of Object.entries(estado.ocupacoes || {}).filter(([, o]) => o?.anexado).map(([i]) => i)) {
+  // ANEXADO BOMBEIA 100%: sem insurgência sabotando duto, o campo é seu de verdade —
+  // e SUA tecnologia de extração vale lá também (é território seu, poço seu).
+  // `paisesAnexados` (e não um filtro cru por `.anexado`): `ocupacoes` acumula as
+  // anexações de TODA a sala, então ler o flag direto fazia o petróleo de uma província
+  // conquistada por OUTRO jogador entrar na minha produção nacional.
+  for (const iso of paisesAnexados(estado)) {
     const p = PETROLEO[iso];
     if (!p) continue;
-    producao += p.producao;
-    espolio.push({ iso, nome: PAISES[iso]?.nome || iso, bruto: p.producao, extraido: p.producao, eficiencia: 100, anexado: true });
+    const extraido = round1(p.producao * fatorTec);
+    producao += extraido;
+    espolio.push({ iso, nome: PAISES[iso]?.nome || iso, bruto: p.producao, extraido, eficiencia: 100, anexado: true });
   }
+  // OCUPADO NÃO GANHA o bônus de tecnologia: o limite ali é a insurgência sabotando
+  // duto, não o quanto sua ciência sabe extrair — sua equipe técnica nem opera em
+  // segurança um campo em revolta. A tecnologia é sua; o poço ainda não é de verdade.
   for (const c of estado.conquistados || []) {
     const p = PETROLEO[c.iso];
     if (!p) continue;

@@ -12,6 +12,9 @@
 import { tempoDe, ACAO_POR_ID } from '../dados/acoes.js';
 import { estaDesbloqueada } from '../jogo/desbloqueios.js';
 import { registrarFila } from '../jogo/filaComando.js';
+// As penas do Conselho de Segurança são predicados puros (não dependem do controlador
+// da ONU estar montado) exatamente pra poderem ser checadas aqui, no gargalo da fila.
+import { caixaCongelado, armasEmbargadas } from './onu.js';
 import { ico } from './icones.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -28,6 +31,26 @@ export function criarTempoReal(jogo, hooks = {}) {
 
   function podeEnfileirar(acao) {
     const custo = jogo.custoDe(acao);
+    // ── #9 · CAIXA CONGELADO PELO CONSELHO ────────────────────────────
+    // A pena mais dura da ONU não tira o seu dinheiro: tira o seu ACESSO a ele. O
+    // tesouro continua na HUD, intacto, e nenhuma ordem que custe um centavo sai do
+    // papel — é essa dissonância que faz a pena doer. A trava mora aqui, na única
+    // porta por onde TODA ordem paga passa; espalhar a checagem pelos painéis seria
+    // garantir que um deles ficaria de fora.
+    const gelo = caixaCongelado(jogo.estado);
+    if (gelo.bloqueado && custo > 0) {
+      return { ok: false, motivo: `Caixa CONGELADO pelo Conselho de Segurança — ${gelo.restante} mês(es) restantes. Nenhuma ordem paga sai do papel.` };
+    }
+    // EMBARGO DE ARMAS: o que está barrado é COMPRAR material (fichas de equipamento e
+    // encomendas do mercado carregam `forcas`/`_compraArsenal`). Mobilizar, treinar e
+    // mover tropa que você já tem continua liberado — embargo não desarma, só não repõe.
+    const compraArsenal = !!(acao?._compraArsenal || acao?.forcas);
+    if (compraArsenal) {
+      const emb = armasEmbargadas(jogo.estado);
+      if (emb.bloqueado) {
+        return { ok: false, motivo: `EMBARGO DE ARMAS do Conselho — ${emb.restante} mês(es) restantes. Nenhum fornecedor aceita o pedido.` };
+      }
+    }
     if (jogo.estado.tesouro < custo) return { ok: false, motivo: 'Sem caixa para esta ordem.' };
     if (fila.length >= MAX_FILA) return { ok: false, motivo: 'Fila cheia — espere concluir.' };
     // REVALIDAÇÃO DOS GATES (auditoria 2026-07-17, fato 5): antes, só caixa e tamanho da

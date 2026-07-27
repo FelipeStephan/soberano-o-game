@@ -33,7 +33,7 @@ import { lucroDoTurno, bonusDoTurno, descontoIndustrial } from '../dados/empresa
 import { empresasDoPais } from '../dados/registro.js';
 import { sincronizarPetroleo, tickPreco, manchetePreco } from './petroleo.js';
 import { fluxoPetroleo, impactoPreco } from '../dados/petroleo.js';
-import { bonusBases } from '../dados/bases.js';
+import { bonusBases, expulsarBasesSemPacto } from '../dados/bases.js';
 import { resolverPedidos } from './compras.js';
 import { salvarPartida } from './save.js';
 import { tickGeografia } from './geografia.js';
@@ -52,7 +52,7 @@ const ERA_TURNO_MAX = 120; // agora cada batida é 1 MÊS → 120 meses = uma D�
 function round2(n) { return Math.round(n * 100) / 100; }
 
 export class Jogo {
-  constructor({ ficha, elenco, veiculos, presidente, saveRestaurado }) {
+  constructor({ ficha, elenco, veiculos, presidente, saveRestaurado, semNucleares = false }) {
     // O jogador assina com o próprio nome. Se não assinar, herda o líder fictício
     // da ficha. Este nome viaja pra IA e sai nas manchetes — é o jogador dentro da ficção.
     this.ficha = presidente ? { ...ficha, presidente } : ficha;
@@ -63,7 +63,9 @@ export class Jogo {
 
     // Continuar partida: o estado inteiro vem do save (JSON puro — a mesma coisa
     // que um dia chega pela rede). Senão, cria do zero pela ficha.
-    this.estado = this._saveRestaurado?.estado || criarEstado(ficha);
+    // #6.4 — a regra "sem nucleares" nasce COM o estado (criarEstado já zera as ogivas
+    // iniciais). Num save restaurado ela vem gravada, como qualquer outra chave.
+    this.estado = this._saveRestaurado?.estado || criarEstado(ficha, { semNucleares });
     // Save antigo (anterior aos soldados/reserva): reconstitui a reserva sem quebrar nada.
     if (this.estado.reservaMilitar == null) this.estado.reservaMilitar = reservaInicial(this.estado.iso || ficha.iso || 'USA');
     this.fios = (ficha.fiosSemente || []).map(criarFio);
@@ -387,6 +389,12 @@ export class Jogo {
       conflitosNPC: e.conflitosNPC || [],
       pandemias: e.pandemias || [],
       estreitos: e.estreitosFechados || null,
+      // #6.4 — "SEM NUCLEARES" É REGRA DE SALA, NÃO DE CLIENTE. Quem hospeda define;
+      // todo mundo obedece. Se viajasse só na tela do host, um convidado que não marcou
+      // a caixa jogaria COM bomba num mundo sem bomba — e descobriria isso lançando uma.
+      // Vai no retrato do mundo de propósito: o servidor cacheia a última batida, então
+      // quem entra tarde também nasce sob a regra, sem ninguém precisar avisar.
+      semNucleares: !!e.semNucleares,
     };
   }
 
@@ -399,6 +407,13 @@ export class Jogo {
     if (Array.isArray(d.conflitosNPC)) e.conflitosNPC = d.conflitosNPC;
     if (Array.isArray(d.pandemias)) e.pandemias = d.pandemias;
     if (d.estreitos) e.estreitosFechados = d.estreitos;
+    // A regra da sala manda no cliente. Se a mesa é sem nucleares, o arsenal que veio
+    // da ficha do país some agora — não adianta proibir a fabricação e deixar as 5.500
+    // ogivas iniciais da Rússia no lugar.
+    if (typeof d.semNucleares === 'boolean') {
+      e.semNucleares = d.semNucleares;
+      if (d.semNucleares && (e.ogivas || 0) > 0) e.ogivas = 0;
+    }
     this._periodoSala = d.turno;
   }
 
@@ -421,6 +436,16 @@ export class Jogo {
     if (Object.keys(bonusEmp).length) aplicarEfeitos(this.estado, bonusEmp);
     const bBases = bonusBases(this.estado);
     if (bBases.inteligencia) aplicarEfeitos(this.estado, bBases);
+    // BASE POR ALIANÇA NÃO SOBREVIVE À ALIANÇA. Quem entrou no solo do aliado entrou
+    // amparado por um tratado; se o tratado cai (o membro sai, trai, ou o bloco morre),
+    // o anfitrião manda embora — foi assim nas Filipinas em 92. Sem esta varredura,
+    // romper um pacto não teria custo nenhum no mapa e o direito de base viraria uma
+    // porta que abre e nunca mais fecha.
+    const expulsao = expulsarBasesSemPacto(this.estado);
+    for (const b of expulsao.expulsas) {
+      this._empilharFeed([{ tipo: 'sistema', handle: '⚙ Estado-Maior', cor: '#ff3b5c',
+        texto: `${b.nome} foi DESATIVADA: o pacto que autorizava tropa nossa em ${b.paisNome} não existe mais. Sem tratado, não há base — os últimos aviões decolaram hoje.` }]);
+    }
     economia.lucroEmpresas = lucroEmp; economia.petro = petro;
     for (const e of tickGeografia(this.estado)) this._empilharFeed([{ tipo: 'sistema', handle: 'Estreitos', texto: e.texto, cor: e.tom === 'ruim' ? '#ff3b5c' : e.tom === 'bom' ? '#22e0a0' : '#7488ad' }]);
     decairSimpatiaLista(this.veiculos);

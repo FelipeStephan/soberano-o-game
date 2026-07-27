@@ -5,7 +5,7 @@
 // uma ogiva tem de doer no dedo. Duas etapas obrigatórias — a conta e a confirmação
 // com trava — porque o jogo quer que você HESITE. O horror de depois começa aqui,
 // na fricção de antes.
-import { avaliarOgiva, podeDispararOgiva, dispararOgiva, manchetesNucleares } from '../jogo/nuclear.js';
+import { avaliarOgiva, podeDispararOgiva, dispararOgiva, manchetesNucleares, partidaSemNucleares } from '../jogo/nuclear.js';
 import { bandeira, ISO2_DE } from '../dados/imagens.js';
 import { PAISES } from '../dados/paises.js';
 import { sirene, flashTela } from './efeitos.js';
@@ -19,6 +19,13 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
   const iso = feature?.properties?.ISO_A3 || feature?.properties?.ADM0_A3 || '';
   const pode = podeDispararOgiva(jogo.estado, iso);
   const av = avaliarOgiva(jogo.estado, iso);
+  // PARTIDA SEM NUCLEARES: o painel abre e EXPLICA em vez de sumir. Botão que
+  // desaparece sem motivo vira suporte ("cadê o nuclear?"); regra que aparece
+  // escrita vira acordo — o jogador entende que o mundo é assim, não que quebrou.
+  const semNuke = partidaSemNucleares(jogo.estado);
+  // O alvo é uma PESSOA na sala? A resposta muda o texto do desfecho inteiro: não
+  // se derrota um jogador com uma ogiva, se apaga.
+  const alvoHumano = !!(jogo.ehOnline && jogo._ehHumanoOnline?.(iso));
 
   const modal = document.createElement('div');
   modal.className = 'modal-fundo nuke-modal';
@@ -46,7 +53,11 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
       <b>${esc(av.nome)}</b>
     </div>
 
-    ${!pode.pode ? `<div class="nk-bloqueio">${ico('ban', 16)} ${esc(pode.motivo)}</div>` : `
+    ${semNuke ? `<div class="nk-sem-nuke">
+      <div class="nk-sem-cab">${ico('ban', 15)} MUNDO SEM ARMAS NUCLEARES</div>
+      <p>Esta partida foi criada com o arsenal atômico desligado — e não só o seu: <b>nenhum país do mundo tem ogivas</b>, nem a Rússia, nem os Estados Unidos, nem quem você teme.</p>
+      <p>Não há botão a apertar, não há dissuasão a comprar e não há chantagem a fazer. Esta guerra se decide com exército, dinheiro e conversa — que é exatamente o ponto.</p>
+    </div>` : !pode.pode ? `<div class="nk-bloqueio">${ico('ban', 16)} ${esc(pode.motivo)}</div>` : `
     <div class="nk-arsenal">${ico('radiation', 13)} Ogivas operacionais: <b>${jogo.estado.ogivas}</b> — esta jogada gasta <b>1</b>.</div>
 
     <div class="nk-conta">
@@ -90,12 +101,36 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
     modal.classList.add('lancando');
     modal.querySelector('.nuke-painel').style.display = 'none';
 
-    const relato = dispararOgiva(jogo.estado, iso);
+    const relato = dispararOgiva(jogo.estado, iso, { alvoHumano });
+    // O motor recusou (partida sem nucleares, arsenal vazio, nação já apagada). Nada
+    // voa, nada ecoa na sala — só a explicação. Sem esta saída, o resto da função
+    // encenaria um cogumelo por cima de um lançamento que nunca aconteceu.
+    if (relato.bloqueado) {
+      modal.classList.remove('lancando');
+      const p = modal.querySelector('.nuke-painel');
+      if (p) { p.style.display = ''; p.innerHTML = `<div class="nk-bloqueio">${ico('ban', 16)} ${esc(relato.motivo)}</div>`; }
+      setTimeout(sair, 2600);
+      return;
+    }
 
     // MUNDO ÚNICO: o lançamento nuclear ecoa na sala inteira — todos veem a ogiva.
+    // #6.1 — O PACOTE PRECISA BASTAR. Antes ia só a coordenada e o `interceptado`, e
+    // o outro lado tinha de adivinhar o resto: quem morreu, se sobrou país. Agora vai
+    // tudo que reconstrói a MESMA cratera em qualquer cliente sem inferência —
+    // `zonaMorta` diz se houve impacto de verdade, `iso` diz onde, `de/para` desenham
+    // o arco, `alvoHumano` avisa que quem saiu do mapa era gente.
     jogo._relayOnline?.('nuclear', iso,
       `${jogo.ficha?.presidente || jogo.ficha?.pais || 'Um jogador'} LANÇOU UMA OGIVA NUCLEAR contra ${av.nome}.`,
-      { para: feature?.properties ? { lat: feature.properties.LABEL_Y, lng: feature.properties.LABEL_X } : null, interceptado: relato.interceptado });
+      {
+        iso,
+        zonaMorta: !relato.interceptado,
+        interceptado: !!relato.interceptado,
+        alvoHumano,
+        porIso: jogo.estado.iso || null,
+        porNome: jogo.ficha?.presidente || jogo.ficha?.pais || null,
+        de: globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA') || null,
+        para: feature?.properties ? { lat: feature.properties.LABEL_Y, lng: feature.properties.LABEL_X } : null,
+      });
 
     // o 3D: a ogiva sobe, reentra e — se o escudo do alvo for bom — é ABATIDA no ar.
     // Interceptada: clarão ciano no céu + radar defensivo gigante, sem clarão de tela.
@@ -122,6 +157,10 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
     }
     // aliados horrorizados entram em modo alerta no mapa
     globoCtrl?.alertaTemporario?.(relato.reacoes.map((r) => isoDaRel(r.chave)).filter(Boolean), 30000);
+    // A CRATERA APARECE AGORA, não na próxima batida. `zonasRadioativas` só é lido
+    // quando o globo se atualiza — sem este empurrão o país continuava normal no
+    // mapa de quem acabou de apagá-lo, por até meio minuto.
+    globoCtrl?.atualizar?.();
 
     fechar();
     mostrarDesfecho(relato);
@@ -144,6 +183,7 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
         <div class="nkd-mad">${ico('eye', 16)} <b>O mundo viu.</b> Você apertou o botão e falhou. ${esc(av.nome)} virou vítima diante de todos, e você virou o Estado que tenta o impensável — e erra.</div>
         <div class="nkd-mundo">${ico('globe', 13)} <b>${relato.reacoes.length} nações</b> despencaram nas relações com você. Ninguém esquece uma tentativa.</div>
         <div class="nkd-restante">${ico('radiation', 12)} Ogiva gasta à toa. Restam no arsenal: <b>${relato.ogivasRestantes}</b></div>
+        <div class="nkd-reversivel">${ico('shield', 12)} Não há cratera, não há zona morta, não há território perdido. <b>Nada aqui é permanente</b> — só a memória do mundo, que cobra juros.</div>
         <button class="avancar" id="nkd-ok">ENGOLIR O FRACASSO ${ico('chevron-right', 15)}</button>
       </div>`;
       document.body.appendChild(d);
@@ -151,13 +191,31 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
       return;
     }
 
+    // ── O QUE NÃO VOLTA ────────────────────────────────────────────────
+    // A grade de medidores conta a conjuntura — números que sobem de novo com o
+    // tempo. Esta lista conta o que é PERMANENTE, e o jogador precisa ler os dois
+    // separados: perder soft power é caro; apagar um país é para sempre.
+    const permanente = (relato.zona?.linhas || []);
     d.innerHTML = `<div class="nuke-desfecho">
       <div class="nkd-simbolo">${ico('radiation', 40)}</div>
       <h2>${esc(av.nome).toUpperCase()} FOI APAGADO DO MAPA</h2>
       <p class="nkd-lead">Você cruzou a linha que 80 anos de humanidade tiveram medo de cruzar. O que vem agora não é vitória — é o depois.</p>
 
+      ${relato.alvoHumano ? `<div class="nkd-apagado">${ico('skull', 16)}
+        <span><b>Havia uma pessoa jogando ${esc(av.nome)}.</b> Ela não foi derrotada — foi <b>APAGADA</b>. Não há governo para render, capital para tomar nem acordo para assinar: aquele país saiu da partida, e você foi quem tirou.</span>
+      </div>` : ''}
+
       <div class="nkd-grade">
         ${relato.mudancas.filter((m) => m.delta).slice(0, 6).map((m) => `<span class="mud ${m.delta > 0 ? 'bom' : 'ruim'}">${esc(m.rotulo || m.chave)} ${m.delta > 0 ? '+' : ''}${m.delta}</span>`).join('')}
+      </div>
+
+      <div class="nkd-permanente">
+        <div class="nkd-perm-cab">${ico('radiation', 12)} ISTO NÃO TEM VOLTA</div>
+        <ul>
+          <li>${esc(av.nome)} é uma <b>zona morta permanente</b>. Não se ocupa, não se reconstrói, não se anexa — nunca mais, nesta partida.</li>
+          ${permanente.map((l) => `<li>${esc(l)}</li>`).join('')}
+        </ul>
+        <p class="nkd-perm-nota">Os medidores acima voltam a subir com o tempo. A cratera, não.</p>
       </div>
 
       <div class="nkd-mundo">${ico('globe', 13)} <b>${relato.reacoes.length} nações</b> despencaram nas relações com você. Você é, oficialmente, um pária.</div>

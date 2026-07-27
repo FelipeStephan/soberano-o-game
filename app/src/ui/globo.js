@@ -27,8 +27,9 @@ import { construirMalha, rotaMaritima } from '../jogo/rotasMar.js';
 import { PETROLEO, ESTREITOS } from '../dados/petroleo.js';
 import { NACOES } from '../dados/registro.js';
 import { ico } from './icones.js';
+import { partidaSemNucleares } from '../jogo/nuclear.js';
 
-import { registrarEstados, registrarCidades, semearGuarnicoes, todosEstados, paisCarregado, tropaLivre } from '../jogo/territorio.js';
+import { registrarEstados, registrarCidades, semearGuarnicoes, todosEstados, paisCarregado, tropaLivre, anexadoPor } from '../jogo/territorio.js';
 import { tickTransito, emTransito, iniciarTransito, comprimentoRota, frotasDetectadas, resolverBatalhaNaval, forcaFrota, poderNaval, semearFrotasInimigas, distGraus, setProvedorRota } from '../jogo/frotas.js';
 import { temIntel } from '../jogo/espionagem.js';
 import { corEstado, linhaEstado, alturaEstado, tipEstado, montarPontos, tipPonto, estadosVisiveis, resumoDominios } from './tatico.js';
@@ -42,12 +43,43 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const iso2 = (f) => (f?.properties?.ISO_A2_EH || f?.properties?.ISO_A2 || '').replace('-99', '');
 
 
+// ── ZONA MORTA: a cicatriz que ganha de tudo ───────────────────────────
+// Verde-nuclear dessaturado e ESCURO, de propósito diferente dos outros dois
+// verdes do arquivo: o vivo (#22e0a0) é aliança, o pulsante (rgba(120,230,90))
+// é o alerta do pino recém-caído. Este aqui é cinza-esverdeado morto — a cor
+// de solo que não sustenta mais governo, exército ou colheita.
+const COR_ZONA_MORTA = 'rgba(70, 92, 58, 0.78)';
+
+function ehZonaMorta(estado, code) {
+  return (estado.zonasRadioativas || []).includes(code);
+}
+
+// Balão que a Zona Morta mostra — no hover do pino (linha ~1498) E no clique
+// bloqueado do polígono (onPolygonClick, ~280). Um texto só, pra não narrar a
+// mesma cratera de dois jeitos diferentes dependendo de onde o jogador olhou.
+function tipZonaMorta(code) {
+  return `<div class="gtc-tag tom-zona">Zona radioativa</div><div class="gtc-nome">${esc(PAISES[code]?.nome || code)}</div><p>Devastado por detonação nuclear. Inabitável por gerações. Ninguém ocupa, ninguém reconstrói, ninguém esquece.</p>`;
+}
+
 function corPais(estado, f, realista) {
   const code = iso(f);
+  // PRECEDÊNCIA ABSOLUTA: um cadáver não é "minha nação", não é "aliado", não é
+  // "em guerra" — é o fim da linha. Por isso este teste vem ANTES até de `souEu`:
+  // não existe "meu território, só que irradiado". Sem isto, o país continuaria
+  // pintado de aliança/guerra/ocupação pra sempre, como se ainda houvesse algo
+  // ali para disputar.
+  if (ehZonaMorta(estado, code)) return COR_ZONA_MORTA;
   if (souEu(code)) return 'rgba(255, 200, 60, 0.30)';   // discreto: quem marca é o pino
-  // ANEXADO É MEU: depois da anexação o país deixa de ser "ocupação" e passa a ser
-  // território nacional — pinta com a MINHA cor, não com a relação diplomática.
-  if (estado.ocupacoes?.[code]?.anexado) return 'rgba(255, 200, 60, 0.30)';
+  // ANEXADO: o país deixou de ser "ocupação" e virou província — pinta pela POSSE,
+  // não pela relação diplomática. Mas a província é de QUEM anexou: `ocupacoes` guarda
+  // as anexações de toda a sala (o evento `anexacao` grava `por`), e ler só o
+  // `.anexado` pintava de dourado-meu um país que a Rússia tinha incorporado.
+  const anexador = anexadoPor(estado, code);
+  if (anexador) {
+    return anexador === (estado.iso || 'USA')
+      ? 'rgba(255, 200, 60, 0.30)'      // minha província: cor de casa
+      : 'rgba(255, 150, 40, 0.55)';     // província alheia: laranja de domínio estrangeiro
+  }
   if (estaOcupado(estado, code)) return 'rgba(255, 150, 40, 0.55)';
   if ((estado.emGuerra || []).includes(code)) return 'rgba(255, 59, 92, 0.55)';
   // ALIADO É INCONFUNDÍVEL: quem está numa aliança comigo fica VERDE VIVO — acima da
@@ -68,6 +100,10 @@ function corPais(estado, f, realista) {
 // Relevo mínimo: nada de blocos gigantes saindo do planeta.
 function altitudeDe(estado, f) {
   const code = iso(f);
+  // Cicatriz não disputa território: fica RASA sempre, nunca erguida como guerra
+  // ou ocupação — erguer uma zona morta seria fingir que ainda há algo ali pra
+  // tomar. Vem antes dos outros dois testes pela mesma razão de corPais().
+  if (ehZonaMorta(estado, code)) return 0.006;
   if (estaOcupado(estado, code)) return 0.012;
   if ((estado.emGuerra || []).includes(code)) return 0.012;
   return 0.006;
@@ -141,7 +177,12 @@ function tooltip(estado, f, selecionado = false) {
     alerta: df.boost > 0,
   });
   if (pib) dados.push({ ic: 'circle-dollar-sign', rot: 'PIB', v: `${pib} tri` });
-  if (ficha?.ogivas > 0) dados.push({ ic: 'radiation', rot: 'Ogivas', v: ficha.ogivas, alerta: true });
+  // PARTIDA SEM NUCLEARES: a ficha ESTÁTICA de cada país (NACOES[iso].ficha) não
+  // sabe nada da sua sala — ela diria "Ogivas: 5500" pra Rússia mesmo numa mesa
+  // que o dono criou explicitamente sem a bomba. `partidaSemNucleares` é a fonte
+  // única (jogo/nuclear.js) de "existe ogiva nesta partida?"; sem este cadeado o
+  // hover mentiria um arsenal que o motor nunca deixaria disparar.
+  if (!partidaSemNucleares(estado) && ficha?.ogivas > 0) dados.push({ ic: 'radiation', rot: 'Ogivas', v: ficha.ogivas, alerta: true });
   if (petro) dados.push({ ic: 'fuel', rot: 'Reservas', v: `${petro.reservas} bi`, oleo: true });
 
   const blocos = blocosDoIso(code).map((b) => b.nome).join(' · ');
@@ -260,7 +301,7 @@ export async function montarGlobo(container, jogo, {
     // O clique lê o que foi clicado, não "em que modo estou".
     //   Estado  → reforçar (seu) ou designar alvo (alheio, no Teatro).
     //   País    → 1º clique SELECIONA e o abre em estados; 2º clique agrega ações.
-    .onPolygonClick(async (f) => {
+    .onPolygonClick(async (f, ev) => {
       cliqueNaEsfera = true;                 // o raio acertou um país/estado — não é clique no vazio
       ultimoCliquePoligono = Date.now();     // avisa o onGlobeClick: este clique JÁ foi tratado como terra
       tocarEfeito('click', { volume: 0.8 }); // o canvas WebGL não passa pelo listener global de som
@@ -271,6 +312,17 @@ export async function montarGlobo(container, jogo, {
         return;
       }
       const code = iso(f);
+      // NÃO SE CLICA NUM CEMITÉRIO: não há governo pra reconhecer aliança, exército
+      // pra atacar ou porto pra ocupar — o painel de país inteiro pressupõe um país
+      // vivo do outro lado. Em vez de abrir o modal, mostra o MESMO balão do pino de
+      // zona morta (tipZonaMorta). `selecionado` fica intocado de propósito: se ele
+      // virasse este ISO, pintarCamada() (~2031) pintaria o país de CYAN de seleção
+      // por cima da cor de cicatriz — escondendo o luto atrás de "país escolhido".
+      if (ehZonaMorta(jogo.estado, code)) {
+        mostrarTipMarcador(tipZonaMorta(code));
+        if (ev) moverTip(ev);   // posiciona o balão já no ponto do clique, sem esperar o próximo mousemove
+        return;
+      }
       // país EM GUERRA: ecoa o som de guerra (instância única que PARA ao trocar/deselecionar);
       // país em paz: silencia o eco anterior.
       if ((jogo.estado.emGuerra || []).includes(code)) tocarGuerraFundo();
@@ -316,6 +368,10 @@ export async function montarGlobo(container, jogo, {
         if (solo === null) { tocarEfeito('click', { volume: 0.8 }); onAlvoMar?.(c); return; }
         setTimeout(() => {
           if (Date.now() - ultimoCliquePoligono < 300) return;   // o polígono já tratou
+          // MESMO CADEADO do onPolygonClick: este é só o caminho de RESERVA (quando o
+          // raio acerta o país mas o polígono não disparou). Um cemitério não vira
+          // alvo de posição naval nem abre painel aqui também.
+          if (ehZonaMorta(jogo.estado, solo)) { mostrarTipMarcador(tipZonaMorta(solo)); moverTip(ev); return; }
           const f = features.find((x) => iso(x) === solo);
           if (f && selecionado !== solo) {
             selecionado = solo; desenharLinha(f, 'foco'); focar(f); atualizar(); onPaisSelecionado?.(f);
@@ -1422,13 +1478,16 @@ export async function montarGlobo(container, jogo, {
   }
 
   // ── LINHA DE AÇÃO: traça do seu país até o alvo ────────────────────
-  const CORES_LINHA = { foco: '#35e0ff', ataque: '#ff3b5c', comercio: '#22e0a0', espionagem: '#b98cff', venda: '#ffb020' };
+  // `preparacao` (#4.2): a ofensiva ainda está sendo montada. É a MESMA cor do ataque,
+  // mas arrastada de propósito (vel alta = pulso lento) — lê como intenção, não como
+  // soco. Enquanto ela está no mapa, nenhum míssil voa: o ferro só sai no impacto.
+  const CORES_LINHA = { foco: '#35e0ff', ataque: '#ff3b5c', preparacao: '#ff6a45', comercio: '#22e0a0', espionagem: '#b98cff', venda: '#ffb020' };
   function desenharLinha(alvo, tipo = 'foco', duracao = 5200, origem = null) {
     const eu = origem || ondeEsta(jogadorIso());
     const c = alvo?.properties ? centro(alvo) : alvo;
     if (!eu || !c || (c.lat === eu.lat && c.lng === eu.lng)) return;
     const cor = CORES_LINHA[tipo] || CORES_LINHA.foco;
-    const arco = { startLat: eu.lat, startLng: eu.lng, endLat: c.lat, endLng: c.lng, cor: [cor, `${cor}00`], vel: tipo === 'ataque' ? 900 : 2200 };
+    const arco = { startLat: eu.lat, startLng: eu.lng, endLat: c.lat, endLng: c.lng, cor: [cor, `${cor}00`], vel: tipo === 'ataque' ? 900 : tipo === 'preparacao' ? 4200 : 2200 };
     arcos = [...arcos, arco];
     pintarArcos();
     setTimeout(() => { arcos = arcos.filter((a) => a !== arco); pintarArcos(); }, duracao);
@@ -1492,12 +1551,18 @@ export async function montarGlobo(container, jogo, {
       focos.push({ ...c, cor: 'rgba(120,230,90,', raio: 8, vel: 1.4, periodo: 900, forca: 0.9 });
       novos.push({ ...c, tipo: 'radioativa', svg: ico('radiation', 13), rot: 'ZONA MORTA',
         titulo: `${PAISES[code]?.nome || code} — devastado por arma nuclear`,
-        tip: `<div class="gtc-tag tom-zona">Zona radioativa</div><div class="gtc-nome">${esc(PAISES[code]?.nome || code)}</div><p>Devastado por detonação nuclear. Inabitável por gerações. Ninguém ocupa, ninguém reconstrói, ninguém esquece.</p>` });
+        tip: tipZonaMorta(code) });
     }
 
     // GUERRA ATIVA: radar vermelho, largo e agressivo. Duas ondas (uma lenta, uma
     // rápida) pra dar a sensação de varredura de radar. Fica enquanto durar o conflito.
     for (const code of jogo.estado.emGuerra || []) {
+      // CINTO E SUSPENSÓRIO: o motor já tira o ISO de `emGuerra` no instante em que
+      // a zona morta nasce (aplicarZonaMorta, jogo/nuclear.js) — mas no online um
+      // snapshot antigo do host pode chegar DEPOIS e reintroduzir o ISO no array.
+      // Sem este filtro, o mesmo país piscaria zona morta E radar de guerra ao
+      // mesmo tempo: dois destinos pro mesmo cadáver.
+      if (ehZonaMorta(jogo.estado, code)) continue;
       const c = ondeEsta(code); if (!c) continue;
       focos.push({ ...c, cor: 'rgba(255,59,92,', raio: 14, vel: 3.4, periodo: 460, forca: 1 });
       focos.push({ ...c, cor: 'rgba(255,120,60,', raio: 9, vel: 1.7, periodo: 900, forca: 0.7 });
@@ -1508,6 +1573,9 @@ export async function montarGlobo(container, jogo, {
     // OCUPAÇÃO: radar laranja, mais lento. A intensidade acompanha a insurgência —
     // território calmo pulsa devagar; território fervendo pisca feito alarme.
     for (const oc of jogo.estado.conquistados || []) {
+      // Mesmo cinto e suspensório do loop de guerra acima: um snapshot atrasado
+      // pode reintroduzir a ocupação de um território que já é cratera.
+      if (ehZonaMorta(jogo.estado, oc.iso)) continue;
       const c = ondeEsta(oc.iso); if (!c) continue;
       const critico = oc.insurgencia >= 60;
       focos.push({
@@ -1526,7 +1594,12 @@ export async function montarGlobo(container, jogo, {
         tip: `<div class="gtc-tag tom-neutro">Frota em patrulha</div><div class="gtc-nome">Sua Marinha</div><p><b>${navios.toLocaleString('pt-BR')}</b> embarcações no mar — ${(f.navios || 0).toLocaleString('pt-BR')} navios de guerra e ${(f.porta_avioes || 0)} porta-aviões. É o que projeta o seu poder longe de casa.</p>` });
       if (f.cacas) novos.push({ lat: eu.lat + 11, lng: eu.lng + 16, tipo: 'aereo', svg: ico('plane', 12), rot: `${f.cacas}`, titulo: 'Força aérea',
         tip: `<div class="gtc-tag tom-neutro">Caças de prontidão</div><div class="gtc-nome">Sua Força Aérea</div><p><b>${f.cacas.toLocaleString('pt-BR')}</b> caças prontos para decolar. Quem domina o céu decide a guerra moderna.</p>` });
-      if (jogo.estado.ogivas) novos.push({ lat: eu.lat + 4, lng: eu.lng - 12, tipo: 'nuke', svg: ico('radiation', 12), rot: `${jogo.estado.ogivas}`, titulo: 'Arsenal nuclear',
+      // PARTIDA SEM NUCLEARES: `jogo.estado.ogivas` pode até estar com um resto de
+      // valor num save antigo ou snapshot do host — mas se a sala é sem nucleares o
+      // pino nem deveria existir. `partidaSemNucleares` é a mesma trava que o motor
+      // usa pra recusar o disparo (jogo/nuclear.js); a UI não pode anunciar um
+      // arsenal que o próprio jogo se recusaria a lançar.
+      if (!partidaSemNucleares(jogo.estado) && jogo.estado.ogivas) novos.push({ lat: eu.lat + 4, lng: eu.lng - 12, tipo: 'nuke', svg: ico('radiation', 12), rot: `${jogo.estado.ogivas}`, titulo: 'Arsenal nuclear',
         tip: `<div class="gtc-tag tom-hostil">${jogo.estado.ogivas} ogiva(s) pronta(s)</div><div class="gtc-nome">Seu Arsenal Nuclear</div><p>Bombas nucleares prontas para lançamento. A arma que redesenha o mapa — e o tabu que ninguém quer ser o primeiro a quebrar. Clique num país inimigo para mirar.</p>` });
     }
     // AS BASES: projeção de poder tem de ser visível. Cada instalação é um
