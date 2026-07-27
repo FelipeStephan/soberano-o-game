@@ -1,0 +1,206 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   ABERTURA DO CONSELHO — a cinemática de 15s antes da votação
+   ═══════════════════════════════════════════════════════════════════════
+   Mesma cabine militar do resto do jogo: chanfro (clip-path) em vez de
+   border-radius, rótulo em var(--mono) caixa alta com tracking largo, cor
+   SEMÂNTICA (cyan = protocolo, âmbar = documento, perigo = acusação).
+
+   A REGRA QUE MANDA AQUI: o texto é o herói, a animação é moldura. Toda
+   animação entra em ~500ms e PARA — nada fica pulsando embaixo de texto que
+   a pessoa está lendo. Foi o erro que quase entrou nesta tela: um scanline
+   animado atrás do nome do réu deixava o nome ilegível justamente no
+   segundo em que ele importa.
+
+   DALTÔNICO LÊ IGUAL: nenhuma etapa depende de cor. Cada uma tem rótulo
+   escrito ("O BANCO DOS RÉUS") + ícone lucide. A cor só reforça.
+
+   Camada: --z-fx (900). Fica acima de modal, popover e tooltip — é tela
+   cheia diegética e nada pode furar ela. Só o grão (--z-grao) passa por
+   cima, e ele é pointer-events:none.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@keyframes cabSelo    { from { opacity: 0; transform: scale(.5) rotate(-16deg); } }
+@keyframes cabSobe    { from { opacity: 0; transform: translateY(16px); } }
+@keyframes cabLado    { from { opacity: 0; transform: translateX(-24px); } }
+@keyframes cabAbre    { from { opacity: 0; } }
+@keyframes cabBandeira{ from { opacity: 0; transform: scale(1.35); filter: blur(14px); } }
+@keyframes cabPulso   { 50% { opacity: .5; } }
+/* Varredura: passa UMA vez ao entrar a cena e some. Não fica em loop. */
+@keyframes cabVarre   { from { transform: translateY(-100%); opacity: .55; } to { transform: translateY(100%); opacity: 0; } }
+
+/* ── O OVERLAY ─────────────────────────────────────────────────────── */
+.cab-over { position: fixed; inset: 0; z-index: var(--z-fx); display: flex; flex-direction: column;
+  align-items: center; justify-content: center; padding: 24px;
+  background:
+    radial-gradient(circle at 50% 42%, rgba(10,20,38,.96), rgba(1,3,7,.99) 70%),
+    #010307;
+  animation: cabAbre .3s ease both; }
+
+/* Grade de cabine ao fundo: dá profundidade sem competir com o texto (opacidade
+   baixíssima de propósito — é papel de parede, não conteúdo). */
+.cab-grade { position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background:
+    linear-gradient(rgba(53,224,255,.045) 1px, transparent 1px) 0 0 / 100% 38px,
+    linear-gradient(90deg, rgba(53,224,255,.045) 1px, transparent 1px) 0 0 / 38px 100%;
+  -webkit-mask-image: radial-gradient(circle at 50% 45%, #000 20%, transparent 78%);
+  mask-image: radial-gradient(circle at 50% 45%, #000 20%, transparent 78%); }
+
+/* O palco tem altura fixa: sem isso a troca de etapa fazia a barra de progresso
+   e o botão PULAR SALTAREM pra cima e pra baixo a cada 3 segundos. */
+.cab-palco { position: relative; z-index: 1; width: min(820px, 100%);
+  min-height: min(62vh, 460px); display: grid; place-items: center; }
+
+.cab-cena { position: relative; display: flex; flex-direction: column; align-items: center;
+  gap: 14px; width: 100%; text-align: center; animation: cabSobe .5s cubic-bezier(.2,.9,.3,1) both; }
+/* A varredura vive num ::after da cena — nasce e morre com ela. */
+.cab-cena::after { content: ''; position: absolute; inset: -20px; pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(53,224,255,.11), transparent);
+  animation: cabVarre .9s ease-out both; }
+
+/* ── RÓTULOS (a etiqueta em cima de cada etapa) ────────────────────── */
+.cab-rot { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono);
+  font-size: 9.5px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase;
+  color: var(--fraco); }
+.cab-rot .ico { flex: none; }
+.cab-cyan   { color: var(--cyan); }
+.cab-ambar  { color: var(--ambar); }
+.cab-perigo { color: var(--perigo); }
+.cab-pc     { color: var(--pc, var(--cyan)); }
+
+.cab-sub { margin: 0; max-width: 46ch; font-size: 12.5px; line-height: 1.55; color: #a9bbd6; }
+.cab-chamada { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono);
+  font-size: 9.5px; letter-spacing: .22em; color: var(--fraco); animation: cabPulso 1.2s ease-in-out infinite; }
+
+/* ── ETAPA 1 — o selo se formando ──────────────────────────────────── */
+.cab-selo { display: grid; place-items: center; width: 92px; height: 92px; color: var(--cyan);
+  background: rgba(53,224,255,.08); box-shadow: inset 0 0 0 1px rgba(53,224,255,.45), 0 0 70px -18px var(--cyan);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  animation: cabSelo .55s cubic-bezier(.2,1.5,.4,1) both; }
+.cab-tit { margin: 0; font-family: var(--disp); font-size: clamp(24px, 5.2vw, 46px); font-weight: 700;
+  line-height: 1.02; letter-spacing: .1em; color: #fff; text-shadow: 0 0 40px rgba(53,224,255,.35); }
+
+.cab-adesao { display: flex; gap: 1px; background: rgba(150,190,240,.12); }
+.cab-ad { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 92px;
+  padding: 9px 14px; background: rgba(6,11,20,.94); }
+.cab-ad b { font-family: var(--disp); font-size: 26px; font-weight: 700; line-height: 1;
+  font-variant-numeric: tabular-nums; }
+.cab-ad i { font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .14em; color: var(--fraco); }
+.cab-ad.sim b { color: var(--verde); }
+.cab-ad.nao b { color: var(--perigo); }
+.cab-ad.tot b { color: var(--texto); }
+
+/* ── ETAPA 2 — quem convocou ───────────────────────────────────────── */
+.cab-cartao { display: flex; align-items: center; gap: 18px; padding: 16px 22px 16px 16px;
+  background: linear-gradient(150deg, rgba(10,19,34,.98), rgba(4,8,15,.96));
+  box-shadow: inset 3px 0 0 var(--cyan), inset 0 0 0 1px var(--borda), 0 0 60px -26px var(--cyan);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: cabLado .5s cubic-bezier(.2,.9,.3,1) both .1s; }
+.cab-cartao-txt { display: flex; flex-direction: column; gap: 5px; text-align: left; min-width: 0; }
+.cab-cartao-txt b { font-family: var(--disp); font-size: clamp(20px, 3.6vw, 32px); font-weight: 700;
+  line-height: 1.05; letter-spacing: .04em; color: #fff; }
+.cab-cartao-txt i { font-style: normal; display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--cyan); }
+
+/* ── ETAPA 3 — o documento desclassificado ─────────────────────────── */
+.cab-doc { width: min(660px, 100%); padding: 18px 22px 22px; text-align: left;
+  background: linear-gradient(180deg, rgba(14,17,22,.98), rgba(6,8,12,.97));
+  box-shadow: inset 0 0 0 1px rgba(255,176,32,.3), 0 0 70px -30px var(--ambar);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px)); }
+.cab-doc-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-bottom: 10px; margin-bottom: 12px; border-bottom: 1px solid rgba(255,176,32,.22);
+  font-family: var(--mono); font-size: 8px; letter-spacing: .2em; color: var(--fraco); }
+/* O carimbo é torto e translúcido: lê como tinta em papel, não como badge de app. */
+.cab-doc-sel { padding: 3px 9px; color: var(--ambar); font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(255,176,32,.55); transform: rotate(-2.5deg); opacity: .9; }
+.cab-doc h2 { margin: 0 0 10px; font-family: var(--disp); font-size: clamp(18px, 3.2vw, 27px);
+  font-weight: 700; line-height: 1.15; letter-spacing: .03em; color: #fff; }
+.cab-doc p { margin: 0; font-size: 13.5px; line-height: 1.65; color: #c3d4ee;
+  max-height: 8.5em; overflow: hidden; }
+
+/* ── ETAPA 4 — O RÉU. É por isto que a cinemática existe ───────────── */
+.cab-reu-cena { gap: 6px; }
+.cab-reu { position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding-top: 6px; }
+.cab-reu .cab-flag.gigante { width: min(420px, 82vw); aspect-ratio: 3 / 2; object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(255,59,92,.5), 0 0 120px -30px var(--perigo);
+  clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+  animation: cabBandeira .75s cubic-bezier(.16,.9,.24,1) both; }
+/* O nome entra 350ms DEPOIS da bandeira: quem reconhece a bandeira descobre
+   antes de quem precisa ler. Essa meia respiração é o susto. */
+.cab-reu-nome { font-family: var(--disp); font-size: clamp(30px, 7.5vw, 66px); font-weight: 700;
+  line-height: 1; letter-spacing: .07em; color: #fff; text-shadow: 0 0 46px rgba(255,59,92,.55);
+  animation: cabSobe .5s cubic-bezier(.2,.9,.3,1) both .35s; }
+.cab-reu-iso { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono);
+  font-size: 9.5px; letter-spacing: .22em; color: var(--perigo);
+  animation: cabAbre .4s ease both .6s; }
+
+/* ── ETAPA 5 — a pena em jogo ──────────────────────────────────────── */
+.cab-pena { display: flex; flex-direction: column; align-items: center; gap: 8px;
+  width: min(560px, 100%); padding: 22px 26px;
+  background: color-mix(in srgb, var(--pc) 13%, rgba(6,11,20,.96));
+  box-shadow: inset 0 0 0 1px var(--pc), 0 0 90px -30px var(--pc);
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  animation: cabSobe .5s cubic-bezier(.2,.9,.3,1) both .08s; }
+.cab-pena-ic { color: var(--pc); display: grid; place-items: center;
+  animation: cabSelo .5s cubic-bezier(.2,1.5,.4,1) both .12s; }
+.cab-pena b { font-family: var(--disp); font-size: clamp(22px, 4.6vw, 40px); font-weight: 700;
+  line-height: 1.05; letter-spacing: .09em; color: #fff; }
+.cab-pena i { font-style: normal; font-size: 12.5px; line-height: 1.5; color: #c3d4ee; }
+
+/* ── BANDEIRAS (compartilhado) + placa de fallback ─────────────────── */
+.cab-flag { display: block; flex: none; background: #0a1626; }
+.cab-flag.media { width: 88px; aspect-ratio: 3 / 2; object-fit: cover;
+  box-shadow: 0 0 0 1px rgba(180,215,255,.28); }
+/* Sem bandeira o espaço não colapsa: entra a sigla no mesmo tamanho. */
+.cab-flag.sem { display: grid; place-items: center; font-family: var(--mono); font-weight: 700;
+  letter-spacing: .12em; color: var(--fraco); background: rgba(10,22,38,.95);
+  box-shadow: inset 0 0 0 1px var(--borda); }
+.cab-flag.media.sem { font-size: 12px; }
+.cab-flag.gigante.sem { width: min(420px, 82vw); aspect-ratio: 3 / 2; font-size: clamp(28px, 8vw, 64px);
+  color: var(--perigo); box-shadow: inset 0 0 0 1px rgba(255,59,92,.45); }
+
+/* ── O PÉ — progresso, contador e o PULAR ──────────────────────────── */
+.cab-pe { position: relative; z-index: 1; display: flex; align-items: center; gap: 16px;
+  width: min(820px, 100%); margin-top: 26px; }
+/* Sem barra, 15s de tela cheia parecem travamento e o jogador dá F5 no meio
+   da própria cinemática. Ela é informação, não enfeite. */
+.cab-prog { flex: 1; height: 3px; background: rgba(150,190,240,.14); overflow: hidden; }
+/* A largura vem do tick de 100ms no JS (uma transição de 15s não pegava no frame
+   de inserção do overlay). A transição curta só amacia os degraus. */
+.cab-prog i { display: block; width: 0; height: 100%; background: var(--cyan);
+  box-shadow: 0 0 12px var(--cyan); transition: width .14s linear; }
+.cab-conta { display: flex; align-items: baseline; gap: 4px; flex: none; }
+.cab-conta b { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--texto);
+  font-variant-numeric: tabular-nums; min-width: 2ch; text-align: right; }
+.cab-conta span { font-family: var(--mono); font-size: 7.5px; letter-spacing: .14em; color: var(--fraco); }
+/* Discreto DE PROPÓSITO: na 1ª sessão ninguém pula, na 12ª todo mundo pula.
+   Ele não pode disputar atenção com a cena — só estar lá quando procurado. */
+.cab-pular { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 8px 14px;
+  cursor: pointer; border: 0; border-radius: 0; font-family: var(--mono); font-size: 9px;
+  font-weight: 700; letter-spacing: .18em; color: var(--fraco); background: transparent;
+  box-shadow: inset 0 0 0 1px var(--borda);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+.cab-pular:hover { color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan); }
+
+/* ── TELAS ESTREITAS ──────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .cab-over { padding: 16px; }
+  .cab-palco { min-height: min(68vh, 400px); }
+  .cab-cartao { flex-direction: column; text-align: center; padding: 16px; }
+  .cab-cartao-txt { align-items: center; text-align: center; }
+  .cab-doc { padding: 14px 16px 18px; }
+  .cab-doc p { max-height: 7em; font-size: 12.5px; }
+  .cab-adesao { width: 100%; }
+  .cab-ad { flex: 1; min-width: 0; padding: 8px 6px; }
+  .cab-pe { gap: 10px; margin-top: 18px; }
+}
+
+/* Quem pediu menos animação no sistema recebe as etapas em corte seco. A
+   informação é a mesma — a moldura é que desliga. */
+@media (prefers-reduced-motion: reduce) {
+  .cab-over, .cab-cena, .cab-selo, .cab-cartao, .cab-reu .cab-flag.gigante,
+  .cab-reu-nome, .cab-reu-iso, .cab-pena, .cab-pena-ic, .cab-chamada { animation: none !important; }
+  .cab-cena::after { display: none; }
+  /* A barra CONTINUA andando: ela não é enfeite, é o "quanto falta". Quem pediu
+     menos movimento não pediu pra ficar sem saber quanto tempo resta. */
+}

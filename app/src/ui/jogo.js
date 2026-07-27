@@ -279,7 +279,16 @@ export function iniciarJogo(container, jogo, opts = {}) {
     chatBloco = montarChatBloco(jogo, net, { ehHumano: (iso) => !!onlineCtrl?.ehHumano(iso) });
     onuCtrl = montarONU(jogo, net, { onlineCtrl, globoCtrl: () => globoCtrl });
     net.setHandlers({
-      onDireto: (m) => { if (chatBloco.aoDireto(m)) return; telefonia.aoDireto(m); },
+      // TRÊS CONSUMIDORES NO MESMO CANAL `direto`, e a ordem importa: a voz da mesa
+      // (`voz-*`) é a mais específica e a mais barata de descartar; o chat de bloco vem
+      // depois; a telefonia 1:1 é a última porque é a que mais abre janela na tela — se
+      // ela visse um bilhete de sinalização da ONU, faria pipocar "chamada recebida" no
+      // meio de uma sessão do Conselho.
+      onDireto: (m) => {
+        if (onuCtrl?.aoDireto(m)) return;
+        if (chatBloco.aoDireto(m)) return;
+        telefonia.aoDireto(m);
+      },
       onDiretoFalhou: (m) => { /* alvo saiu da sala no meio: a UI da chamada resolve pelo timeout */ },
     });
   }

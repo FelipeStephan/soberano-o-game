@@ -15,6 +15,7 @@ import './estilo.css';
 // só acrescenta o que é dela.
 import './estilo-nuclear.css';
 import './estilo-onu.css';
+import './estilo-onu-abertura.css';
 import { mostrarInicio } from './ui/inicio.js';
 import { iniciarJogo } from './ui/jogo.js';
 import { Jogo } from './jogo/motor.js';

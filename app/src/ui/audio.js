@@ -26,6 +26,7 @@ const URLS = {
   'missil-1': '/audio/missil-1.mp3',             // swooshs de míssil (variam por salva)
   'missil-2': '/audio/missil-2.mp3',
   'missil-3': '/audio/missil-3.mp3',
+  'conselho-suspense': '/audio/conselho-suspense.mp3', // abertura do Conselho de Segurança
 };
 // DECISÃO DO DONO: o slider de volume controla SÓ A MÚSICA DE FUNDO. Efeitos
 // (click, radar, míssil…) tocam num volume fixo calibrado — o mute silencia tudo.
@@ -54,6 +55,7 @@ function aplicarVolumes() {
   musica.volume = volumeMusica();
   musica.muted = estado.mudo;
   if (nuclearAtual) nuclearAtual.volume = estado.mudo ? 0 : VOL_EFEITOS;
+  if (conselhoAtual) conselhoAtual.volume = estado.mudo ? 0 : VOL_EFEITOS;
   document.querySelectorAll('.aud-ctl').forEach(pintarWidget);
 }
 
@@ -105,6 +107,40 @@ function tocarNuclear() {
     duckando = false; nuclearAtual = null;
     musica.volume = volumeMusica();
   });
+}
+
+// ── TRILHA DO CONSELHO (ducking + fade de saída) ───────────────────────
+// A abertura do Conselho de Segurança dura 15s, o arquivo tem ~18,9s. Ou seja:
+// a cinemática SEMPRE termina antes da música. Por isso o parar() não corta seco
+// — desce o volume em 800ms enquanto a tela vira pra votação. Sem isso o corte
+// soava como um cabo arrancado, e a cena que o dono quis "bonitinha" azedava no
+// último segundo. Também não faz loop: a música é longa demais pra precisar.
+let conselhoAtual = null;
+export function tocarConselho() {
+  // Duas convocações emendadas (jogador pulou uma e outra sala abriu) não podem
+  // sobrepor duas trilhas: a anterior morre agora.
+  if (conselhoAtual) { try { conselhoAtual.pause(); } catch {} conselhoAtual = null; }
+  duckando = true;
+  musica.volume = volumeMusica();
+  const restaurar = () => { duckando = false; musica.volume = volumeMusica(); };
+
+  const a = tocarEfeito('conselho-suspense', { volume: 1 });
+  // Mudo global (ou arquivo faltando): a cinemática roda muda, mas quem chamou
+  // ainda recebe um { parar() } válido — não é trabalho dele saber do mute.
+  if (!a) { restaurar(); return { parar() {} }; }
+  conselhoAtual = a;
+  a.addEventListener('ended', () => {
+    if (conselhoAtual !== a) return;
+    conselhoAtual = null; restaurar();
+  });
+  return {
+    parar() {
+      if (conselhoAtual !== a) return;   // já parada/substituída
+      conselhoAtual = null;
+      fade(a, a.volume ?? VOL_EFEITOS, 0, 800, () => { try { a.pause(); a.currentTime = 0; } catch {} });
+      restaurar();                       // a música de fundo já pode voltar a subir
+    },
+  };
 }
 
 // ── FADE genérico de um <audio> (sobe/desce o volume aos poucos) ───────

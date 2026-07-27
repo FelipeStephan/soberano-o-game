@@ -44,13 +44,22 @@ export function montarTelefonia(jogo, net, { globoCtrl } = {}) {
     onEstado: (s, extra) => {
       if (s === 'chamando') telaChamada(extra.alvo, 'DISCANDO — LINHA SEGURA', 'chamando');
       else if (s === 'tocando') telaRecebendo(extra.de, extra.deNome);
+      // ESTABELECENDO: a tela que faltava. Quem atendia ficava sem UI nenhuma
+      // enquanto o ICE negociava — sem status, sem botão de abortar, sem saída.
+      else if (s === 'estabelecendo') telaChamada(extra.alvo, 'ESTABELECENDO LINHA', 'chamando');
       else if (s === 'conectada') telaConectada(extra.alvo);
+      // Conectou e nenhuma voz chegou: dizer isso é melhor que deixar o jogador
+      // falando pro vazio. Não derruba a chamada — só troca o rótulo.
+      else if (s === 'sem_audio') avisarSemAudio();
+      else if (s === 'sem_resposta') telaFim(`${nomeDe(extra.alvo || extra.de)} não atendeu — a linha caiu por tempo.`, 'ruim');
       else if (s === 'recusada') telaFim(`${nomeDe(extra.de)} recusou a chamada.`, 'ruim');
       else if (s === 'ocupado') telaFim(`A linha de ${nomeDe(extra.de)} está ocupada.`, 'ruim');
       else if (s === 'aviao') telaFim(`O telefone do outro lado está DESLIGADO (modo avião).`, 'ruim');
       else if (s === 'offline') telaFim(`${nomeDe(extra.alvo)} não está na sala agora.`, 'ruim');
       else if (s === 'erro') telaFim(extra.motivo || 'Falha na linha.', 'ruim');
-      else if (s === 'encerrada') { pararCronometro(); fecharOverlays(); }
+      // encerrada também precisa matar a vibração: o auto-recusa por tempo esgotado
+      // fecha o cartão pela rede, sem ninguém clicar em nada.
+      else if (s === 'encerrada') { pararCronometro(); pararVibra(); fecharOverlays(); }
     },
   });
 
@@ -139,7 +148,18 @@ export function montarTelefonia(jogo, net, { globoCtrl } = {}) {
       <button class="tel-desligar" id="tel-desligar">${ico('phone-off', 15)} ABORTAR</button>
     </div>`;
     palco().appendChild(over);
-    over.querySelector('#tel-desligar').addEventListener('click', () => tel.encerrar());
+    // ABORTAR serve nos dois papéis: se a chamada ainda está TOCANDO aqui (atendi e
+    // desisti antes de a linha subir), o certo é recusar — assim o outro lado sabe.
+    over.querySelector('#tel-desligar').addEventListener('click', () => {
+      if (tel.tocando()) tel.recusar('recusou'); else tel.encerrar();
+    });
+  }
+
+  // Aviso dentro da tela de conversa: linha aberta, mas nenhuma voz chegando.
+  // Sem isto o jogador jurava estar conectado enquanto falava pro vazio.
+  function avisarSemAudio() {
+    const alvo = document.querySelector('.tel-over.conectada .tel-alvo span');
+    if (alvo) { alvo.className = 'ruim'; alvo.textContent = 'LINHA ABERTA — MAS SEM ÁUDIO DO OUTRO LADO'; }
   }
 
   function telaConectada(alvoIso) {
@@ -182,6 +202,9 @@ export function montarTelefonia(jogo, net, { globoCtrl } = {}) {
     document.body.appendChild(el);
     el.querySelector('#tel-sim').addEventListener('click', async () => {
       el.remove(); pararVibra();
+      // A tela vem ANTES de pedir o microfone: a permissão do navegador pode
+      // demorar (ou ficar pendente) e o jogador não pode ficar olhando pro nada.
+      telaChamada(dePais, 'AUTORIZANDO O MICROFONE', 'chamando');
       // atender também pergunta o microfone (uma vez; rápido)
       const { mics } = await listarMicrofones();
       await tel.atender(mics?.[0]?.id);

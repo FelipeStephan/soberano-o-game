@@ -319,3 +319,102 @@
   .onu-reu-nome { font-size: 26px; }
   .onu-chamado { right: 12px; left: 12px; width: auto; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   CONVOCAÇÃO SELADA, ADESÃO E MICROFONE DA MESA
+   ═══════════════════════════════════════════════════════════════════════
+   Três blocos que nasceram do mesmo pedido: o Conselho deixou de ser um formulário que
+   abre uma votação e passou a ser um EVENTO — envelope lacrado, a sala decidindo no
+   escuro se abre o tribunal, e voz de verdade na mesa. A cor conta a história: ciano
+   para o processo (sigilo, adesão), verde para voz ao vivo, âmbar para moderação,
+   vermelho para o réu. */
+
+/* ── O ENVELOPE (na convocação) ──────────────────────────────────────── */
+.onu-sigilo { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; padding: 11px 13px;
+  background: rgba(53,224,255,.07); box-shadow: inset 3px 0 0 var(--cyan); font-size: 11.5px; line-height: 1.6; color: #bfe4f6; }
+.onu-sigilo b { color: #fff; }
+.onu-rot-sel { margin-left: auto; font-style: normal; font-family: var(--mono); font-size: 8px;
+  letter-spacing: .08em; color: var(--cyan); text-transform: none; }
+.onu-area { width: 100%; background: #060d18; border: 0; box-shadow: inset 0 0 0 1px var(--borda);
+  color: #eaf1ff; padding: 9px 11px; font-size: 12px; font-family: inherit; line-height: 1.5;
+  resize: vertical; margin-bottom: 12px; }
+.onu-area:focus { outline: none; box-shadow: inset 0 0 0 1px var(--cyan); }
+
+/* ── AS TRÊS DURAÇÕES ────────────────────────────────────────────────── */
+.onu-duracoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-bottom: 12px; }
+.onu-dur { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; text-align: left;
+  padding: 10px 11px; cursor: pointer; border: 0; background: rgba(9,15,26,.9); color: var(--texto);
+  box-shadow: inset 0 0 0 1px var(--borda); font-family: var(--corpo); letter-spacing: 0;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.onu-dur:hover { box-shadow: inset 0 0 0 1px rgba(53,224,255,.5); }
+.onu-dur.on { background: rgba(53,224,255,.09); box-shadow: inset 0 0 0 1px var(--cyan); }
+.onu-dur b { font-family: var(--mono); font-size: 9.5px; letter-spacing: .1em; color: var(--cyan); }
+.onu-dur i { font-style: normal; font-family: var(--disp); font-size: 15px; }
+.onu-dur small { font-size: 9.5px; line-height: 1.4; color: var(--fraco); }
+@media (max-width: 700px) { .onu-duracoes { grid-template-columns: 1fr; } }
+
+/* ── O CARTÃO DE ADESÃO (votar no escuro) ────────────────────────────── */
+.onu-chamado.adesao { box-shadow: inset 0 0 0 1px rgba(53,224,255,.5), 0 18px 44px -14px #000; }
+.onu-ch-selado { display: flex; gap: 11px; align-items: center; padding: 11px 13px; }
+.onu-ch-envelope { flex: none; display: grid; place-items: center; width: 52px; height: 52px; color: var(--cyan);
+  background: rgba(53,224,255,.08); box-shadow: inset 0 0 0 1px rgba(53,224,255,.35);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  animation: onuLacre 2.6s ease-in-out infinite; }
+@keyframes onuLacre { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+.onu-ch-placar { display: flex; gap: 12px; align-items: center; padding: 8px 13px;
+  border-top: 1px solid var(--borda); font-family: var(--mono); font-size: 9.5px; color: var(--fraco); }
+.onu-ch-placar span { display: inline-flex; align-items: center; gap: 5px; }
+.onu-ch-placar .sim b { color: var(--verde); } .onu-ch-placar .nao b { color: var(--perigo); }
+.onu-ch-placar .rel { margin-left: auto; } .onu-ch-placar .rel b { color: var(--ambar); }
+.onu-ch-aviso { padding: 0 13px 11px; font-size: 10px; line-height: 1.45; color: var(--fraco);
+  display: flex; gap: 6px; align-items: flex-start; }
+.onu-chamado .onu-sim.on { background: var(--verde); color: #01120c; }
+.onu-chamado .onu-nao.on { background: var(--perigo); color: #fff; }
+
+/* ── O MICROFONE DA MESA ─────────────────────────────────────────────── */
+.onu-voz { margin: 0 0 9px; background: rgba(9,15,26,.92); box-shadow: inset 2px 0 0 var(--borda); }
+.onu-voz.on { box-shadow: inset 2px 0 0 var(--verde); }
+.onu-voz-cab { display: flex; align-items: center; gap: 6px; padding: 8px 10px; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: .1em; color: var(--fraco); text-transform: uppercase; }
+.onu-voz.on .onu-voz-cab { color: var(--verde); }
+.onu-voz-modo { margin-left: auto; color: var(--cyan); }
+.onu-voz-gente { display: flex; flex-direction: column; gap: 3px; padding: 0 8px 8px; max-height: 128px; overflow-y: auto; }
+.onu-vz { display: flex; align-items: center; gap: 7px; padding: 5px 7px; background: rgba(6,13,24,.8);
+  box-shadow: inset 2px 0 0 transparent; transition: box-shadow .12s, background .12s; }
+.onu-vz.falando { background: rgba(34,224,160,.1); box-shadow: inset 2px 0 0 var(--verde); }
+.onu-vz.palavra { box-shadow: inset 2px 0 0 var(--cyan); }
+.onu-vz.calado { opacity: .5; box-shadow: inset 2px 0 0 var(--perigo); }
+.onu-vz-flag { width: 18px; height: 12px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--borda); }
+.onu-vz-nome { flex: 1; min-width: 0; font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onu-vz-medidor { flex: none; width: 40px; height: 4px; background: #0b1524; overflow: hidden; }
+.onu-vz-medidor i { display: block; height: 100%; width: 0; background: var(--verde); transition: width .09s linear; }
+.onu-vz.calado .onu-vz-medidor i { background: var(--perigo); }
+.onu-vz-mutar { flex: none; display: grid; place-items: center; width: 22px; height: 20px; cursor: pointer;
+  border: 0; padding: 0; background: rgba(255,176,32,.12); color: var(--ambar); }
+.onu-vz-mutar:hover { background: var(--ambar); color: #1a0e00; }
+.onu-vz-reu { flex: none; color: var(--perigo); font-style: normal; display: grid; place-items: center; width: 22px; }
+.onu-voz-so { padding: 7px 8px; font-size: 10px; color: var(--fraco); display: flex; gap: 6px; align-items: center; }
+.onu-voz-ctl { display: flex; gap: 5px; padding: 0 8px 8px; }
+.onu-voz-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  border: 0; padding: 8px; font-family: var(--mono); font-size: 8.5px; letter-spacing: .07em;
+  background: rgba(34,224,160,.14); color: var(--verde); box-shadow: inset 0 0 0 1px rgba(34,224,160,.4); }
+.onu-voz-b.mudo { background: rgba(255,176,32,.14); color: var(--ambar); box-shadow: inset 0 0 0 1px rgba(255,176,32,.45); }
+.onu-voz-b.sair { background: rgba(255,59,92,.12); color: #ff9aab; box-shadow: inset 0 0 0 1px rgba(255,59,92,.4); }
+.onu-voz-preside { display: flex; gap: 5px; padding: 0 8px 8px; }
+.onu-voz-modo-b { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer;
+  border: 0; padding: 7px; font-family: var(--mono); font-size: 8px; letter-spacing: .07em;
+  background: rgba(150,190,240,.07); color: var(--fraco); box-shadow: inset 0 0 0 1px var(--borda); }
+.onu-voz-modo-b.on { background: rgba(53,224,255,.12); color: var(--cyan); box-shadow: inset 0 0 0 1px var(--cyan); }
+.onu-voz-fila { padding: 0 10px 9px; font-family: var(--mono); font-size: 9px; color: var(--fraco);
+  display: flex; gap: 5px; align-items: center; }
+.onu-voz-fila b { color: var(--cyan); }
+.onu-voz-entrar { width: calc(100% - 16px); margin: 0 8px 6px; display: flex; align-items: center; justify-content: center;
+  gap: 7px; cursor: pointer; border: 0; padding: 10px; font-family: var(--mono); font-size: 9.5px;
+  font-weight: 700; letter-spacing: .08em; background: var(--verde); color: #01120c; }
+.onu-voz-entrar:hover { filter: brightness(1.08); }
+.onu-voz-nota { padding: 0 10px 9px; font-size: 9.5px; line-height: 1.45; color: var(--fraco);
+  display: flex; gap: 6px; align-items: flex-start; }
+
+/* a fila de oradores clicável: no modo "um de cada vez" quem preside dá a palavra */
+.onu-orador.clicavel { cursor: pointer; }
+.onu-orador.clicavel:hover { box-shadow: inset 0 0 0 1px var(--cyan); }
