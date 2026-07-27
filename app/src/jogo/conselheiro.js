@@ -280,7 +280,7 @@ export async function gerarConselho(jogo, { signal } = {}) {
       acoesDisponiveis,
     };
     const { system, user } = montarPromptConselho(estado, ctx);
-    const { texto } = await chamarIA({ system, user, temperature: 0.7, jsonMode: true, signal });
+    const { texto } = await chamarIA({ system, user, temperature: 0.7, maxTokens: 700, jsonMode: true, signal });
     const parsed = extrairJSON(texto);
     const norm = normalizar(parsed, 'ia');
     return norm || conselhoLocal(estado);

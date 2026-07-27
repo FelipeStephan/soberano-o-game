@@ -96,6 +96,10 @@ export function acaoAnexar(estado, iso, feature = null) {
   // tático, o índice e o mundo inteiro enxergarem o território como nacional.
   estado.donoEstado = estado.donoEstado || {};
   for (const e of estadosDe(iso)) estado.donoEstado[e.id] = estado.iso || 'USA';
+  // o catálogo carrega sob demanda: se o país nunca foi aberto, `estadosDe` vem vazio.
+  // Marcamos o país inteiro como anexado (a posse por estado é resolvida por donoDe
+  // quando o catálogo chegar) e limpamos qualquer conflito remanescente por prefixo.
+  for (const id of Object.keys(estado.conflitosEstado || {})) if (id.startsWith(`${iso}-`)) delete estado.conflitosEstado[id];
   const oc = garantirOcupacao(estado, iso); oc.anexado = true;
 
   // PIB incorporado: do GeoJSON se veio a feature (mais preciso), senão pela força do país.
@@ -145,19 +149,40 @@ export function devolverSoberania(estado, iso) {
   if (!eraAnexado && !(estado.conquistados || []).some((c) => c.iso === iso)) {
     return { falha: 'Este país não está sob seu controle.' };
   }
-  // os estados voltam a ser dele (apaga a exceção — a posse volta a ser a natural)
-  for (const e of estadosDe(iso)) {
-    if (estado.donoEstado?.[e.id] === (estado.iso || 'USA')) delete estado.donoEstado[e.id];
-    delete estado.guarnicoes?.[e.id];      // a tropa que estava lá volta pro quartel
-    delete estado.conflitosEstado?.[e.id];
+  // Os estados voltam a ser dele. Varre POR PREFIXO do id (`VEN-…`) em vez de
+  // `estadosDe(iso)`: o catálogo de estados carrega sob demanda, e se o jogador
+  // nunca abriu aquele país a lista vem VAZIA — a devolução limpava nada e o mapa
+  // continuava marcando "conquista em curso" de um território já devolvido.
+  const meu = estado.iso || 'USA';
+  const pref = `${iso}-`;
+  for (const id of Object.keys(estado.donoEstado || {})) {
+    if (id.startsWith(pref) && estado.donoEstado[id] === meu) delete estado.donoEstado[id];
   }
+  for (const id of Object.keys(estado.conflitosEstado || {})) if (id.startsWith(pref)) delete estado.conflitosEstado[id];
+  for (const id of Object.keys(estado.guarnicoes || {})) if (id.startsWith(pref)) delete estado.guarnicoes[id];
   estado.anexados = (estado.anexados || []).filter((x) => x !== iso);
   estado.conquistados = (estado.conquistados || []).filter((c) => c.iso !== iso);
   delete estado.ocupacoes?.[iso];
+
+  // ── A GUERRA ACABA JUNTO ─────────────────────────────────────────────
+  // BUG QUE ISTO CONSERTA: devolver o território deixava a guerra aberta e as
+  // operações em preparo mirando o país — a UI continuava dizendo "conquista em
+  // curso" de um lugar que você acabou de devolver. Devolver É o fim do conflito.
+  estado.emGuerra = (estado.emGuerra || []).filter((x) => x !== iso);
+  for (const op of [...(estado.operacoes || [])].filter((o) => o.alvoIso === iso)) {
+    for (const [id, q] of Object.entries(op.deploy || {})) if (q) estado.forcas[id] = (estado.forcas[id] || 0) + q;
+    estado.operacoes = estado.operacoes.filter((o) => o !== op);   // tropa volta pro quartel
+  }
+  estado.mobilizacoes = (estado.mobilizacoes || []).filter((m) => m.iso !== iso && m.alvo !== iso);
+  estado.minhasOfensivas = (estado.minhasOfensivas || []).filter((o) => o.alvo !== iso);
+
+  // ── GRATIDÃO: quem devolve ganha um PARCEIRO, não um neutro ──────────
+  // Devolver soberania é o gesto diplomático mais caro que existe: o país devolvido
+  // sai da inimizade direto para a parceria (piso 45), e o mundo inteiro registra.
   const relKey = info.rel;
+  if (relKey) estado[relKey] = Math.max(45, Math.min(100, (Number(estado[relKey]) || 0) + 70));
   const mudancas = aplicarEfeitos(estado, {
-    territorio: -1, soft_power: 16, aprovacao: -5, estabilidade: 2,
-    ...(relKey ? { [relKey]: 45 } : {}),
+    territorio: -1, soft_power: 16, aprovacao: -5, estabilidade: 2, temp_guerra: -10,
   });
-  return { ok: true, iso, nome, eraAnexado, mudancas };
+  return { ok: true, iso, nome, eraAnexado, relacaoFinal: relKey ? estado[relKey] : null, mudancas };
 }

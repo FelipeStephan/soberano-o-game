@@ -33,10 +33,12 @@ export class LimiteError extends Error {
 
 // Chamada de geração. Retorna { texto, usage, latenciaMs, model }.
 // A chave é do servidor; aqui só mandamos o prompt.
-export async function chamarIA({ system, user, temperature = 0.9, jsonMode = true, signal }) {
+// `maxTokens` é o TETO DE SAÍDA — quem chama declara o quanto precisa. Sem ele o
+// modelo pode devolver (e cobrar) 800 tokens numa manchete de 12 palavras.
+export async function chamarIA({ system, user, temperature = 0.9, jsonMode = true, maxTokens = 700, signal }) {
   const t0 = performance.now();
   try {
-    const out = await iaGerar({ system, user, temperature, jsonMode, signal });
+    const out = await iaGerar({ system, user, temperature, jsonMode, maxTokens, signal });
     registrar({ model: out.model, ok: true, latenciaMs: out.latenciaMs || Math.round(performance.now() - t0),
       pt: out.usage?.prompt_tokens || 0, ct: out.usage?.completion_tokens || 0 });
     return out;

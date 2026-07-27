@@ -49,7 +49,7 @@ async function gerarManchete(veiculo, ctx) {
   try {
     const system = `Você é o editor de plantão do veículo "${veiculo.nome}". Escreva UMA manchete de BREAKING NEWS, curta (no máximo 12 palavras), afiada, no tom editorial do veículo. Sem aspas, sem emoji, sem ponto final. Português do Brasil.`;
     const user = `Fato: ${ctx.assunto}. Contexto: ${ctx.contexto || ctx.assunto}. Escreva a manchete de plantão.`;
-    const { texto } = await chamarIA({ system, user, temperature: 1, jsonMode: false });
+    const { texto } = await chamarIA({ system, user, temperature: 1, jsonMode: false, maxTokens: 90 });
     const limpo = String(texto || '').trim().replace(/^["'“”]|["'“”.]$/g, '').split('\n')[0];
     return limpo.length > 6 ? limpo : fb();
   } catch { return fb(); }
@@ -60,9 +60,19 @@ function moldeFallback(ctx) {
 }
 
 export async function dispararBreaking(jogo, ctx = {}) {
+  // ── ECONOMIA DE IA (auditoria de custo) ─────────────────────────────
+  // Dois vazamentos caros foram fechados aqui:
+  //
+  // 1. NO ONLINE, CADA CLIENTE gerava a MESMA manchete para o MESMO evento do mundo —
+  //    o custo multiplicava por jogador. Agora, em evento AUTOMÁTICO (batida do mundo,
+  //    pulso do petróleo), só o HOST escreve; os outros recebem o eco pronto.
+  // 2. EVENTO AUTOMÁTICO NÃO PRECISA DE IA: "Brent dispara para US$ 96" é texto
+  //    previsível. A IA fica guardada para o que o JOGADOR faz — que é onde ela
+  //    impressiona (anexação, aliança, ataque naval).
+  if (ctx.auto && jogo?.ehOnline && jogo?._souHostOnline && !jogo._souHostOnline()) return;
+
   const veiculo = ctx.veiculo || escolherVeiculo(ctx.iso || jogo?.estado?.iso, fila.length);
-  // A IA escreve enquanto a fila anda; quando chegar a vez, o texto já está pronto.
-  const texto = await gerarManchete(veiculo, ctx);
+  const texto = ctx.auto ? moldeFallback(ctx) : await gerarManchete(veiculo, ctx);
   // MUNDO ÚNICO: o plantão ecoa na sala com o MESMO texto — todos leem a mesma
   // manchete. `remoto` impede o eco de ecoar de volta (loop).
   if (!ctx.remoto) jogo?._relayOnline?.('breaking', null, texto,

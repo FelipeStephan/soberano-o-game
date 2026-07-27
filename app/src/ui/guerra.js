@@ -782,7 +782,7 @@ async function gerarRespostaPais(res, jogo) {
   const system = 'Você escreve UM comunicado oficial curto (2 a 3 frases) de um governo nacional FICTÍCIO reagindo a um ataque militar. Tom: mundo de hoje — seco, institucional, afiado, com vocabulário diplomático real (resposta proporcional, sanções, congelamento de ativos, foro internacional, integridade territorial). Sem clichê de filme, sem emoji, sem aspas. Português do Brasil. Devolva só o texto do comunicado.';
   const user = `País: ${defensor}. Líder (fictício): ${lider?.nome}. Agressor: ${meu}. Situação: ${situacao}. Escreva o comunicado oficial de ${defensor} reagindo AGORA.`;
   try {
-    const { texto } = await chamarIA({ system, user, temperature: 0.95, jsonMode: false });
+    const { texto } = await chamarIA({ system, user, temperature: 0.95, jsonMode: false, maxTokens: 220 });
     const limpo = String(texto || '').trim().replace(/^["']|["']$/g, '');
     return limpo.length > 8 ? limpo : respostaFallback(res);
   } catch { return respostaFallback(res); }

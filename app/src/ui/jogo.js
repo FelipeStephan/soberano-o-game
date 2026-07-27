@@ -245,6 +245,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     jogo._relayOnline = (tipo, alvo, texto, dados) => onlineCtrl?.notificar(tipo, alvo, texto, dados);
     jogo._relayFrota = (dados) => onlineCtrl?.relayFrota(dados);
     jogo._ehHumanoOnline = (iso) => !!onlineCtrl?.ehHumano(iso);   // a mesa de alianças pergunta isto
+    jogo._souHostOnline = () => !!onlineCtrl?.souHost();            // breaking automático: só o host escreve
     jogo._relayFrotaSaiu = (id) => onlineCtrl?.relayFrotaSaiu(id);
     // TELEFONE VERMELHO: escuta o canal `direto` (que ligarOnline não usa — setHandlers
     // faz merge, então onDireto entra sem atropelar onSala/onEvento).
@@ -358,7 +359,8 @@ export function iniciarJogo(container, jogo, opts = {}) {
         jogo.estado.brent_hist.unshift({ turno: jogo.turno, preco: Math.round(jogo.estado.preco_petroleo), delta: p.barril, motivo: p.motivo, tom: 'ruim' });
         jogo.estado.brent_hist = jogo.estado.brent_hist.slice(0, 12);
         renderTopo();
-        if (p.breaking) dispararBreaking(jogo, { assunto: `Petróleo dispara para US$ ${Math.round(jogo.estado.preco_petroleo)} com guerra no exterior`, contexto: p.motivo, tom: 'quente' });
+        // AUTO: texto previsível, sem IA — e no online só o host publica (ver breaking.js)
+        if (p.breaking) dispararBreaking(jogo, { auto: true, manchete: `Petróleo dispara para US$ ${Math.round(jogo.estado.preco_petroleo)} com guerra no exterior`, assunto: 'Choque no petróleo', contexto: p.motivo, tom: 'quente' });
       }
 
       // HOST retransmite o pulso (posts + animação + período) pra sala inteira ver o MESMO mundo
@@ -1645,6 +1647,8 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const d = Math.round(e.brent_delta || 0);
     if (Math.abs(d) >= 12) {
       dispararBreaking(jogo, {
+        auto: true,   // batida do mundo: manchete pronta, sem IA e só do host no online
+        manchete: `Petróleo ${d > 0 ? 'dispara' : 'despenca'} para US$ ${Math.round(e.preco_petroleo)} o barril`,
         assunto: `Petróleo ${d > 0 ? 'dispara' : 'despenca'} para US$ ${Math.round(e.preco_petroleo)} o barril`,
         contexto: e.brent_motivo || (d > 0 ? 'choque de oferta no mercado global' : 'alívio na oferta global'),
         tom: d > 0 ? 'quente' : 'frio',
@@ -2084,4 +2088,5 @@ export function iniciarJogo(container, jogo, opts = {}) {
   window.__tr = tr; // hook de debug (dev)
   window.__render = { renderFeed, renderHud, renderAcoes, renderTopo }; // hook de debug (dev)
   window.__fim = mostrarFim; // hook de debug (dev): testar a tela de queda sem esperar cair
+  window.__painel = abrirPainelPais; // hook de debug (dev): abrir o painel de um país direto
 }

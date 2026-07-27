@@ -64,10 +64,10 @@ export async function iaStatus() {
   catch { return { disponivel: false, model: null }; }
 }
 
-export async function iaGerar({ system, user, temperature, jsonMode, signal }) {
+export async function iaGerar({ system, user, temperature, jsonMode, maxTokens, signal }) {
   return req('/api/ai/generate', {
     method: 'POST', signal,
-    body: JSON.stringify({ system, user, temperature, jsonMode }),
+    body: JSON.stringify({ system, user, temperature, jsonMode, maxTokens }),
   });
 }
 

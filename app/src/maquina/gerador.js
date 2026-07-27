@@ -8,7 +8,9 @@ import { validarCarta } from './validador.js';
 import { escolherFioTema } from './fios.js';
 import { puxarFallback } from './fallback.js';
 
-const MAX_TENTATIVAS = 2;
+// 2 tentativas dobravam o custo da chamada MAIS CARA do jogo quando o JSON
+// vinha torto. A reserva local é boa o bastante para valer 1 tentativa.
+const MAX_TENTATIVAS = 1;
 
 // Contexto estático montado uma vez por partida (candidato a cache).
 export function prepararContexto({ ficha, elenco, veiculos }) {

@@ -76,7 +76,7 @@ export function abrirIndiceMundial(jogo) {
     try {
       const system = 'Você é um analista geopolítico seco e afiado. Comente um ranking mundial em UMA frase curta (máx. 20 palavras), sem clichê, sem emoji, sem aspas. Português do Brasil.';
       const user = `Régua: ${bloco.rot}. Líder: ${top.nome} (${top.fmt}). ${meu} está em ${euPos || '—'}º de ${bloco.linhas.length}. Comente.`;
-      const { texto } = await chamarIA({ system, user, temperature: 0.9, jsonMode: false });
+      const { texto } = await chamarIA({ system, user, temperature: 0.9, maxTokens: 110, jsonMode: false });
       const limpo = String(texto || '').trim().replace(/^["']|["'.]$/g, '').split('\n')[0];
       cacheNarr[metrica] = limpo.length > 6 ? limpo : fb;
     } catch { cacheNarr[metrica] = fb; }

@@ -139,16 +139,42 @@ export function definirModelo(model) {
 }
 
 // Chamada real ao OpenRouter. Usada pelas rotas e pelo teste do admin.
-async function chamarOpenRouter({ system, user, temperature = 0.9, jsonMode = true, signal }) {
+// ── CACHE DE RESPOSTA (10 min) ────────────────────────────────────────
+// No online, N clientes geram a MESMA manchete para o MESMO evento — o custo
+// multiplicava por jogador. Aqui a segunda chamada idêntica sai de graça.
+const cacheIA = new Map();          // hash → { texto, usage, model, quando }
+const CACHE_TTL = 10 * 60 * 1000;
+function chaveCache(system, user, temperature) {
+  let h = 0x811c9dc5;
+  const str = `${temperature}|${system}|${user}`;
+  for (let i = 0; i < str.length; i += 1) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36) + ':' + str.length;
+}
+function doCache(k) {
+  const v = cacheIA.get(k);
+  if (!v) return null;
+  if (Date.now() - v.quando > CACHE_TTL) { cacheIA.delete(k); return null; }
+  return v;
+}
+
+async function chamarOpenRouter({ system, user, temperature = 0.9, jsonMode = true, maxTokens = null, signal }) {
   if (!cfg.apiKey) {
     const e = new Error('IA não configurada no servidor (defina OPENROUTER_API_KEY).');
     e.code = 'SEM_CHAVE';
     throw e;
   }
+  // CACHE: pergunta idêntica nos últimos 10 min → resposta de graça.
+  const ck = chaveCache(system, user, temperature);
+  const emCache = doCache(ck);
+  if (emCache) return { ...emCache, cacheado: true };
+
   const body = {
     model: cfg.model,
     temperature,
     messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
+    // TETO DE SAÍDA: sem isto, uma manchete de 12 palavras podia devolver 800 tokens
+    // (e ser cobrada como tal). Cada tipo de chamada declara o quanto precisa.
+    max_tokens: Math.max(32, Math.min(2000, Number(maxTokens) || 700)),
   };
   if (jsonMode) body.response_format = { type: 'json_object' };
 
@@ -178,7 +204,10 @@ async function chamarOpenRouter({ system, user, temperature = 0.9, jsonMode = tr
   const usage = data?.usage || null;
   registrar({ model: cfg.model, ok: true, latenciaMs, pt: usage?.prompt_tokens || 0, ct: usage?.completion_tokens || 0 });
   if (!texto) throw new Error('Resposta da IA veio vazia.');
-  return { texto, usage, latenciaMs, model: cfg.model };
+  const saida = { texto, usage, latenciaMs, model: cfg.model };
+  cacheIA.set(ck, { ...saida, quando: Date.now() });
+  if (cacheIA.size > 400) cacheIA.delete(cacheIA.keys().next().value);   // teto de memória
+  return saida;
 }
 
 export { chamarOpenRouter };
@@ -250,10 +279,10 @@ export function rotasIA() {
 
   // A geração que o jogo consome. Recebe só system+user; a chave é do servidor.
   r.post('/generate', limitar, async (req, res) => {
-    const { system, user, temperature, jsonMode } = req.body || {};
+    const { system, user, temperature, jsonMode, maxTokens } = req.body || {};
     if (!system || !user) return res.status(400).json({ erro: 'system e user são obrigatórios.' });
     try {
-      const out = await chamarOpenRouter({ system, user, temperature, jsonMode });
+      const out = await chamarOpenRouter({ system, user, temperature, jsonMode, maxTokens });
       res.json(out);
     } catch (e) {
       if (e.code === 'SEM_CHAVE') return res.status(503).json({ erro: e.message, code: 'SEM_CHAVE' });

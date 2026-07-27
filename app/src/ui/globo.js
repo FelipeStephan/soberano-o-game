@@ -1452,9 +1452,13 @@ export async function montarGlobo(container, jogo, {
       const r = await chamarIA({
         system: 'Você é o porta-voz de um governo estrangeiro reagindo a outro país. Escreva UMA frase curta (máx 22 palavras), em português, TENSA e específica ao clima entre os dois — sem inventar eventos concretos que você não sabe. Só o clima. Responda em JSON {"t": "frase"}.',
         user: `Seu país: ${nome}. O outro país: ${meuNome}. Relação atual: ${rel} de -100 a 100 (bem ruim). ${guerra ? 'Vocês estão EM GUERRA aberta.' : rel <= -75 ? 'Vocês estão à beira da guerra.' : 'A relação é hostil e desconfiada.'} Fale como ${nome} veria ${meuNome} agora.`,
-        temperature: 0.95, jsonMode: true,
+        temperature: 0.95, maxTokens: 80, jsonMode: true,
       });
-      const txt = (typeof r === 'string' ? r : r?.t || r?.texto || '').trim();
+      // BUG QUE ISTO CONSERTA: `r` é { texto, usage, ... } e `r.texto` é o JSON CRU
+      // ({"t":"frase"}) — o tooltip mostrava JSON e ainda cacheava. Agora parseia.
+      let txt = '';
+      const bruto = typeof r === 'string' ? r : (r?.texto ?? '');
+      try { txt = String(JSON.parse(bruto)?.t ?? bruto).trim(); } catch { txt = String(bruto).trim(); }
       if (txt) { jogo.estado._tensaoIA[code] = { faixa, texto: txt }; atualizar(); }
     } catch { /* sem IA: o texto fixo cobre */ } finally { _tensaoPedindo.delete(code); }
   }
@@ -1708,7 +1712,10 @@ export async function montarGlobo(container, jogo, {
       if (rel > -55) continue;
       const c = ondeEsta(code); if (!c) continue;
       const guerraC = (jogo.estado.emGuerra || []).includes(code);
-      enriquecerTensaoIA(code, info.nome, rel, guerraC);   // gera (uma vez, cacheado) a fala da IA
+      // ECONOMIA DE IA: antes isto rodava para TODO país hostil a cada atualizar() —
+      // uma rajada de 10+ chamadas simultâneas por um texto que só aparece no tooltip.
+      // Agora só o país SELECIONADO (o que o jogador está de fato olhando) pede a fala.
+      if (code === selecionado) enriquecerTensaoIA(code, info.nome, rel, guerraC);
       const iaTexto = jogo.estado._tensaoIA?.[code]?.texto;
       const fallback = rel <= -75 ? 'À beira do confronto. Uma provocação e vira guerra.' : 'Relação hostil. Diplomacia aqui está por um fio.';
       // ÍCONE: o ⚡ confundia (parecia energia). Agora é ESPADAS — leitura direta de "rival

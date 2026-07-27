@@ -139,7 +139,7 @@ export async function gerarDespachos(ctx, { signal } = {}) {
     const r = await chamarIA({
       system: 'Você escreve cobertura de guerra para um jogo. Responde SÓ com JSON válido.',
       user: montarPrompt(ctx),
-      temperature: 1,
+      temperature: 1, maxTokens: 700,
       signal,
     });
     const j = extrairJSON(r?.texto);

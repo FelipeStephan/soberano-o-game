@@ -66,7 +66,7 @@ ${manchetes || '- (o noticiário mal registrou este governo)'}
 Escreva o texto final sobre a queda/encerramento deste governo.`;
 
   try {
-    const { texto } = await chamarIA({ system, user, temperature: 1, jsonMode: false });
+    const { texto } = await chamarIA({ system, user, temperature: 1, jsonMode: false, maxTokens: 520 });
     const limpo = String(texto || '').trim().replace(/^["']|["']$/g, '');
     return limpo.length > 40 ? limpo : fallbackObituario(jogo, fim, diag);
   } catch { return fallbackObituario(jogo, fim, diag); }
