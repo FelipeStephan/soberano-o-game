@@ -272,6 +272,25 @@ export function aliancaCom(estado, iso) {
   return minhasAliancas(estado).find((a) => a.membros.includes(iso)) || null;
 }
 export function ehAliado(estado, iso) { return !!aliancaCom(estado, iso); }
+
+// QUALQUER aliança que contenha este país — inclusive blocos de que eu NÃO faço parte.
+// É o que permite a cascata: atacar um membro é atacar o bloco inteiro. As alianças
+// alheias chegam pela rede (evento `alianca_publica`) e vivem no mesmo array.
+export function aliancaDe(estado, iso) {
+  if (!iso) return null;
+  return (estado.aliancas || []).find((a) => (a.membros || []).includes(iso)) || null;
+}
+
+// Registra/atualiza uma aliança ANUNCIADA por outro jogador (pacto é fato público).
+export function registrarAliancaConhecida(estado, al) {
+  if (!al?.id) return null;
+  estado.aliancas = estado.aliancas || [];
+  const existente = estado.aliancas.find((x) => x.id === al.id);
+  if (existente) { existente.membros = [...new Set([...(existente.membros || []), ...(al.membros || [])])]; return existente; }
+  estado.aliancas.push({ ...al, membros: [...(al.membros || [])], convites: al.convites || [] });
+  sincronizarBlocos(estado);
+  return estado.aliancas[estado.aliancas.length - 1];
+}
 // Aliado MILITAR: a guerra dele é a minha (defesa mútua).
 export function ehAliadoMilitar(estado, iso) {
   const al = aliancaCom(estado, iso);

@@ -19,7 +19,7 @@ import { techDaFrota } from '../dados/forcas.js';
 import { tocarEfeito } from './audio.js';
 import { offsetServidor } from '../net/lobby.js';
 import { estadosDe } from '../jogo/territorio.js';
-import { aliancaCom, ehAliadoMilitar, quebrarPorTraicao, sincronizarBlocos } from '../jogo/aliancas.js';
+import { aliancaCom, ehAliadoMilitar, quebrarPorTraicao, sincronizarBlocos, aliancaDe, registrarAliancaConhecida, ehMilitar } from '../jogo/aliancas.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -98,6 +98,8 @@ export function ligarOnline(jogo, net, hooks) {
       }
       hooks.atualizar?.();
     }
+    // CASCATA: quem ataca um aliado meu fica VERMELHO no meu mapa (a relação despenca).
+    if (HOSTIL.has(ev.tipo)) cascataAoVerAtaque(ev);
     // DEFESA MÚTUA: a guerra do meu ALIADO MILITAR é a minha guerra — sou avisado com
     // força quando ele é atacado (mesmo que o alvo não seja eu).
     if (ev.alvo && ev.alvo !== meuIso && ehAliadoMilitar(jogo.estado, ev.alvo)
@@ -150,6 +152,23 @@ export function ligarOnline(jogo, net, hooks) {
     if (ev.tipo === 'guerra_resultado') { aplicarImpactoTerritorial(ev); return; }
     // PLANTÃO de outro jogador: o mesmo breaking, o mesmo texto, na tela de todos.
     if (ev.tipo === 'breaking') { breakingRemoto(jogo, ev.dados || {}); return; }
+    // FAKE NEWS: a mentira plantada por outro jogador aparece no X de todos, com a
+    // cara do @Choquei — ninguém sabe quem pagou por ela (é esse o ponto).
+    if (ev.tipo === 'fakenews' && ev.dados?.texto) {
+      jogo._empilharFeed?.([{ tipo: 'veiculo', veiculo: 'Choquei', handle: '@choquei',
+        texto: ev.dados.texto, manchete: ev.dados.texto }]);
+      hooks.renderFeed?.();
+      return;
+    }
+    // ALIANÇA ANUNCIADA: todo mundo passa a conhecer o bloco (mesmo sem fazer parte).
+    // É o que permite a cascata "atacar um é atacar todos" pra quem está de fora.
+    if (ev.tipo === 'alianca_publica' && ev.dados?.alianca) {
+      registrarAliancaConhecida(jogo.estado, ev.dados.alianca);
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Diplomacia', cor: '#22e0a0',
+        texto: `${ev.dados.alianca.nome} anunciada: ${(ev.dados.alianca.membros || []).map((m) => nomeDe(m)).join(' · ')}.` }]);
+      hooks.renderFeed?.(); hooks.globoCtrl?.()?.atualizar?.();
+      return;
+    }
     // ANEXAÇÃO: o país anexado vira território do conquistador NO MAPA DE TODOS —
     // cor, dono dos estados e status. O mundo inteiro atualiza na hora.
     if (ev.tipo === 'anexacao' && ev.dados?.iso) {
@@ -162,6 +181,13 @@ export function ligarOnline(jogo, net, hooks) {
       if (alvo === meuIso) {
         alertaUrgente({ titulo: '☠ SEU PAÍS FOI ANEXADO', texto: `${ev.deNome || nomeDe(ev.dePais)} incorporou a sua nação.`, tom: 'ataque' });
       }
+      hooks.globoCtrl?.()?.atualizar?.();
+    }
+    // DEVOLUÇÃO: o país volta ao mapa como nação soberana — em todos os clientes.
+    if (ev.tipo === 'devolucao' && ev.dados?.iso) {
+      const e = jogo.estado; const alvo = ev.dados.iso;
+      for (const est of estadosDe(alvo)) if (e.donoEstado?.[est.id] === ev.dePais) delete e.donoEstado[est.id];
+      delete e.ocupacoes?.[alvo];
       hooks.globoCtrl?.()?.atualizar?.();
     }
     // STATS VIVOS de outro jogador (PIB, militar, petróleo, território): alimentam o
@@ -232,7 +258,10 @@ export function ligarOnline(jogo, net, hooks) {
         // O CONVIDADO RESPONDEU: se aceitou, ele entra na MINHA aliança de verdade.
         if (ev.dados.aceito) {
           const al = (jogo.estado.aliancas || []).find((x) => x.id === ev.dados.alianca?.id);
-          if (al && !al.membros.includes(ev.dePais)) { al.membros.push(ev.dePais); sincronizarBlocos(jogo.estado); }
+          if (al && !al.membros.includes(ev.dePais)) {
+            al.membros.push(ev.dePais); sincronizarBlocos(jogo.estado);
+            net.evento('alianca_publica', null, `${al.nome} foi selada.`, { alianca: al });   // o mundo fica sabendo
+          }
           const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
           jogo.estado[k] = Math.min(100, (jogo.estado[k] || 0) + 20);
           jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Chancelaria', cor: '#22e0a0',
@@ -285,6 +314,39 @@ export function ligarOnline(jogo, net, hooks) {
     autoFechar = setTimeout(() => responder(false), 20000);
   }
 
+  // ── CASCATA DE ALIANÇA — atacar um membro é atacar o bloco inteiro ────
+  // Eventos hostis que disparam a cascata (mesma régua da queda de relação).
+  const HOSTIL = new Set(['guerra', 'guerra_resultado', 'ataque_estado', 'naval', 'nuclear', 'anexacao']);
+
+  // EU ATAQUEI alguém: se o alvo pertence a um bloco, TODO o bloco me vira as costas —
+  // cada membro fica hostil no MEU mapa (vermelho). Roda no cliente do agressor.
+  function cascataAoAtacar(alvoIso) {
+    const al = aliancaDe(jogo.estado, alvoIso);
+    if (!al) return;
+    const outros = (al.membros || []).filter((m) => m !== alvoIso && m !== meuIso);
+    if (!outros.length) return;
+    const peso = ehMilitar(al) ? 45 : 22;   // pacto militar reage muito mais forte
+    for (const m of outros) {
+      const k = PAISES[m]?.rel || `rel_${String(m).toLowerCase()}`;
+      jogo.estado[k] = Math.max(-100, Math.min(100, (jogo.estado[k] || 0) - peso));
+    }
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Chancelaria', cor: '#ff3b5c',
+      texto: `Atacar ${nomeDe(alvoIso)} foi atacar ${al.nome}: ${outros.map((m) => nomeDe(m)).join(', ')} ${outros.length > 1 ? 'romperam' : 'rompeu'} com você.` }]);
+    hooks.renderFeed?.(); hooks.atualizar?.();
+  }
+
+  // ALGUÉM ATACOU UM ALIADO MEU: o agressor fica vermelho no MEU mapa. Com defesa
+  // mútua, a queda é brutal — o pacto militar transforma a guerra dele na minha.
+  function cascataAoVerAtaque(ev) {
+    if (!ev.alvo || ev.alvo === meuIso || ev.dePais === meuIso) return;
+    const al = aliancaCom(jogo.estado, ev.alvo);          // o alvo é MEU aliado?
+    if (!al) return;
+    const militar = ehMilitar(al);
+    const k = PAISES[ev.dePais]?.rel || `rel_${String(ev.dePais).toLowerCase()}`;
+    jogo.estado[k] = Math.max(-100, Math.min(100, (jogo.estado[k] || 0) - (militar ? 55 : 25)));
+    hooks.atualizar?.();
+  }
+
   // ── ALIANÇA MATERIALIZADA (os dois lados ficam com o MESMO bloco) ──────
   // Recebe o desenho da aliança do proponente e a grava no meu estado, comigo dentro.
   // É o que faz o aceite virar aliança de verdade (antes só mexia na relação).
@@ -297,6 +359,8 @@ export function ligarOnline(jogo, net, hooks) {
     if (existente) existente.membros = [...new Set([...existente.membros, ...membros])];
     else e.aliancas.push({ ...al, membros, convites: al.convites || [] });
     sincronizarBlocos(e);
+    // o pacto vira público: a sala inteira passa a conhecer o bloco (cascata)
+    net.evento('alianca_publica', null, `${al.nome} foi selada.`, { alianca: { ...al, membros } });
     jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Chancelaria', cor: '#22e0a0',
       texto: `Pacto assinado: ${al.nome} agora reúne ${membros.map((m) => nomeDe(m)).join(' e ')}.` }]);
     hooks.renderFeed?.();
@@ -550,8 +614,14 @@ export function ligarOnline(jogo, net, hooks) {
     // VOCÊ agiu sobre um país. Se for humano, dispara o alerta pra ele. Sempre publica
     // no feed da sala (todos veem o impacto — é o World Trends).
     notificar: (tipo, alvoIso, texto, dados) => {
+      // CASCATA LOCAL: se o que eu fiz foi hostil e o alvo tem bloco, o bloco inteiro
+      // me vira as costas AQUI (os países ficam vermelhos no meu mapa na hora).
+      if (HOSTIL.has(tipo) && alvoIso) cascataAoAtacar(alvoIso);
       net.evento(tipo, alvoIso, texto, dados);
     },
+    // PACTO É FATO PÚBLICO: anuncia a aliança pra sala inteira (todos passam a saber
+    // quem é aliado de quem — é o que faz a cascata funcionar pros não-membros).
+    anunciarAlianca: (al) => net.evento('alianca_publica', null, `${al.nome} foi selada.`, { alianca: al }),
     ehHumano: (iso) => porPais.has(iso),
   };
 }

@@ -107,6 +107,17 @@ function tooltip(estado, f, selecionado = false) {
   // 2. O QUE É PRA MIM — a decisão cabe aqui.
   let faixa; let cor;
   if (eu) { faixa = { rot: 'SUA NAÇÃO', sub: 'Aqui é casa' }; cor = '#ffc83c'; }
+  // ANEXADO: o país não existe mais como nação — é província. O hover conta a história:
+  // quem ele ERA e quem o incorporou (no online, o `por` diz de quem é a bandeira agora).
+  else if (estado.ocupacoes?.[code]?.anexado) {
+    const dono = estado.ocupacoes[code].por || estado.iso || 'USA';
+    const meuTerritorio = dono === (estado.iso || 'USA');
+    faixa = {
+      rot: meuTerritorio ? 'TERRITÓRIO ANEXADO' : `ANEXADO POR ${(PAISES[dono]?.nome || dono).toUpperCase()}`,
+      sub: `Antigo ${nomePais(f)} · deixou de existir como país soberano`,
+    };
+    cor = meuTerritorio ? '#ffc83c' : '#ff9628';
+  }
   else if (oc) {
     faixa = { rot: 'SOB SUA OCUPAÇÃO', sub: `Insurgência ${oc.insurgencia}% · ocupado há ${oc.desde || 0} turno(s)` };
     cor = oc.insurgencia >= 60 ? '#ff3b5c' : '#ff9628';

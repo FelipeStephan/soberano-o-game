@@ -7,6 +7,13 @@
 // `simpatia`: 0 hostil · 50 neutro · 100 comprado. Sobe com propaganda/publicidade.
 
 export const VEICULOS = [
+  // O PERFIL DE FOFOCA que engole qualquer boato — é por ele que a FAKE NEWS do
+  // jogador entra no timeline. Sem linha editorial, sem checagem: só alcance.
+  {
+    nome: 'Choquei', handle: '@choquei', dominio: 'choquei.com.br', cor: '#111111', pais: 'Brasil',
+    posicao: 'Agregador viral', eixo: { economico: 0, autoridade: 0 }, simpatia: 50,
+    vies: 'Republica tudo que engaja, sem apurar. Boato vira manchete em minutos — e a correção nunca vem.',
+  },
   {
     nome: 'CNN', handle: '@CNN', dominio: 'cnn.com', cor: '#cc0000', pais: 'EUA',
     posicao: 'Centro-liberal', eixo: { economico: 15, autoridade: -25 }, simpatia: 50,

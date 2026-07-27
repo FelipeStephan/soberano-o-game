@@ -9,7 +9,7 @@ import { UNIDADES, DOMINIOS, forcaCombate } from '../dados/forcas.js';
 import { descontoMilitar } from '../dados/blocos.js';
 import { iso, souEu, rotuloRelacao, relacaoAtual, nomePais, verbo, PAISES } from '../dados/paises.js';
 import { ocupacaoDe, acoesOcupacao } from '../jogo/ocupacao.js';
-import { upkeepDe, acaoManterOrdem, acaoAnexar, podeAnexar, ANEXACAO_TURNOS_ESTAVEL } from '../jogo/manutencao.js';
+import { upkeepDe, acaoManterOrdem, acaoAnexar, podeAnexar, devolverSoberania, ANEXACAO_TURNOS_ESTAVEL } from '../jogo/manutencao.js';
 import { riscoDe } from '../dados/riscos.js';
 import { podeInstalarBase, basesEm } from '../dados/bases.js';
 import { petroleoDe, bandaPreco } from '../dados/petroleo.js';
@@ -37,6 +37,7 @@ import { abrirPontosQuentes, fecharPontosQuentes } from './pontosQuentes.js';
 import { abrirIndiceMundial } from './indiceMundial.js';
 import { statsVivos } from '../jogo/indiceMundial.js';
 import { diagnosticoQueda, obituarioDaQueda } from './relatorioQueda.js';
+import { abrirFakeNews } from './fakeNews.js';
 import { abrirBlocosVisor } from './blocos.js';
 import { montarTelefonia } from './telefone.js';
 import { abrirMercado } from './mercado.js';
@@ -997,6 +998,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
       renderAcoes();
     }));
     el.acoes.querySelectorAll('.acao-chip[data-acao]').forEach((b) => b.addEventListener('click', () => {
+      // AÇÕES QUE ABREM TELA (não vão pra fila): o jogador decide o conteúdo primeiro.
+      const especial = ACAO_POR_ID[b.dataset.acao]?._modal;
+      if (especial === 'fakenews') { abrirFakeNews(jogo, { onFim: () => { renderHud(); renderFeed(); renderTopo(); renderAcoes(); } }); return; }
       const r = tr?.enfileirar(ACAO_POR_ID[b.dataset.acao]);
       if (r && !r.ok && r.motivo) toastFila(r.motivo);
       renderAcoes(); renderTopo();
@@ -1139,7 +1143,10 @@ export function iniciarJogo(container, jogo, opts = {}) {
   function abrirPainelPais(feature) {
     if (jogo.fase !== 'planejamento') return;
     const code = iso(feature);
-    const ehJogador = souEu(code);
+    // ANEXADO É MEU: o país incorporado entra no ramo "SUA NAÇÃO" — sem planejar
+    // ofensiva contra si mesmo, sem espionar a própria província, sem nuke em casa.
+    const meuAnexado = !!jogo.estado.ocupacoes?.[code]?.anexado;
+    const ehJogador = souEu(code) || meuAnexado;
     const oc = ocupacaoDe(jogo.estado, code);
 
     // BASES: parceiro (rel ≥ 40) aceita negociar; território ocupado não é consultado.
@@ -1212,15 +1219,26 @@ export function iniciarJogo(container, jogo, opts = {}) {
       acoes = [];
       const bd = bandeiraDeFeature(feature);
       const fc = forcaCombate(jogo.estado.forcas);
-      cabecalho = `<div class="pp-cab">${bd ? `<img class="pp-flag" src="${bd}" alt="">` : ''}<h2>${esc(jogo.ficha.pais)}</h2><span class="pp-rel rel-voce">SUA NAÇÃO</span><button class="pp-fechar">✕</button></div>`;
+      // PROVÍNCIA ANEXADA: mesmo painel de "casa", com a memória de quem ela foi —
+      // e a única decisão que ainda cabe aqui: devolver a soberania.
+      const nomeAntigo = PAISES[code]?.nome || nomePais(feature) || code;
+      cabecalho = meuAnexado
+        ? `<div class="pp-cab">${bd ? `<img class="pp-flag" src="${bd}" alt="">` : ''}<h2>${esc(nomeAntigo)}</h2><span class="pp-rel rel-voce">PROVÍNCIA · ${esc((jogo.ficha.pais || '').toUpperCase())}</span><button class="pp-fechar">✕</button></div>`
+        : `<div class="pp-cab">${bd ? `<img class="pp-flag" src="${bd}" alt="">` : ''}<h2>${esc(jogo.ficha.pais)}</h2><span class="pp-rel rel-voce">SUA NAÇÃO</span><button class="pp-fechar">✕</button></div>`;
       corpo = `<div class="pp-eu">
+          ${meuAnexado ? `<div class="ppe-anexado">${ico('landmark', 14)}
+            <span><b>Território anexado.</b> ${esc(nomeAntigo)} deixou de ser um país — é província de ${esc(jogo.ficha.pais)}.
+            Sem insurgência, sem upkeep: distribua tropa daqui como em qualquer estado seu.</span></div>` : ''}
           <div class="ppe-grid">
             <div class="ppe-cel"><span>Força de combate</span><b>${fc}</b></div>
             <div class="ppe-cel"><span>Territórios</span><b>${jogo.estado.territorio}</b></div>
             <div class="ppe-cel"><span>Ogivas</span><b>${jogo.estado.ogivas}</b></div>
             <div class="ppe-cel"><span>Tesouro</span><b>${dinheiro(jogo.estado.tesouro)}</b></div>
           </div>
-          <div class="ppe-nota">Aqui é casa. Use o console embaixo para agir — e o globo para agir sobre os outros.</div>
+          ${meuAnexado
+            ? `<button class="ppe-devolver" id="ppe-devolver">${ico('flag-off', 15)} <span>DEVOLVER A SOBERANIA DE ${esc(nomeAntigo.toUpperCase())}</span>
+                 <i>o mundo aplaude · sua base não</i></button>`
+            : `<div class="ppe-nota">Aqui é casa. Use o console embaixo para agir — e o globo para agir sobre os outros.</div>`}
         </div>`;
     } else {
       // ── O PAINEL DO GENERAL ──────────────────────────────────────────
@@ -1360,6 +1378,22 @@ export function iniciarJogo(container, jogo, opts = {}) {
       const r = acaoManterOrdem(jogo.estado, code);
       if (r.falha) { toastFila(r.falha); return; }
       fechar(); atualizarTudo(); abrirPainelPais(feature);
+    });
+    // DEVOLVER A SOBERANIA: desfaz a anexação — no meu estado e no mapa de todos.
+    modal.querySelector('#ppe-devolver')?.addEventListener('click', () => {
+      const r = devolverSoberania(jogo.estado, code);
+      if (r.falha) { toastFila(r.falha); return; }
+      if (jogo.ehOnline) {
+        onlineCtrl?.notificar('devolucao', code,
+          `${jogo.ficha.presidente || jogo.ficha.pais} DEVOLVEU a soberania de ${r.nome}. O país volta ao mapa.`,
+          { iso: code, nome: r.nome });
+      }
+      dispararBreaking(jogo, {
+        assunto: `${jogo.ficha.pais} devolve a soberania de ${r.nome}`,
+        contexto: `Depois da ocupação, a retirada: ${r.nome} volta a existir como país independente. Gesto raro — e caro em política interna.`,
+        tom: 'frio', iso: code,
+      });
+      fechar(); atualizarTudo();
     });
     modal.querySelector('#ppu-anexar')?.addEventListener('click', () => {
       const r = acaoAnexar(jogo.estado, code, feature);

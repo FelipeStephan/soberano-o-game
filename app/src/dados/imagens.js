@@ -88,6 +88,7 @@ export const FOTO_ACAO = {
 // subsidiária Yonhap News TV — marca errada é pior que nenhuma), Egypt Independent
 // e CartaCapital (nenhum logo no Commons nem nas Wikipédias).
 const LOGO_MANUAL = {
+  Choquei: 'https://static.wikia.nocookie.net/logopedia/images/d/da/Choquei.jpg/revision/latest?cb=20230111183711',
   // ── internacionais ──────────────────────────────────────────────────
   'CNN':        'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9d/CNN_Logo_%282014%29.svg/1280px-CNN_Logo_%282014%29.svg.png',
   'Fox News':   'https://upload.wikimedia.org/wikipedia/commons/thumb/6/67/Fox_News_Channel_logo.svg/960px-Fox_News_Channel_logo.svg.png',

@@ -48,7 +48,9 @@ export function statsVivos(estado) {
     area: MUNDO_STATS[eu] ? Math.round((MUNDO_STATS[eu].area + Math.max(0, (estado.territorio || 1) - 1) * 0.2) * 100) / 100 : null,
   };
 }
-function controlado(estado) { try { return Number(reservasControladas(estado)) || 0; } catch { return 0; } }
+// BUG QUE ISTO CONSERTA: reservasControladas devolve um OBJETO {total, conquistadas} —
+// Number(objeto) dava NaN e as reservas conquistadas nunca entravam no índice.
+function controlado(estado) { try { return Number(reservasControladas(estado)?.total) || 0; } catch { return 0; } }
 
 const METRICAS = {
   pib:        { rot: 'PIB', ic: 'circle-dollar-sign', fmt: (v) => `US$ ${Number(v).toFixed(1)} tri` },

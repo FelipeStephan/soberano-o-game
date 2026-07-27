@@ -54,6 +54,23 @@ export function donoDe(estado, idEstado) {
 }
 export function ehMeu(estado, idEstado) { return donoDe(estado, idEstado) === (estado.iso || 'USA'); }
 
+// ── ANEXAÇÃO: o país virou PROVÍNCIA, não é mais ocupação ─────────────
+// Um país anexado não tem insurgência, não tem upkeep e os estados dele são MEUS
+// para todos os efeitos (distribuir tropa, defender, contar no domínio). Estas duas
+// funções são a fonte única dessa verdade — o motor inteiro pergunta aqui.
+export function paisAnexado(estado, iso) { return !!estado?.ocupacoes?.[iso]?.anexado; }
+export function paisesAnexados(estado) {
+  return Object.entries(estado?.ocupacoes || {}).filter(([, o]) => o?.anexado).map(([iso]) => iso);
+}
+// TODOS os estados sob o meu comando: os do meu país + os dos países que anexei.
+// Substitui `estadosDe(eu)` em tudo que significa "meu domínio" (distribuir, defender).
+export function estadosSobMeuComando(estado) {
+  const eu = estado.iso || 'USA';
+  const out = [...estadosDe(eu)];
+  for (const iso of paisesAnexados(estado)) out.push(...estadosDe(iso));
+  return out;
+}
+
 // Territórios que eu perdi (eram meus por nascimento, hoje são de outro) — é o que
 // pinta de vermelho no mapa e dá ao jogador o alvo da reconquista.
 export function meusPerdidos(estado) {
@@ -61,6 +78,11 @@ export function meusPerdidos(estado) {
   return Object.entries(estado.donoEstado || {})
     .filter(([id, dono]) => dono !== eu && (PORID.get(id)?.pais || id.split('-')[0]) === eu)
     .map(([id, dono]) => ({ ...PORID.get(id), id, dono }));
+}
+// OCUPADOS DE VERDADE (com insurgência viva) — exclui os já ANEXADOS, que viraram
+// província. Sem isso o tickReconquista despedaçava o país anexado estado por estado.
+export function meusOcupadosVivos(estado) {
+  return meusConquistados(estado).filter((e) => !paisAnexado(estado, e.pais || String(e.id).split('-')[0]));
 }
 // Territórios que eu tomei de outros.
 export function meusConquistados(estado) {
@@ -364,7 +386,8 @@ export function semearGuarnicoes(estado, { fracao = 0.55 } = {}) {
 // cobre a fronteira mas SEGURA metade para a invasão e as posições navais.
 export function distribuirAuto(estado, { modo = 'fronteira', ondeEsta = null, frotasInimigas = null, conflitos = null, fracao = 1 } = {}) {
   const eu = estado.iso || 'USA';
-  const meus = estadosDe(eu);
+  // DOMÍNIO TOTAL: distribui também nos países ANEXADOS (são província, não colônia).
+  const meus = estadosSobMeuComando(estado);
   if (!meus.length) return { ok: false, motivo: 'Este país não tem estados mapeados.' };
   const livre = tropaLivre(estado);
   const totalLivre = Object.entries(livre).reduce((a, [u, q]) => a + (u === 'ogivas' ? 0 : (q || 0)), 0);

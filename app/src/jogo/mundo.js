@@ -1,7 +1,7 @@
 // O MUNDO SE MOVE. A cada fechamento de turno o planeta age sozinho: a insurgência
 // ferve nos territórios ocupados, os rivais rearmam, e as relações derivam conforme
 // a sua postura (belicosa afasta, soft power aproxima).
-import { meusConquistados, guarnicao, forcaGuarnicao, estadoPorId } from './territorio.js';
+import { meusConquistados, meusOcupadosVivos, guarnicao, forcaGuarnicao, estadoPorId } from './territorio.js';
 import { PAISES } from '../dados/paises.js';
 import { upkeepDe, garantirOcupacao } from './manutencao.js';
 import { rand } from './rng.js';
@@ -26,7 +26,8 @@ export function tickReconquista(estado) {
   estado.conflitosEstado = estado.conflitosEstado || {};
   estado.donoEstado = estado.donoEstado || {};
 
-  for (const e of meusConquistados(estado)) {
+  // ANEXADO NÃO SE REBELA: país incorporado virou província — sai da reconquista.
+  for (const e of meusOcupadosVivos(estado)) {
     e.nome = e.nome || e.id;   // catálogo pode não ter sido carregado ainda (pós-reload)
     const forca = forcaGuarnicao(guarnicao(estado, e.id));
     const natural = estadoPorId(e.id)?.pais || e.id.split('-')[0];

@@ -13,6 +13,9 @@
 import { PAISES } from '../dados/paises.js';
 import { estadosDe } from './territorio.js';
 import { aplicarEfeitos } from './efeitos.js';
+import { EFETIVO_ATIVO, reservaInicial } from '../dados/efetivoMilitar.js';
+
+const efetivoAtivo = (iso) => EFETIVO_ATIVO[iso] || EFETIVO_ATIVO._default;
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const round2 = (n) => Math.round(n * 100) / 100;
@@ -103,6 +106,58 @@ export function acaoAnexar(estado, iso, feature = null) {
     pib: pibGanho, territorio: 1, soft_power: -14, aprovacao: 6, estabilidade: -4,
     ...(relKey ? { [relKey]: -25 } : {}),
   };
+  // ── A INCORPORAÇÃO DE VERDADE ────────────────────────────────────────
+  // Anexar não é trocar a cor no mapa: o país VIRA você. O que ele tinha, você passa
+  // a ter — exército, poços, território — e o que ele sofria (insurgência, upkeep)
+  // deixa de existir, porque não há mais ocupação: há uma província.
+  estado.anexados = estado.anexados || [];
+  if (!estado.anexados.includes(iso)) estado.anexados.push(iso);
+  delete estado.ocupacoes?.[iso]?.insurgencia;
+  oc.insurgencia = 0;
+
+  // 1) O EXÉRCITO DELE VIRA SEU. Só uma FRAÇÃO sobrevive à conquista (o resto morreu,
+  //    desertou ou foi destruído) — anexar rende exército, mas nunca o exército inteiro.
+  //    A escala vem do efetivo real do país e da força militar dele.
+  const SOBREVIVE = 0.35;
+  const absorvido = {};
+  const soldados = Math.round(efetivoAtivo(iso) * SOBREVIVE);
+  if (soldados > 0) { estado.forcas.infantaria = (estado.forcas.infantaria || 0) + soldados; absorvido.infantaria = soldados; }
+  const forcaPais = Number(info.forca || 25);          // 0–100
+  const equip = { blindados: 0.9, artilharia: 0.8, cacas: 0.35, helicopteros: 0.4, navios: 0.15, drones: 0.5 };
+  for (const [id, k] of Object.entries(equip)) {
+    const n = Math.round(forcaPais * k * SOBREVIVE);
+    if (n > 0) { estado.forcas[id] = (estado.forcas[id] || 0) + n; absorvido[id] = n; }
+  }
+  // 2) RESERVISTAS: a população dele passa a poder ser convocada por você.
+  estado.reservaMilitar = (estado.reservaMilitar || 0) + Math.round(reservaInicial(iso) * 0.6);
+
   const mudancas = aplicarEfeitos(estado, efeitos);
-  return { ok: true, iso, nome, pibGanho, mudancas };
+  return { ok: true, iso, nome, pibGanho, absorvido, mudancas };
+}
+
+// ── DEVOLVER A SOBERANIA — desfazer a anexação/ocupação ────────────────
+// O oposto exato de anexar: os estados voltam ao dono original, a produção sai do
+// seu balanço e o mundo respira (soft power sobe; a sua base não gosta).
+export function devolverSoberania(estado, iso) {
+  const info = PAISES[iso] || {};
+  const nome = info.nome || iso;
+  const eraAnexado = !!estado.ocupacoes?.[iso]?.anexado;
+  if (!eraAnexado && !(estado.conquistados || []).some((c) => c.iso === iso)) {
+    return { falha: 'Este país não está sob seu controle.' };
+  }
+  // os estados voltam a ser dele (apaga a exceção — a posse volta a ser a natural)
+  for (const e of estadosDe(iso)) {
+    if (estado.donoEstado?.[e.id] === (estado.iso || 'USA')) delete estado.donoEstado[e.id];
+    delete estado.guarnicoes?.[e.id];      // a tropa que estava lá volta pro quartel
+    delete estado.conflitosEstado?.[e.id];
+  }
+  estado.anexados = (estado.anexados || []).filter((x) => x !== iso);
+  estado.conquistados = (estado.conquistados || []).filter((c) => c.iso !== iso);
+  delete estado.ocupacoes?.[iso];
+  const relKey = info.rel;
+  const mudancas = aplicarEfeitos(estado, {
+    territorio: -1, soft_power: 16, aprovacao: -5, estabilidade: 2,
+    ...(relKey ? { [relKey]: 45 } : {}),
+  });
+  return { ok: true, iso, nome, eraAnexado, mudancas };
 }

@@ -133,6 +133,11 @@ export const ACOES = [
     efeitos: { inteligencia: 14, seguranca: 8 }, efeitos_falha: { inteligencia: 3 } },
 
   // ── MÍDIA ───────────────────────────────────────────────────────────
+  // FAKE NEWS: não entra na fila — abre a tela onde o JOGADOR escreve a mentira
+  // (ver ui/fakeNews.js). O `_modal` é o que diz à UI para abrir em vez de enfileirar.
+  { id: 'fakenews', categoria: 'Mídia', icone: '🗞️', nome: 'Plantar Fake News', custo: 0.001, custoPA: 1, prob: 1,
+    descricao: 'Você escreve a manchete. O @Choquei publica pro mundo inteiro. US$ 1 mi.', _modal: 'fakenews',
+    efeitos: {} },
   { id: 'publicidade', categoria: 'Mídia', icone: '📺', nome: 'Campanha de Publicidade', custo: 0.06, custoPA: 1, prob: 0.85,
     descricao: 'Molda a narrativa a seu favor.', efeitos: { aprovacao: 8, soft_power: 4 }, efeitos_falha: { aprovacao: 1 } },
   { id: 'influen', categoria: 'Mídia', icone: '📱', nome: 'Exército de Influenciadores', custo: 0.05, custoPA: 1, prob: 0.75,

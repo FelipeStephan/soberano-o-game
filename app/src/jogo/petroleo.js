@@ -11,6 +11,7 @@
 import { PRECO_BASE, PETROLEO, ehPetroestado, ESTREITOS } from '../dados/petroleo.js';
 import { EMPRESAS_POR_PAIS } from '../dados/empresas.js';
 import { rand } from './rng.js';
+import { PAISES } from '../dados/paises.js';
 
 // Produção ORIGINAL de uma empresa (do catálogo, imutável). Serve de régua pra
 // medir o quanto ela cresceu por investimento — o objeto em jogo é uma cópia mutável.
@@ -54,6 +55,13 @@ export function sincronizarPetroleo(estado, empresas) {
   // O saque dos territórios ocupados: você não fica com tudo — a insurgência
   // sabota dutos e o campo não bombeia sob fogo. Quanto mais revolta, menos petróleo.
   const espolio = [];
+  // ANEXADO BOMBEIA 100%: sem insurgência sabotando duto, o campo é seu de verdade.
+  for (const iso of Object.entries(estado.ocupacoes || {}).filter(([, o]) => o?.anexado).map(([i]) => i)) {
+    const p = PETROLEO[iso];
+    if (!p) continue;
+    producao += p.producao;
+    espolio.push({ iso, nome: PAISES[iso]?.nome || iso, bruto: p.producao, extraido: p.producao, eficiencia: 100, anexado: true });
+  }
   for (const c of estado.conquistados || []) {
     const p = PETROLEO[c.iso];
     if (!p) continue;
