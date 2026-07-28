@@ -1,0 +1,142 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   DOUTRINA — as cinco cartas de abertura e o Legado do fim
+   ═══════════════════════════════════════════════════════════════════════
+   Vocabulário da cabine: chanfro em vez de raio, mono para rótulo, cor semântica por
+   doutrina (--cd, injetada inline pelo JS a partir de DOUTRINAS[].cor).
+
+   A ABERTURA BLOQUEIA. É a única tela do jogo que escurece tudo e não tem X — porque
+   é a única decisão que o jogador não pode adiar sem esvaziar a década inteira.
+   O Legado, ao contrário, é injetado DENTRO do cartão de fim que já existe: nunca
+   um modal por cima de outro no momento mais dramático da partida. */
+
+.dt-over { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(10,18,32,.9), rgba(2,5,10,.97));
+  backdrop-filter: blur(6px); animation: subir .35s ease both; padding: 22px; overflow-y: auto; }
+.dt-over.saindo { opacity: 0; transition: opacity .28s ease; }
+
+.dt-painel { width: min(98%, 1120px); display: flex; flex-direction: column; gap: 18px; }
+
+.dt-cab { display: flex; align-items: flex-start; gap: 18px; }
+.dt-flag { width: 62px; height: 42px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--borda), 0 12px 30px -14px #000; }
+.dt-flag.sem { display: grid; place-items: center; font-family: var(--mono); font-size: 9px; color: var(--fraco); background: #0a1322; }
+.dt-cab-txt { flex: 1; min-width: 0; }
+.dt-k { display: block; font-family: var(--mono); font-size: 9px; letter-spacing: .18em; color: var(--cyan); margin-bottom: 6px; }
+.dt-cab h2 { margin: 0 0 8px; font-family: var(--disp); font-size: clamp(20px, 3vw, 30px); letter-spacing: .02em; }
+.dt-cab p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--fraco); max-width: 74ch; }
+.dt-cab p b { color: #cfe0f7; }
+
+/* auto-fit e não 5 colunas fixas: em tela estreita as cartas empilham em vez de
+   espremer o texto até virar ilegível — a promessa é o que vende a doutrina. */
+.dt-cartas { display: grid; grid-template-columns: repeat(auto-fit, minmax(198px, 1fr)); gap: 11px; }
+.dt-carta { position: relative; display: flex; flex-direction: column; gap: 7px; text-align: left;
+  padding: 16px 15px 15px; cursor: pointer; color: var(--texto);
+  background: linear-gradient(180deg, #0b1424, #070d18); border: 0;
+  box-shadow: inset 0 0 0 1px var(--borda); transition: transform .18s ease, box-shadow .18s ease;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: subir .4s ease both; }
+.dt-carta:hover { transform: translateY(-3px); box-shadow: inset 0 0 0 1px var(--cd), 0 20px 40px -22px var(--cd); }
+.dt-carta.sel { box-shadow: inset 0 0 0 2px var(--cd), 0 0 40px -14px var(--cd);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--cd) 12%, #0b1424), #070d18); }
+.dt-ic { display: grid; place-items: center; width: 40px; height: 40px; color: var(--cd);
+  background: color-mix(in srgb, var(--cd) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cd) 45%, transparent);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.dt-nome { font-family: var(--disp); font-size: 15px; letter-spacing: .04em; color: #eaf1ff; }
+.dt-lema { font-style: normal; font-size: 11.5px; color: var(--cd); opacity: .95; }
+.dt-promessa { margin: 2px 0 4px; font-size: 12px; line-height: 1.5; color: #b8c8e0; flex: 1; }
+.dt-mede { display: flex; flex-direction: column; gap: 2px; font-size: 11.5px; color: #cfe0f7;
+  padding-top: 9px; border-top: 1px solid var(--borda); }
+.dt-mede span { font-family: var(--mono); font-size: 7.5px; letter-spacing: .16em; color: var(--fraco); }
+.dt-usa { font-family: var(--mono); font-size: 8px; letter-spacing: .06em; color: var(--fraco); line-height: 1.7; }
+.dt-check { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 22px; height: 22px;
+  color: #04121c; background: var(--cd); opacity: 0; transform: scale(.5); transition: all .18s ease;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px)); }
+.dt-carta.sel .dt-check { opacity: 1; transform: none; }
+
+.dt-rodape { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.dt-aviso { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--fraco); }
+.dt-aviso b { color: #cfe0f7; }
+.dt-confirmar { --cd: var(--cyan); margin-left: auto; display: flex; align-items: center; gap: 10px;
+  padding: 14px 26px; border: 0; cursor: pointer; font-family: var(--disp); font-size: 14px; letter-spacing: .08em;
+  color: #04121c; background: var(--cd); transition: filter .16s ease, opacity .16s ease;
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+.dt-confirmar:hover:not(:disabled) { filter: brightness(1.12); }
+.dt-confirmar:disabled { opacity: .35; cursor: not-allowed; background: #22304a; color: var(--fraco); }
+
+/* ── A INSÍGNIA NO TOPO ─────────────────────────────────────────────── */
+.dt-insig { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; cursor: help;
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: .12em; color: var(--cd);
+  background: color-mix(in srgb, var(--cd) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cd) 40%, transparent);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px)); }
+
+/* A insígnia mora colada no nome do país, no topo. `block` porque o bloco da nação é
+   uma coluna (rótulo em cima, valor embaixo) e a doutrina é a terceira linha dela. */
+.topo-doutrina:empty { display: none; }
+.topo-doutrina { display: block; margin-top: 3px; }
+
+/* ── O LEGADO (dentro do cartão de fim) ─────────────────────────────── */
+.lgd-bloco { padding: 15px 16px; background: rgba(6,11,20,.85); box-shadow: inset 0 0 0 1px var(--borda); display: flex; flex-direction: column; gap: 13px;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+.lgd-topo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.lgd-doutrina { display: flex; align-items: center; gap: 11px; flex: 1; min-width: 180px; }
+.lgd-ic { display: grid; place-items: center; width: 40px; height: 40px; flex: none; color: var(--cd);
+  background: color-mix(in srgb, var(--cd) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cd) 45%, transparent);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.lgd-doutrina b { display: block; font-family: var(--disp); font-size: 14px; color: #eaf1ff; }
+.lgd-doutrina span { font-size: 11px; color: var(--fraco); }
+.lgd-total { text-align: right; }
+.lgd-total i { display: block; font-style: normal; font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--fraco); }
+.lgd-total b { font-family: var(--disp); font-size: 40px; line-height: 1; color: var(--cd); }
+.lgd-epiteto { display: flex; align-items: center; gap: 9px; padding: 10px 12px; color: #ffc750;
+  background: rgba(255,199,80,.07); box-shadow: inset 2px 0 0 #ffc750;
+  font-family: var(--disp); font-size: 14px; letter-spacing: .05em; }
+
+.lgd-somas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.lgd-soma { padding: 9px 11px; background: rgba(11,20,36,.8); box-shadow: inset 0 0 0 1px var(--borda);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.lgd-soma.dentro { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cd) 50%, transparent); background: color-mix(in srgb, var(--cd) 8%, rgba(11,20,36,.8)); }
+.lgd-soma i { display: block; font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .13em; color: var(--fraco); }
+.lgd-soma b { display: block; font-family: var(--disp); font-size: 21px; color: #eaf1ff; }
+.lgd-soma.dentro b { color: var(--cd); }
+.lgd-soma small { font-size: 9.5px; color: var(--fraco); }
+
+.lgd-detalhe { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 5px; }
+.lgd-linha { display: flex; align-items: center; gap: 8px; padding: 6px 9px; background: rgba(11,20,36,.6); font-size: 11.5px; }
+.lgd-linha.dentro { box-shadow: inset 2px 0 0 var(--cd); }
+.lgd-linha.ruim { box-shadow: inset 2px 0 0 var(--perigo); }
+.lgd-rot { flex: 1; min-width: 0; color: #b8c8e0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lgd-qtd { font-family: var(--mono); font-size: 10px; color: var(--fraco); }
+.lgd-x3 { font-style: normal; font-family: var(--mono); font-size: 8px; letter-spacing: .08em; color: var(--cd); }
+.lgd-pts { font-family: var(--disp); font-size: 14px; color: #eaf1ff; min-width: 42px; text-align: right; }
+.lgd-linha.ruim .lgd-pts { color: var(--perigo); }
+.lgd-vazio, .lgd-solo { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-size: 11.5px; color: var(--fraco);
+  background: rgba(11,20,36,.6); box-shadow: inset 2px 0 0 var(--borda); }
+
+.lgd-lab { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .14em; color: var(--fraco); text-transform: uppercase; }
+.lgd-rank { display: flex; flex-direction: column; gap: 4px; }
+.lgd-r { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: rgba(11,20,36,.7); }
+.lgd-r.eu { box-shadow: inset 0 0 0 1px rgba(53,224,255,.45); }
+.lgd-r.primeiro { background: rgba(255,199,80,.08); box-shadow: inset 2px 0 0 #ffc750; }
+.lgd-r.primeiro.eu { box-shadow: inset 2px 0 0 #ffc750, inset 0 0 0 1px rgba(53,224,255,.45); }
+.lgd-pos { font-family: var(--disp); font-size: 15px; color: var(--fraco); min-width: 18px; }
+.lgd-r.primeiro .lgd-pos { color: #ffc750; }
+.lgd-r .dt-flag { width: 26px; height: 18px; }
+.lgd-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.lgd-quem b { font-size: 12px; } .lgd-quem i { font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; color: var(--fraco); }
+.lgd-rleg { font-family: var(--disp); font-size: 17px; color: #eaf1ff; }
+
+.lgd-coroas { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+.lgd-coroa { display: flex; align-items: center; gap: 9px; padding: 8px 10px; background: rgba(11,20,36,.7);
+  box-shadow: inset 2px 0 0 var(--cd); }
+.lgd-cic { color: var(--cd); display: grid; place-items: center; flex: none; }
+.lgd-coroa div { flex: 1; min-width: 0; }
+.lgd-coroa i { display: block; font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; color: var(--cd); }
+.lgd-coroa b { font-size: 12px; color: #eaf1ff; }
+.lgd-coroa span { font-family: var(--disp); font-size: 15px; color: var(--fraco); }
+
+@media (max-width: 620px) {
+  .dt-cab { flex-direction: column; gap: 10px; }
+  .lgd-somas { grid-template-columns: 1fr; }
+  .dt-confirmar { width: 100%; justify-content: center; margin-left: 0; }
+}

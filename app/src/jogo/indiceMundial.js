@@ -16,6 +16,8 @@ import { MUNDO_STATS } from '../dados/mundoStats.js';
 import { forcaDe } from './forcasMundo.js';
 import { forcaGuarnicao } from './territorio.js';
 import { reservasControladas } from './petroleo.js';
+import { calcularLegado } from './doutrinas.js';
+import { calcularDestino } from './destino.js';
 
 function pool(estado) {
   const s = new Set([...Object.keys(MUNDO_STATS), ...Object.keys(PETROLEO)]);
@@ -59,7 +61,23 @@ export function statsVivos(estado) {
     //           tabela estática de NPC (ver chanceDeteccaoAlvo).
     guarn: guarnicoesResumo(estado),
     intel: Math.round(estado.inteligencia ?? 0),
+    // ── A CORRIDA DA DÉCADA VIAJA AQUI ────────────────────────────────────
+    // O pódio final (rankingLegado) precisa do Legado de cada humano, e este pacote já
+    // sai a cada batida para todo mundo na sala. Criar um evento novo só para isso
+    // significaria mais um caminho para dessincronizar — e um jogador que caiu e parou
+    // de transmitir sumiria do pódio no exato momento em que ele importa.
+    // São três números e uma string; o custo é irrelevante perto do `guarn`.
+    dout: estado.doutrina?.id || null,
+    leg: legadoRelay(estado),
+    dest: Math.round(calcularDestino(estado)),
   };
+}
+
+// O cálculo do Legado NUNCA pode derrubar a batida do mundo: se ele falhar, o pacote
+// sai sem o campo e o jogador só some do pódio — o jogo inteiro continua de pé.
+function legadoRelay(estado) {
+  if (!estado.doutrina?.id) return null;
+  try { return calcularLegado(estado, { destino: calcularDestino(estado) }).total; } catch { return null; }
 }
 
 // Só os estados que ainda são MEUS, e só o escalar de força — é o suficiente pro

@@ -47,6 +47,10 @@ import { abrirChamadoSocorro, abrirOperacaoRetomada, avisarSocorroRecebido } fro
 import { postsParaEvento } from '../dados/vozesX.js';
 import { registrarFeito, fechouAno, placarDoAno, titulosDoAno, limparAno, jaFechou, anoDoTurno, recompensaDoTitulo, mancheteDoTitulo, rotuloAno } from '../jogo/feitos.js';
 import { abrirRelatorioAno } from './relatorioAno.js';
+// A DOUTRINA — a espinha da década (ver docs/ENREDO-E-CAMPANHA.md, Fase 1). Motor puro
+// no jogo/, as duas telas (as cinco cartas e o Legado) em ui/doutrina.js.
+import { temDoutrina, acumularAno, calcularLegado, rankingLegado } from '../jogo/doutrinas.js';
+import { abrirEscolhaDoutrina, blocoLegadoHTML, insigniaDoutrinaHTML } from './doutrina.js';
 // Encomendas entre governos: motor puro + as telas.
 import { abrirEncomendas, cartaoPedidoRecebido, badgeEncomendas } from './encomendas.js';
 import { registrarPedidoRecebido, aplicarResposta, tickEncomendas, receberEntrega, aplicarPagamento } from '../jogo/encomendas.js';
@@ -111,7 +115,37 @@ function logoX(tam = 20) {
 }
 const prob = (p) => (p >= 1 ? '100%' : `${Math.round(p * 100)}%`);
 
+// ═══════════════════════════════════════════════════════════════════════
+// OS RELÓGIOS DA PARTIDA ANTERIOR
+// ═══════════════════════════════════════════════════════════════════════
+// BUG QUE ISTO CONSERTA: `iniciarJogo` é chamado MAIS DE UMA VEZ na mesma aba. Quem
+// cai numa sala online renasce em outra nação sem recarregar a página (#11, ver
+// main.js → renascer) — e cada renascimento montava a cabine do zero, incluindo dois
+// `setInterval` que nunca eram desligados.
+//
+// O custo não era só memória. O intervalo do MUNDO AO VIVO captura o `jogo` e o
+// `ctrl` da partida MORTA: depois do renascimento ele continuava pulsando o mundo do
+// país que já não existe, empilhando post no feed antigo e — se aquele jogador fosse
+// o host — RETRANSMITINDO pulsos duplicados para a sala inteira, um par a mais a cada
+// vez que alguém caísse. Numa sala longa, o feed de todo mundo começava a repetir.
+//
+// A lista é de módulo (e não do closure) exatamente porque quem precisa limpar é a
+// partida SEGUINTE, que não tem acesso ao closure da anterior.
+let RELOGIOS_DA_PARTIDA = [];
+function cadenciar(fn, ms) { const id = setInterval(fn, ms); RELOGIOS_DA_PARTIDA.push(id); return id; }
+// O MESMO vale para o relógio de tempo real. Hoje ele é parado no caminho normal
+// (entrarEmEspectador chama `tr.parar()` antes de renascer), mas depender disso é
+// depender de um único caminho continuar sendo o único para sempre. Parar aqui torna
+// a garantia estrutural: seja qual for a porta por onde a partida nova entrar, a
+// antiga não sobrevive a ela.
+let TR_ANTERIOR = null;
+
 export function iniciarJogo(container, jogo, opts = {}) {
+  // Primeira coisa: desligar os relógios da partida anterior nesta aba.
+  for (const id of RELOGIOS_DA_PARTIDA) clearInterval(id);
+  RELOGIOS_DA_PARTIDA = [];
+  TR_ANTERIOR?.parar?.();
+  TR_ANTERIOR = null;
   const online = !!opts.online;
   const net = opts.net || null;
   // Um listener no document cobre a HUD inteira, pra sempre: os cartões seguem
@@ -146,7 +180,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
         <div class="marca-topo"><span class="titulo">SOBERANO</span><span class="linha-status">// COMANDO ESTRATÉGICO</span></div>
         <div class="topo-nacao">
           <img class="topo-flag" src="${bandeira(ISO2_JOGADOR, 80)}" alt="" onerror="this.style.display='none'">
-          <div><span class="rot">Nação</span><span class="val">${esc(f.pais)}</span></div>
+          <div><span class="rot">Nação</span><span class="val">${esc(f.pais)}</span><span class="topo-doutrina" id="t-doutrina"></span></div>
         </div>
         <div class="topo-sep"></div>
         <div class="stat" data-tip="O mês do seu mandato. O mundo corre em tempo real — o calendário anda mês a mês; a cada 12 meses o ano vira. Seu reinado termina quando o tempo (ou o povo) acabar." data-tip-t="Tempo no poder" data-tip-k="TEMPO REAL"><span class="rot">Período</span><span class="val"><span id="t-turno">${mesAnoDoJogo(1).label}</span></span></div>
@@ -432,7 +466,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const focos = (jogo.estado.emGuerra?.length || 0) + (jogo.estado.conquistados?.filter((c) => c.insurgencia >= 60).length || 0);
     container.querySelector('#mv-focos').textContent = focos ? `${focos} foco(s) quente(s)` : 'sem focos ativos';
   }
-  setInterval(() => {
+  cadenciar(() => {
     const r = container.querySelector('#mv-relogio');
     if (r) r.textContent = new Date().toLocaleTimeString('pt-BR');
   }, 1000);
@@ -446,7 +480,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
   const HANDLES_MUNDO = ['@radar_geo', '@fio_internacional', '@mercado_ao_vivo', '@boletim_mundo', '@olho_no_mapa'];
   let pulsoN = 0;
   function iniciarMundoAoVivo(ctrl) {
-    setInterval(() => {
+    cadenciar(() => {
       if (jogo.fase !== 'planejamento') return;
       // MUNDO COMPARTILHADO: numa sala online, SÓ o host gera o mundo ao vivo. O convidado
       // não roda o seu (que divergia) — ele recebe do host via ligarOnline/aplicarMundo.
@@ -647,6 +681,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // acesso. Sem marca no topo, o jogador olharia pro tesouro cheio e concluiria que
     // o jogo travou toda vez que uma ordem fosse recusada. O número fica lá, riscado.
     pintarClima();
+    // A DOUTRINA É PÚBLICA — e informação pública que só aparece na tela final não é
+    // pública, é surpresa. O selo fica colado no nome do país, onde o jogador (e o
+    // print que ele manda pro grupo) já olha.
+    const dtEl = container.querySelector('#t-doutrina');
+    if (dtEl) { const h = insigniaDoutrinaHTML(jogo.estado); if (dtEl.innerHTML !== h) dtEl.innerHTML = h; }
     const gelo = caixaCongelado(jogo.estado);
     el.tesouro.classList.toggle('congelado', gelo.bloqueado);
     if (gelo.bloqueado) el.tesouro.title = `Caixa congelado pelo Conselho de Segurança — ${gelo.restante} mês(es) restantes.`;
@@ -2353,6 +2392,19 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // Agora existe um terceiro desfecho ('legado') e quem decide cor, ícone e etiqueta
     // é `tomDoFim`, num lugar só (jogo/destino.js).
     const tom = tomDoFim(fim);
+
+    // ── O LEGADO — a resposta a "então, quem foi o melhor?" ───────────
+    // Calculado AQUI e não no fim do ano porque uma partida pode terminar em março
+    // (queda) ou no Ano VII (império): `calcularLegado` soma o acumulador dos anos
+    // fechados com o ano corrente ainda em aberto. Quem fecha a década inteira não
+    // sente diferença; quem cai no meio, sente muita.
+    let blocoLegado = '';
+    try {
+      const leg = calcularLegado(jogo.estado, { destino: jogo.destino });
+      const rank = rankingLegado(jogo.estado, { meuLegado: leg.total, meuDestino: jogo.destino });
+      blocoLegado = blocoLegadoHTML(leg, rank, { anos });
+    } catch { blocoLegado = ''; }   // sem doutrina (save antigo) a tela é a de sempre
+
     container.insertAdjacentHTML('beforeend', `
       <div class="modal-fundo fim-fundo ${tom.classe}">
         <div class="fim-card ${tom.classe}" style="--acento:${tom.acento}">
@@ -2396,6 +2448,8 @@ export function iniciarJogo(container, jogo, opts = {}) {
             ${pill('Soft Power', Math.round(e.soft_power), 'var(--roxo)')}
             ${pill('Ocupações', conq, conq ? '#ff9628' : 'var(--fraco)')}
           </div>
+
+          ${blocoLegado}
 
           <div class="fim-sec">${ico('radio', 13)} COMO A IMPRENSA VAI TE LEMBRAR</div>
           <div class="fim-imprensa">
@@ -2518,6 +2572,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
         tom: campeao.tom === 'mau' ? 'quente' : 'frio', auto: true,
       });
     }
+    // ── O LEGADO ACUMULA AQUI, E SÓ AQUI ──────────────────────────────
+    // Tem de ser ANTES de `limparAno`: é ele que apaga os registros crus do ano (a
+    // única coisa que impede o save de crescer para sempre numa década). Se o Legado
+    // fosse calculado lendo os registros, ele seria zerado todo 31 de dezembro.
+    try { acumularAno(jogo.estado, placar?.[meu], ano); } catch { /* o placar do ano já foi entregue; o acumulador é o que pode falhar sem custo */ }
     limparAno(jogo.estado, { ano, placar, titulos });
     if (document.querySelector('.carta-wrap .cena')) return;   // não atropela uma cena aberta
     abrirRelatorioAno(jogo, { ano, placar, titulos, meuIso: meu, onFim: () => { renderHud(); renderTopo(); } });
@@ -2668,6 +2727,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // recebe a batida pela rede (aoBeatHost em ligarOnline → tr.beatExterno).
     souBeatLocal: () => !jogo.ehOnline || !!onlineCtrl?.souHost(),
   });
+  TR_ANTERIOR = tr;
   if (jogo.fase !== 'fim') tr.iniciar();
 
   // RECÉM-CHEGADO NA SALA: adota o retrato do mundo que o servidor entregou no
@@ -2688,6 +2748,31 @@ export function iniciarJogo(container, jogo, opts = {}) {
   }
 
   renderBadge(); renderHud(); renderFeed(); renderAcoes();
+
+  // ── A PRIMEIRA DECISÃO DA DÉCADA ──────────────────────────────────────
+  // Vem DEPOIS do primeiro render, não antes: as cartas aparecem sobre a cabine já
+  // montada, e o jogador escolhe olhando para o país que herdou — não para um fundo
+  // preto. O relógio local pausa sozinho enquanto o overlay está aberto (tempoReal
+  // trata `.dt-over` como qualquer outra cena grande).
+  //
+  // A guarda cobre três casos que NÃO devem ver esta tela: quem já escolheu (save
+  // retomado no meio da década), quem já acabou, e o espectador — que não governa
+  // nada e escolheria uma doutrina para um país que não é dele.
+  if (!temDoutrina(jogo.estado) && jogo.fase !== 'fim' && !jogo.espectador) {
+    abrirEscolhaDoutrina(jogo, {
+      onEscolher: (d) => {
+        renderTopo();
+        // A escolha é PÚBLICA, e público começa em casa: o país inteiro fica sabendo
+        // que rumo o governo assumiu. É a primeira linha do enredo daquela partida.
+        jogo._empilharFeed?.([{
+          tipo: 'sistema', handle: '📜 Doutrina de Estado', cor: '#ffc750',
+          texto: `${jogo.ficha.pais} adota a doutrina ${d.nome}. ${d.promessa} A década começa a ser medida a partir de agora.`,
+        }]);
+        renderFeed();
+      },
+    });
+  }
+
   window.__jogo = jogo; // hook de debug (dev)
   window.__tr = tr; // hook de debug (dev)
   window.__render = { renderFeed, renderHud, renderAcoes, renderTopo }; // hook de debug (dev)

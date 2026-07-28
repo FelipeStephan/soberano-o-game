@@ -283,9 +283,29 @@ tensão muda: Máquina offline, gente online.
 
 ## 10. ORDEM DE IMPLEMENTAÇÃO
 
-**Fase 1 — A espinha.** Escolha de Doutrina + cálculo de Legado no fim (reusa
-`feitos.js`) + tela final com campeão e coroas.
+**Fase 1 — A espinha. 🟢 FEITA em 2026-07-28.** Escolha de Doutrina + cálculo de
+Legado no fim (reusa `feitos.js`) + tela final com campeão e coroas.
 *Sozinha, já dá rumo ao jogo inteiro.* É a fase de maior retorno por linha de código.
+
+> **O que entrou:** `jogo/doutrinas.js` (motor puro: as cinco doutrinas, o acumulador
+> de dez anos, o cálculo de Legado, o pódio e as coroas), `ui/doutrina.js` (as cinco
+> cartas na abertura + o bloco de Legado injetado na tela de fim + a insígnia no topo)
+> e `estilo-doutrina.css`. Amarrado em `ui/jogo.js` (abertura, virada de ano, tela
+> final, topo) e em `jogo/indiceMundial.js` — a doutrina, o Legado e o Destino de cada
+> humano viajam dentro do pacote `statsVivos` que já saía a cada batida, sem evento
+> novo no relay.
+>
+> **Detalhes que valem lembrar antes de mexer:**
+> - O Legado NÃO pode ser calculado lendo `feitos.registros`: `limparAno` apaga os
+>   registros crus todo ano. Por isso existe `estado.doutrina.tally`, somado na virada
+>   de ano **antes** do `limparAno`, com trava por ano contra a batida em dobro do online.
+> - Feito negativo (ogiva, sanção sofrida, território perdido) **não** ganha o ×3 da
+>   doutrina. Punição com desconto não é punição.
+> - O relógio local pausa enquanto as cartas estão abertas (`.dt-over` entrou na mesma
+>   lista de `ui/tempoReal.js` que já pausava para modal e cena).
+> - A calibragem está no comentário de `VALOR` em `doutrinas.js`: uma década ativa
+>   fecha entre 200 e 300, na mesma ordem de grandeza do Destino, para que nenhuma das
+>   duas metades da conta vire decoração.
 
 **Fase 2 — O ritmo.** Os cinco Mandatos e os três Atos.
 
@@ -344,8 +364,19 @@ exatamente por isso que o jogo parece rico e sem rumo ao mesmo tempo.
 
 ## 13. DECISÕES QUE PRECISAM DO DONO
 
+Duas foram **batidas na implementação da Fase 1** porque o código não podia esperar por
+elas — as duas seguiram a recomendação deste documento, e as duas são reversíveis:
+
+2. ~~**Doutrina pública ou secreta?**~~ → **PÚBLICA.** Ela aparece como insígnia no topo
+   e no pódio final. É o que permite aliança, rivalidade e chantagem: informação que só
+   aparece na tela final não é pública, é surpresa. *Para tornar secreta:* apagar a
+   chamada a `insigniaDoutrinaHTML` em `renderTopo` e o campo `dout` de `statsVivos`.
+5. ~~**Cinco doutrinas é o número certo?**~~ → **CINCO**, como no documento. *Mexer é
+   barato:* `DOUTRINAS` e `ORDEM_DOUTRINAS` em `jogo/doutrinas.js` são declarativos, e
+   a tela usa `auto-fit` — tirar ou acrescentar uma não quebra layout nenhum.
+
+As três que continuam abertas, e que só importam a partir da Fase 2:
+
 1. **Década (60 min) ou Meia-Década (30 min) como padrão?**
-2. **Doutrina pública ou secreta?** (a recomendação é pública, com objetivo secreto)
 3. **Quem cai vira Estraga-Prazeres ou volta disputando normalmente?**
 4. **O offline é modo próprio ou tutorial do online?** (a recomendação é modo próprio)
-5. **Cinco doutrinas é o número certo?** Menos = mais foco; mais = mais rejogabilidade.

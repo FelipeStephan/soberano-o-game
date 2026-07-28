@@ -26,12 +26,22 @@ renasce em outro país na MESMA sala sem recarregar a página (`ui/renascer.js`)
 
 ---
 
-## 0. A DECISÃO QUE VEM ANTES DE TUDO
+## 0. O ENREDO — a espinha já está no código
 
-O jogo tem sistemas demais e rumo de menos — e isso não se resolve com mais features.
-A proposta de enredo (A Década, as Doutrinas, os Mandatos, a campanha offline com
-missões e finais múltiplos) está em **`ENREDO-E-CAMPANHA.md`**, com cinco decisões
-esperando o dono no fim do documento. **Ler antes de escolher a próxima feature.**
+O jogo tinha sistemas demais e rumo de menos. A proposta completa (A Década, as
+Doutrinas, os Mandatos, os três Atos, a campanha offline com missões e finais
+múltiplos) está em **`ENREDO-E-CAMPANHA.md`**.
+
+**A Fase 1 está entregue (2026-07-28):** o jogador escolhe uma das cinco **Doutrinas**
+ao assumir o país, ela aparece como insígnia no topo, cada feito do ano acumula num
+**Legado** (peso ×3 dentro da doutrina, ×1 fora, mais o Destino final) e a tela de fim
+mostra o placar detalhado, o pódio da sala e uma **coroa por doutrina**. Motor em
+`jogo/doutrinas.js`, telas em `ui/doutrina.js`.
+
+**O que vem a seguir, na ordem do documento:** Fase 2 (os cinco Mandatos e os três
+Atos) → Fase 3 (a abertura em cinco cenas, com o tutorial embutido) → Fase 4 (o Rival
+e a cadeia de missões offline) → Fase 5 (o Estraga-Prazeres). Três decisões do dono
+continuam abertas na seção 13 do documento, e nenhuma delas bloqueia a Fase 2.
 
 ---
 
@@ -99,6 +109,52 @@ servidor zera o contador, então um restart no meio do dia reabre o gasto. E os
 saves funcionam pelo volume do Docker, não por um banco de verdade: `DATABASE_URL`
 (Neon, Postgres serverless) está prevista no `.env` mas nunca foi preenchida. Sem
 ela não há "nuvem" — se o volume do VPS se perder, os saves vão junto.
+
+---
+
+## 2.5 DESEMPENHO — a auditoria de 2026-07-28
+
+Medido com o jogo rodando, não lido no código. Método: cronometrar cada função quente
+com `performance.now()` sobre um estado de **fim de década forçado** — 900 guarnições,
+7 jogadores humanos com 200 estados cada, 600 feitos registrados e 40 guerras
+simultâneas. Ou seja, pior caso bem acima de qualquer partida real.
+
+| O que | Custo | Frequência | Veredito |
+|---|---|---|---|
+| `renderHud()` | 2,8 ms | por ação e por batida | folgado |
+| `renderAcoes()` | 1,0 ms | idem | folgado |
+| `globoCtrl.atualizar()` | 3,1 ms | por batida (30 s) | folgado |
+| `montarIndice()` | 0,27 ms | ao abrir o Índice | irrelevante |
+| `statsVivos()` | 0,51 ms | 1× por batida | irrelevante |
+| `calcularLegado()` | 0,02 ms | 1× por batida | irrelevante |
+| `JSON.stringify(estado)` | 0,56 ms | autosave | irrelevante |
+| Estado serializado | 122 KB | localStorage (teto 5 MB) | 4% do teto |
+| Pacote de rede por batida | 0,1 KB | 1× por jogador | trivial |
+| Retrato do mundo (host) | 0,34 KB | 1× por batida | trivial |
+
+**Conclusão: o laço do jogo não é o gargalo, nem perto.** Somando tudo, uma batida
+custa menos de 8 ms — de um orçamento de 30.000 ms. Não há o que otimizar aí, e
+otimizar mesmo assim só deixaria o código pior.
+
+**O que a auditoria ENCONTROU (e já foi corrigido):** `iniciarJogo` roda mais de uma
+vez na mesma aba (é o caminho do renascimento, #11) e deixava dois `setInterval` vivos
+a cada vez. O custo não era memória: o intervalo do MUNDO AO VIVO capturava o `jogo`
+da partida morta e continuava pulsando o mundo dela — empilhando post no feed antigo
+e, se aquele jogador fosse o host, **retransmitindo pulsos duplicados para a sala
+inteira**. Consertado com uma lista de relógios de módulo, limpa no início de cada
+partida (`RELOGIOS_DA_PARTIDA` / `TR_ANTERIOR` em `ui/jogo.js`). Verificado: 5 partidas
+seguidas na mesma aba, contagem de intervalos constante em 2.
+
+**O único custo real que sobra é o CARREGAMENTO, não a partida:** o bundle fecha em
+**3,8 MB** (1,05 MB gzipado), quase tudo `globe.gl` + `three.js`. Isso é tempo de
+primeira tela, não travamento em jogo. Se algum dia incomodar, o caminho é
+`import()` dinâmico do globo — a home e o jogo já são dois momentos separados.
+
+**O que esta auditoria NÃO conseguiu medir:** FPS real com o planeta girando. O painel
+de navegador do agente não compõe frames, então `requestAnimationFrame` não dispara e
+qualquer número que eu reportasse seria inventado. É a única medida que precisa de
+uma janela de verdade — abra o jogo, F12 → aba Performance, e grave 10 segundos com o
+globo girando.
 
 ---
 

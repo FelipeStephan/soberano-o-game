@@ -97,8 +97,11 @@ export function criarTempoReal(jogo, hooks = {}) {
     // PAUSA enquanto uma cena grande ou um modal está aberto (ofensiva, carta, mercado,
     // flash urgente, decisão de país…) — o mundo espera o jogador sair; senão a economia
     // corre por baixo de um modal e uma batida empilha outra cena por cima da atual.
+    // `.dt-over` (a escolha da doutrina) entra aqui pelo mesmo motivo das outras: é a
+    // primeira decisão da década e não pode ser tomada com o mundo correndo por baixo.
     if (document.querySelector('.lg-barra') || document.querySelector('.carta-wrap .cena')
-      || document.querySelector('.defesa-modal') || document.querySelector('.modal-fundo')) return;
+      || document.querySelector('.defesa-modal') || document.querySelector('.modal-fundo')
+      || document.querySelector('.dt-over')) return;
 
     jogo.estado.relogio.segundos += 1;
 
