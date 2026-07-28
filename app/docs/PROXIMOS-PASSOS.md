@@ -26,6 +26,15 @@ renasce em outro país na MESMA sala sem recarregar a página (`ui/renascer.js`)
 
 ---
 
+## 0. A DECISÃO QUE VEM ANTES DE TUDO
+
+O jogo tem sistemas demais e rumo de menos — e isso não se resolve com mais features.
+A proposta de enredo (A Década, as Doutrinas, os Mandatos, a campanha offline com
+missões e finais múltiplos) está em **`ENREDO-E-CAMPANHA.md`**, com cinco decisões
+esperando o dono no fim do documento. **Ler antes de escolher a próxima feature.**
+
+---
+
 ## 1. AÇÕES IMEDIATAS DO DONO (5 minutos, no /admin)
 
 1. **Recuperar a senha:** `grep ADMIN_PASSWORD /opt/soberano/app/.env` no terminal da VPS.
