@@ -164,6 +164,11 @@ function etapaDoutrina(d) {
       <i class="fe-lema">“${esc(dt.lema)}”</i>
       <p class="fe-corpo">${esc(dt.promessa)}</p>
       <div class="fe-mede">${ico('ruler', 12)} MEDIDO POR: ${esc(dt.mede)}</div>
+      ${d.mandatos ? `<div class="fe-mandatos">
+        <span>${ico('scroll', 12)} MANDATOS CUMPRIDOS</span>
+        <b>${d.mandatos.cumpridos} de ${d.mandatos.total}</b>
+        <i>${esc(fraseDeMandatos(d.mandatos))}</i>
+      </div>` : ''}
     </div>` };
 }
 
@@ -181,6 +186,18 @@ function etapaDoutrina(d) {
 //     quantidade, ×3 é o peso da doutrina e +210 é o resultado.
 // O ×1 também passou a aparecer nas linhas de fora da doutrina: mostrar o peso só
 // quando ele é 3 faz parecer que as outras linhas não têm peso nenhum.
+// A régua dos Mandatos na tela final. Cinco cobranças ao longo da década, e o que
+// o jogador fez com elas é metade da história de como ele chegou até aqui — a outra
+// metade é o Legado. Sem esta linha, os Mandatos somem no instante em que a partida
+// acaba, e um sistema que só existe durante o jogo é um sistema que ninguém lembra.
+function fraseDeMandatos(m) {
+  if (!m.total) return 'Nenhuma cobrança chegou a vencer.';
+  if (m.cumpridos === m.total) return 'Todas as cobranças entregues no prazo. Isso praticamente não acontece.';
+  if (m.cumpridos === 0) return 'Nenhuma entregue. O gabinete parou de perguntar em algum momento.';
+  if (m.cumpridos >= m.total - 1) return 'Quase tudo entregue. A falha que sobrou é a que vão citar.';
+  return 'Metade do que o país pediu virou realidade. A outra metade virou discurso.';
+}
+
 function etapaLegado(d) {
   const L = d.legado;
   if (!L) return null;

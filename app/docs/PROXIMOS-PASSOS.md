@@ -38,10 +38,17 @@ ao assumir o país, ela aparece como insígnia no topo, cada feito do ano acumul
 mostra o placar detalhado, o pódio da sala e uma **coroa por doutrina**. Motor em
 `jogo/doutrinas.js`, telas em `ui/doutrina.js`.
 
-**O que vem a seguir, na ordem do documento:** Fase 2 (os cinco Mandatos e os três
-Atos) → Fase 3 (a abertura em cinco cenas, com o tutorial embutido) → Fase 4 (o Rival
-e a cadeia de missões offline) → Fase 5 (o Estraga-Prazeres). Três decisões do dono
-continuam abertas na seção 13 do documento, e nenhuma delas bloqueia a Fase 2.
+**A Fase 2 também está entregue (2026-07-28):** a cada 2 anos o seu país **cobra** —
+cinco Mandatos por década, derivados da sua doutrina, com prazo, barra de progresso
+fixa na HUD e veredito com efeito real (falhar dois seguidos dói em dobro e vira
+plantão). E o mundo passou a ter **três Atos**: frio nos anos 1-3, duro nos 4-7, e no
+8-10 a Corrida — guerra nasce mais e o Conselho de Segurança pode ser convocado no
+dobro da frequência. Motores em `jogo/mandatos.js` e `jogo/atos.js`.
+
+**O que vem a seguir:** Fase 3 (a abertura em cinco cenas, com o tutorial embutido) →
+Fase 4 (o Rival e a cadeia de missões offline) → Fase 5 (o Estraga-Prazeres). Três
+decisões do dono continuam abertas na seção 13 do documento, e nenhuma bloqueia a
+Fase 3.
 
 ---
 

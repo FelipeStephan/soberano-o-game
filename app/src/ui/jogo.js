@@ -53,6 +53,11 @@ import { temDoutrina, acumularAno, calcularLegado, rankingLegado, epitetoDaDecad
 import { abrirEscolhaDoutrina, insigniaDoutrinaHTML } from './doutrina.js';
 import { abrirFimDaEra } from './fimDaEra.js';
 import { situacaoDoFim } from '../dados/copyFim.js';
+// FASE 2 DO ENREDO: os cinco Mandatos (o país te cobra a cada 2 anos) e os três Atos
+// (o mundo muda de comportamento ao longo da década). Motores puros em jogo/.
+import { emitirMandato, julgarMandato, mandatoDoTurno, cofreMandato, placarDeMandatos, roman, ANOS_POR_MANDATO, TOTAL_MANDATOS } from '../jogo/mandatos.js';
+import { abrirCobranca, abrirVeredito, faixaMandatoHTML } from './mandato.js';
+import { viradaDeAto } from '../jogo/atos.js';
 // Encomendas entre governos: motor puro + as telas.
 import { abrirEncomendas, cartaoPedidoRecebido, badgeEncomendas } from './encomendas.js';
 import { registrarPedidoRecebido, aplicarResposta, tickEncomendas, receberEntrega, aplicarPagamento } from '../jogo/encomendas.js';
@@ -220,6 +225,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <div class="mv-barra"><div class="mv-fill" id="mv-fill"></div></div>
           <div class="mv-rodape"><span id="mv-relogio">--:--:--</span><span id="mv-focos"></span></div>
         </div>
+
+        ${/* A faixa do Mandato vive aqui, colada sob o MUNDO AO VIVO: é a coluna
+             para onde o jogador já olha quando quer saber "e agora?". Nasce vazia e
+             some sozinha (`:empty`) enquanto não houver mandato. */''}
+        <div id="mandato-faixa"></div>
 
         <div class="globo-ctrl">
           <button class="gc-btn" id="btn-textura" data-tip="Alternar satélite / político">${ico('layers', 14)} <span id="tx-rot">SATÉLITE</span></button>
@@ -397,7 +407,10 @@ export function iniciarJogo(container, jogo, opts = {}) {
     });
   }
 
-  const refresh = () => { renderHud(); renderFeed(); renderTopo(); renderAcoes(); };
+  // `pintarMandato` entra aqui e não só na batida do mundo: o progresso do Mandato
+  // muda quando o JOGADOR age (tomar território, selar pacto, curar), e uma barra que
+  // só anda de 30 em 30 segundos é uma barra em que ninguém confia.
+  const refresh = () => { renderHud(); renderFeed(); renderTopo(); renderAcoes(); pintarMandato(); };
   container.querySelector('#btn-mercado').addEventListener('click', () => {
     if (jogo.fase !== 'planejamento' || jogo.espectador) return;
     // ENCOMENDAR DE OUTRO JOGADOR: o mercado precisa saber quem, na sala, é gente de
@@ -1235,7 +1248,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
     avisarMobilizacoes();                   // a inteligência detectou um ataque se montando?
     avisarOperacoesDetectadas();            // o ALVO detectou a MINHA ofensiva se montando?
     onuCtrl?.aplicarPenasNoBeat();          // #9 — as penas do Conselho sangram e expiram
-    checarViradaDeAno();                    // fechou 12 meses? entrega os títulos do ano
+    checarViradaDeAno();                    // fechou 12 meses? entrega títulos ou julga o Mandato
+    checarViradaDeAto();                    // Ano IV e Ano VIII: o mundo muda de comportamento
+    pintarMandato();                        // o progresso do Mandato anda junto com o mundo
     // A LINHA DE PRODUÇÃO ANDA COM O MUNDO, não com um cronômetro próprio: um mês de
     // jogo é uma batida, e é por isso que a encomenda tem PESO — você espera de verdade.
     try {
@@ -2513,6 +2528,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
       // A régua do Legado. Sem ela o jogador vê "480" e não tem como saber se é muito
       // ou pouco — foi exatamente a pergunta que o dono fez ao olhar a tela.
       faixaLegado: legado ? faixaDeLegado(legado.total) : null,
+      mandatos: (() => { try { const p = placarDeMandatos(e); return p.total ? p : null; } catch { return null; } })(),
       amiga: imprensaFinal[0], inimiga: imprensaFinal[imprensaFinal.length - 1],
       historico: jogo.historico.slice(-4).reverse(),
     };
@@ -2587,7 +2603,98 @@ export function iniciarJogo(container, jogo, opts = {}) {
     try { acumularAno(jogo.estado, placar?.[meu], ano); } catch { /* o placar do ano já foi entregue; o acumulador é o que pode falhar sem custo */ }
     limparAno(jogo.estado, { ano, placar, titulos });
     if (document.querySelector('.carta-wrap .cena')) return;   // não atropela uma cena aberta
+
+    // ── UMA CERIMÔNIA POR VIRADA DE ANO ───────────────────────────────
+    // Ano PAR fecha um Mandato; ano ÍMPAR entrega a retrospectiva. Nunca os dois: duas
+    // telas cheias na mesma batida é o jogador fechando a segunda sem ler — e a segunda
+    // seria sempre a mesma, então a retrospectiva viraria a tela que ninguém vê.
+    // O acumulador do Legado roda nos DOIS casos (acima), porque ele não é cerimônia.
+    if (ano % ANOS_POR_MANDATO === 0) { fecharMandato(ano); return; }
     abrirRelatorioAno(jogo, { ano, placar, titulos, meuIso: meu, onFim: () => { renderHud(); renderTopo(); } });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // OS MANDATOS — o país cobra, e a cobrança é o enredo (Fase 2)
+  // ═══════════════════════════════════════════════════════════════════
+  // A Doutrina sozinha é regra de PONTUAÇÃO: diz como você será medido no minuto 60 e
+  // some da tela até lá. O Mandato é o que a traz para o minuto a minuto — a cada 2
+  // anos o seu próprio país pede uma coisa concreta, com prazo, e cobra.
+  function fecharMandato(ano) {
+    let res = null;
+    try { res = julgarMandato(jogo.estado); } catch { res = null; }
+    const seguir = () => {
+      renderHud(); renderTopo(); pintarMandato();
+      // O PRÓXIMO já entra na sequência, sem esperar outra batida: sair do veredito e
+      // ficar dois anos sem rumo é exatamente o vazio que este sistema veio preencher.
+      const prox = (res?.mandato?.n || mandatoDoTurno(jogo.turno)) + 1;
+      if (prox <= TOTAL_MANDATOS) emitirEAnunciar(prox);
+    };
+    if (!res) { seguir(); return; }
+
+    // O efeito é aplicado ANTES da tela: se o jogador fechar a aba no meio do veredito,
+    // a consequência já aconteceu. Tela é narração, não é onde a regra mora.
+    try { aplicarEfeitos(jogo.estado, res.efeitos); } catch { /* veredito sem efeito não derruba a virada de ano */ }
+    jogo._empilharFeed?.([{
+      tipo: 'sistema', handle: res.cumprido ? '📜 Mandato cumprido' : '📜 Mandato descumprido',
+      cor: res.cumprido ? '#22e0a0' : '#ff3b5c',
+      texto: res.cumprido
+        ? `${jogo.ficha.pais} entrega o Mandato ${roman(res.mandato.n)} no prazo: ${res.mandato.titulo}. ${res.progresso?.texto} ${res.progresso?.rot}.`
+        : `${jogo.ficha.pais} falha o Mandato ${roman(res.mandato.n)} (${res.mandato.titulo}). Ficou em ${res.progresso?.texto} ${res.progresso?.rot}${res.reincidencia >= 2 ? ' — a segunda falha seguida.' : '.'}`,
+    }]);
+    renderFeed();
+    // Falhar não é notícia de plantão; falhar DUAS seguidas é. É quando a imprensa
+    // deixa de cobrir a meta e passa a cobrir o governo.
+    if (!res.cumprido && res.reincidencia >= 2) {
+      dispararBreaking(jogo, {
+        assunto: `${jogo.ficha.pais} descumpre o segundo mandato seguido`,
+        contexto: `${res.mandato.quem} cobrou "${res.mandato.titulo}" e o governo entregou ${res.progresso?.texto}. É a segunda falha consecutiva; o gabinete já discute sucessão.`,
+        tom: 'quente', iso: jogo.estado.iso,
+      });
+    }
+    abrirVeredito(jogo, res, { onFim: seguir });
+  }
+
+  function emitirEAnunciar(n) {
+    let m = null;
+    try { m = emitirMandato(jogo.estado, n); } catch { m = null; }
+    if (!m) return;
+    pintarMandato();
+    abrirCobranca(jogo, m, { onFim: () => { renderHud(); pintarMandato(); } });
+  }
+
+  // A faixa da HUD. Repintada a cada batida junto com o resto — o progresso do Mandato
+  // muda quando o jogador age, e uma barra que só atualiza na virada de ano seria uma
+  // barra em que ninguém confia.
+  function pintarMandato() {
+    const alvo = container.querySelector('#mandato-faixa');
+    if (!alvo) return;
+    let html = '';
+    try { html = faixaMandatoHTML(jogo.estado); } catch { html = ''; }
+    if (alvo.innerHTML !== html) alvo.innerHTML = html;
+  }
+
+  // ── A VIRADA DE ATO ─────────────────────────────────────────────────
+  // Duas vezes por partida (Ano IV e Ano VIII) o mundo muda de comportamento. Não é
+  // modal: é uma placa que atravessa a tela e sai sozinha em 7s. O jogador precisa
+  // SABER que o mundo endureceu, não parar o que está fazendo para clicar em "ok".
+  function checarViradaDeAto() {
+    let ato = null;
+    try { ato = viradaDeAto(jogo.turno); } catch { return; }
+    if (!ato) return;
+    const el = document.createElement('div');
+    el.className = 'ato-aviso';
+    el.style.setProperty('--ac', ato.cor);
+    el.innerHTML = `
+      <div class="ato-ic">${ico(ato.ic, 26)}</div>
+      <span class="ato-k">ATO ${ato.n} DE 3 · O MUNDO MUDOU</span>
+      <div class="ato-nome">${esc(ato.nome)}</div>
+      <div class="ato-lema">${esc(ato.lema)}</div>
+      <p class="ato-txt">${esc(ato.texto)}</p>`;
+    document.body.appendChild(el);
+    setTimeout(() => { el.classList.add('saindo'); setTimeout(() => el.remove(), 500); }, 7000);
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🎬 Virada de ato', cor: '#ffb020',
+      texto: `ATO ${ato.n} — ${ato.nome}. ${ato.texto}` }]);
+    renderFeed();
   }
 
   // ═══════════════════════════════════════════════════════════════════
@@ -2774,6 +2881,10 @@ export function iniciarJogo(container, jogo, opts = {}) {
     abrirEscolhaDoutrina(jogo, {
       onEscolher: (d) => {
         renderTopo();
+        // O MANDATO I ENTRA COLADO NA ESCOLHA. É a Cena 5 do documento de enredo: você
+        // escolhe o rumo e o país imediatamente diz o que espera de você. Deixar para
+        // a próxima batida quebraria a única sequência dramática que a abertura tem.
+        emitirEAnunciar(1);
         // A escolha é PÚBLICA, e público começa em casa: o país inteiro fica sabendo
         // que rumo o governo assumiu. É a primeira linha do enredo daquela partida.
         jogo._empilharFeed?.([{
@@ -2783,11 +2894,20 @@ export function iniciarJogo(container, jogo, opts = {}) {
         renderFeed();
       },
     });
+  } else if (temDoutrina(jogo.estado) && jogo.fase !== 'fim' && !jogo.espectador
+             && !cofreMandato(jogo.estado).atual) {
+    // SAVE RETOMADO (ou partida começada antes da Fase 2): tem doutrina e nenhum
+    // mandato em curso. Emite o que DEVERIA estar valendo neste turno — e não o
+    // Mandato I —, senão quem retoma no Ano VIII recebe "tome dois territórios".
+    emitirEAnunciar(mandatoDoTurno(jogo.turno));
   }
+  pintarMandato();
 
   window.__jogo = jogo; // hook de debug (dev)
   window.__tr = tr; // hook de debug (dev)
-  window.__render = { renderFeed, renderHud, renderAcoes, renderTopo }; // hook de debug (dev)
+  window.__render = { renderFeed, renderHud, renderAcoes, renderTopo, pintarMandato, refresh }; // hook de debug (dev)
   window.__fim = mostrarFim; // hook de debug (dev): testar a tela de queda sem esperar cair
+  window.__ano = checarViradaDeAno; // hook de debug (dev): forçar a virada de ano (mandato/retrospectiva)
+  window.__ato = checarViradaDeAto; // hook de debug (dev): forçar a virada de ato
   window.__painel = abrirPainelPais; // hook de debug (dev): abrir o painel de um país direto
 }

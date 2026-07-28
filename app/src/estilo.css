@@ -5828,16 +5828,21 @@ button[data-tip], .tip-q { cursor: pointer; }
 .mv-clima b { font-family: var(--disp); font-size: 9.5px; letter-spacing: .06em; }
 .cl-seta { font-style: normal; font-size: 9px; }
 .cl-seta.caindo { color: var(--verde); } .cl-seta.subindo { color: var(--perigo); } .cl-seta.estavel { color: var(--fraco); }
+/* A COR DO NÍVEL VIVE NO RÓTULO, NÃO NUMA LISTRA NA BORDA.
+   Eu tinha posto um `inset 2px 0 0` colorido no painel inteiro — uma barra vertical
+   âmbar grudada na borda esquerda. O dono pediu para tirar, e com razão: o painel já
+   carrega o número, o rótulo escrito e a barra horizontal de tensão. Uma quarta marca
+   da mesma informação, e ainda por cima uma que parece um elemento de interface
+   (aquela listra é o vocabulário de "item selecionado" no resto do jogo), só polui.
+   Sobrou o brilho externo nas DUAS PONTAS da escala — paz e beira — porque essas
+   duas o jogador precisa notar sem estar olhando para o painel. */
 .mundo-vivo { cursor: help; transition: box-shadow .3s ease; }
-.mundo-vivo[data-nivel="paz"] { box-shadow: inset 2px 0 0 var(--verde), 0 0 26px -12px var(--verde); }
+.mundo-vivo[data-nivel="paz"] { box-shadow: 0 0 26px -12px var(--verde); }
 .mundo-vivo[data-nivel="paz"] .mv-clima b { color: var(--verde); }
-.mundo-vivo[data-nivel="calmo"] { box-shadow: inset 2px 0 0 var(--cyan); }
 .mundo-vivo[data-nivel="calmo"] .mv-clima b { color: var(--cyan); }
-.mundo-vivo[data-nivel="tenso"] { box-shadow: inset 2px 0 0 var(--ambar); }
 .mundo-vivo[data-nivel="tenso"] .mv-clima b { color: var(--ambar); }
-.mundo-vivo[data-nivel="fervendo"] { box-shadow: inset 2px 0 0 #ff8c42; }
 .mundo-vivo[data-nivel="fervendo"] .mv-clima b { color: #ff8c42; }
-.mundo-vivo[data-nivel="beira"] { box-shadow: inset 2px 0 0 var(--perigo), 0 0 26px -12px var(--perigo); }
+.mundo-vivo[data-nivel="beira"] { box-shadow: 0 0 26px -12px var(--perigo); }
 .mundo-vivo[data-nivel="beira"] .mv-clima b { color: var(--perigo); animation: piscar 1.4s steps(2) infinite; }
 
 /* ── A TELA DE FIM SAIU DAQUI ─────────────────────────────────────────────

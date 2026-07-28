@@ -16,6 +16,7 @@
 // Regra de ouro: nada aqui depende de UI. O globo LÊ este estado e desenha;
 // este módulo nunca toca no DOM.
 import { PAISES } from '../dados/paises.js';
+import { ritmoDeGuerra } from './atos.js';
 import { ehPetroestado } from '../dados/petroleo.js';
 import { populacaoDe } from '../dados/populacaoMundo.js';
 import { sinaisPrecocesPandemia } from '../dados/opiniao.js';
@@ -404,7 +405,11 @@ export function tickMundoVivo(estado) {
       if (r.a === eu || r.b === eu) continue;                       // guerra SUA é outra mecânica
       if (humanoNPC(estado, r.a) || humanoNPC(estado, r.b)) continue; // país de outro humano: a IA não declara guerra por ele
       if (estado.conflitosNPC.find((c) => c.a === r.a && c.b === r.b)) continue;
-      if (chance((r.tensao / 100) * 0.022 + quente * 0.02)) {
+      // O ATO MODULA A TAXA (Fase 2 do enredo). No Ato I o mundo é frio de propósito
+      // — ×0,35 — para o jogador ter três anos de aprender sem morrer; no Ato III é
+      // ×1,45, porque a última corrida tem de doer. Vem de jogo/atos.js e não de um
+      // `if (turno > 84)` aqui, senão o Ato III existiria neste arquivo e não na ONU.
+      if (chance(((r.tensao / 100) * 0.022 + quente * 0.02) * ritmoDeGuerra(turnoAgora))) {
         const novo = { id: `${r.a}_${r.b}_${estado.turno || 0}`, a: r.a, b: r.b, intensidade: 45 + rand() * 25, turnos: 0, tema: r.tema };
         estado.conflitosNPC.push(novo);
         estado._ultimaGuerraNPC = turnoAgora;   // marca a carência (JSON puro, viaja no save/multiplayer)

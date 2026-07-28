@@ -237,3 +237,12 @@
   .fe-nav { padding: 10px 14px; font-size: 11.5px; }
   .fe-ponto i { display: none; }
 }
+
+/* Os Mandatos na etapa da doutrina: cinco cobranças ao longo da década, e o que o
+   jogador fez com elas é metade da história de como ele chegou ao número final. */
+.fe-mandatos { display: flex; flex-direction: column; gap: 3px; padding: 10px 14px; max-width: 56ch;
+  background: rgba(9,15,26,.75); box-shadow: inset 2px 0 0 var(--dc); }
+.fe-mandatos span { display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: .14em; color: var(--fraco); }
+.fe-mandatos b { font-family: var(--disp); font-size: 20px; color: var(--dc); }
+.fe-mandatos i { font-style: normal; font-size: 11.5px; line-height: 1.45; color: var(--fraco); }

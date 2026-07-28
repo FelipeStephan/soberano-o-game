@@ -30,6 +30,7 @@
 // meio da sessão. Em vez de meio-quebrado: PEDIR A PALAVRA (fila de oradores real,
 // pela rede) + chat de texto funcionando. O que faltaria está no relatório.
 import { PAISES } from '../dados/paises.js';
+import { fatorCooldownONU } from '../jogo/atos.js';
 import { bandeira, ISO2_DE } from '../dados/imagens.js';
 import { liderDe } from '../dados/lideres.js';
 import { ico } from './icones.js';
@@ -211,7 +212,12 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
     return Math.max(0, ate - turnoAgora());
   }
   function marcarCooldown() {
-    jogo.estado.onuProximaSessao = turnoAgora() + COOLDOWN_MESES;
+    // O ATO III CORTA O INTERVALO PELA METADE (Fase 2 do enredo). É a peça que dá aos
+    // perdedores uma arma institucional contra o líder na reta final — sem ela, quem
+    // abriu vantagem no Ato II só precisa não fazer nada por vinte minutos. O fator
+    // vem de jogo/atos.js: a régua dos atos é uma só para o jogo inteiro.
+    const meses = Math.max(1, Math.round(COOLDOWN_MESES * fatorCooldownONU(turnoAgora())));
+    jogo.estado.onuProximaSessao = turnoAgora() + meses;
   }
 
   // Quem pode votar: todos os presentes MENOS o réu. Ele fala, não julga a própria pena.

@@ -189,24 +189,32 @@ export function acumularAno(estado, linhaPlacar, ano) {
 // termina em março (queda, ou império no Ano VII) perderia tudo que foi feito desde
 // janeiro. Quem fecha uma década inteira não sente diferença — quem cai no meio,
 // sente muita.
+// A CONTA CORRENTE DE FEITOS: o acumulador dos anos fechados MAIS o ano ainda em
+// aberto. É a única leitura honesta de "quanto eu já fiz até agora" — o `tally`
+// sozinho ignora tudo que aconteceu desde janeiro, e `placarDoAno` sozinho ignora os
+// nove anos anteriores. Exportada porque os Mandatos (jogo/mandatos.js) precisam
+// exatamente disto para medir progresso no meio do caminho.
+export function somaDeFeitos(estado) {
+  const c = cofreDoutrina(estado);
+  const soma = { ...c.tally };
+  const meu = estado.iso || 'USA';
+  const ano = anoDoTurno(estado.turno || 1);
+  if (!c.anos.includes(ano)) {
+    let linha = null;
+    try { linha = placarDoAno(estado, { isos: [meu], ano })[meu]; } catch { linha = null; }
+    for (const [tipo, v] of Object.entries(linha || {})) {
+      if (!(tipo in VALOR) || !Number.isFinite(v)) continue;
+      soma[tipo] = round1((soma[tipo] || 0) + v);
+    }
+  }
+  return soma;
+}
+
 export function calcularLegado(estado, { destino = null, incluirAnoCorrente = true } = {}) {
   const c = cofreDoutrina(estado);
   const dout = c.id ? DOUTRINAS[c.id] : null;
   const pesados = new Set(dout?.pesados || []);
-  const soma = { ...c.tally };
-
-  if (incluirAnoCorrente) {
-    const meu = estado.iso || 'USA';
-    const ano = anoDoTurno(estado.turno || 1);
-    if (!c.anos.includes(ano)) {
-      let linha = null;
-      try { linha = placarDoAno(estado, { isos: [meu], ano })[meu]; } catch { linha = null; }
-      for (const [tipo, v] of Object.entries(linha || {})) {
-        if (!(tipo in VALOR) || !Number.isFinite(v)) continue;
-        soma[tipo] = round1((soma[tipo] || 0) + v);
-      }
-    }
-  }
+  const soma = incluirAnoCorrente ? somaDeFeitos(estado) : { ...c.tally };
 
   const linhas = [];
   let dentro = 0; let fora = 0;

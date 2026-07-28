@@ -1,0 +1,110 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   MANDATOS E ATOS — a cobrança, o placar e a virada de ato
+   ═══════════════════════════════════════════════════════════════════════
+   Vocabulário da cabine: chanfro, mono para rótulo, --cd = a cor da doutrina que
+   cobra. A faixa da HUD é a peça mais delicada daqui: ela fica na tela a partida
+   inteira, então tem de ser legível de canto de olho e silenciosa o resto do tempo.
+   Só grita nos últimos 4 meses, e só se ainda faltar cumprir. */
+
+/* ── 1 · A COBRANÇA E O VEREDITO (modais) ───────────────────────────── */
+.mnd-over { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center;
+  padding: 22px; background: rgba(3,6,12,.82); backdrop-filter: blur(5px); animation: subir .3s ease both; }
+.mnd-over.saindo { opacity: 0; transition: opacity .26s ease; }
+.mnd-card { width: min(96%, 560px); display: flex; flex-direction: column; gap: 14px; padding: 22px 24px;
+  background: linear-gradient(180deg, #0b1424, #070d18);
+  box-shadow: inset 0 0 0 1px var(--borda), inset 3px 0 0 var(--cd), 0 34px 90px -34px #000;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px)); }
+.mnd-over.veredito .mnd-card { align-items: center; text-align: center; }
+
+.mnd-cab { display: flex; align-items: center; gap: 12px; }
+.mnd-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; color: var(--cd);
+  background: color-mix(in srgb, var(--cd) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cd) 45%, transparent);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px)); }
+.mnd-cab-txt { flex: 1; min-width: 0; }
+.mnd-k { display: block; font-family: var(--mono); font-size: 8px; letter-spacing: .16em; color: var(--fraco); }
+.mnd-cab-txt b { font-family: var(--disp); font-size: 15px; letter-spacing: .04em; color: var(--cd); }
+.mnd-prazo { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; flex: none;
+  font-family: var(--mono); font-size: 8px; letter-spacing: .12em; color: var(--fraco);
+  background: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px var(--borda); }
+
+.mnd-tit { margin: 0; font-family: var(--disp); font-size: clamp(20px, 3.4vw, 28px); letter-spacing: .03em; color: #eaf1ff; }
+.mnd-fala { margin: 0; font-size: 13.5px; line-height: 1.62; color: #b8c8e0; }
+.mnd-selo { display: grid; place-items: center; width: 72px; height: 72px; color: var(--cd);
+  background: color-mix(in srgb, var(--cd) 11%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cd) 45%, transparent), 0 0 60px -20px var(--cd);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+
+.mnd-meta { padding: 12px 14px; background: rgba(9,15,26,.8); box-shadow: inset 2px 0 0 var(--cd); width: 100%; }
+.mnd-meta-k { display: block; font-family: var(--mono); font-size: 7.5px; letter-spacing: .15em; color: var(--fraco); margin-bottom: 4px; }
+.mnd-meta b { font-family: var(--disp); font-size: 17px; color: var(--cd); }
+
+.mnd-consq { display: grid; gap: 6px; }
+.mnd-c { display: flex; align-items: flex-start; gap: 9px; padding: 9px 11px; font-size: 11.5px; line-height: 1.45;
+  color: var(--fraco); background: rgba(9,15,26,.6); }
+.mnd-c.bom { box-shadow: inset 2px 0 0 var(--verde); color: #9ff0cf; }
+.mnd-c.ruim { box-shadow: inset 2px 0 0 var(--perigo); color: #ffb3c0; }
+.mnd-c i { display: block; font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .14em; }
+
+.mnd-efeitos { display: flex; gap: 7px; flex-wrap: wrap; justify-content: center; }
+.mnd-ef { padding: 6px 11px; font-size: 11px; color: var(--fraco); background: rgba(9,15,26,.7); }
+.mnd-ef b { font-family: var(--disp); font-size: 14px; margin-left: 5px; }
+.mnd-ef.bom b { color: var(--verde); } .mnd-ef.ruim b { color: var(--perigo); }
+
+.mnd-ok { align-self: flex-end; display: inline-flex; align-items: center; gap: 8px; padding: 12px 22px; border: 0;
+  cursor: pointer; font-family: var(--disp); font-size: 13px; letter-spacing: .07em; color: #04121c; background: var(--cd);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.mnd-over.veredito .mnd-ok { align-self: center; }
+.mnd-ok:hover { filter: brightness(1.12); }
+
+/* ── 2 · A FAIXA NA HUD ─────────────────────────────────────────────── */
+/* Mora sob o painel MUNDO AO VIVO, na coluna esquerda do globo: é onde o olho do
+   jogador já vai quando quer saber "e agora?". Largura idêntica à do painel de cima
+   para as duas lerem como uma peça só. */
+.mnd-faixa { position: absolute; top: 132px; left: 16px; z-index: 3; width: 190px; cursor: help;
+  display: flex; flex-direction: column; gap: 5px; padding: 9px 11px;
+  background: rgba(6,11,20,.82); box-shadow: inset 0 0 0 1px var(--borda), inset 2px 0 0 var(--cd);
+  backdrop-filter: blur(4px); transition: box-shadow .3s ease;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.mnd-faixa:empty { display: none; }
+.mnd-f-cab { display: flex; align-items: center; gap: 6px; }
+.mnd-f-k { display: inline-flex; align-items: center; gap: 4px; flex: 1;
+  font-family: var(--mono); font-size: 7.5px; letter-spacing: .13em; color: var(--cd); }
+.mnd-f-prazo { font-family: var(--mono); font-size: 7px; letter-spacing: .1em; color: var(--fraco); }
+.mnd-f-tit { font-family: var(--disp); font-size: 11.5px; letter-spacing: .03em; color: #eaf1ff; line-height: 1.25; }
+.mnd-f-trilho { height: 5px; background: rgba(255,255,255,.07); overflow: hidden; }
+.mnd-f-trilho i { display: block; height: 100%; background: var(--cd); transition: width .45s ease; }
+.mnd-f-num { font-family: var(--mono); font-size: 7.5px; letter-spacing: .06em; color: var(--fraco); }
+.mnd-f-num b { font-weight: 400; color: #8ea4c4; }
+
+.mnd-faixa.ok { box-shadow: inset 0 0 0 1px var(--borda), inset 2px 0 0 var(--verde); }
+.mnd-faixa.ok .mnd-f-k { color: var(--verde); }
+.mnd-faixa.ok .mnd-f-trilho i { background: var(--verde); }
+/* O aperto: só nos últimos 4 meses e só se ainda faltar. Alarme falso ensina o
+   jogador a ignorar a faixa, e aí ela deixa de existir mesmo estando na tela. */
+.mnd-faixa.apertado { box-shadow: inset 0 0 0 1px rgba(255,59,92,.4), inset 2px 0 0 var(--perigo), 0 0 24px -12px var(--perigo); }
+.mnd-faixa.apertado .mnd-f-prazo { color: var(--perigo); animation: piscar 1.6s steps(2) infinite; }
+
+/* ── 3 · A VIRADA DE ATO ────────────────────────────────────────────── */
+/* Uma placa que atravessa a tela e sai sozinha. Não é modal de propósito: o ato muda
+   duas vezes na partida e o jogador precisa SABER, não parar o que está fazendo. */
+.ato-aviso { position: fixed; left: 50%; top: 22%; transform: translateX(-50%); z-index: var(--z-modal);
+  width: min(94%, 620px); display: flex; flex-direction: column; align-items: center; gap: 9px; text-align: center;
+  padding: 22px 26px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(11,20,36,.96), rgba(7,13,24,.96));
+  box-shadow: inset 0 0 0 1px var(--borda), inset 3px 0 0 var(--ac), 0 30px 80px -34px #000;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  animation: atoEntra .5s cubic-bezier(.2,.8,.3,1) both; }
+.ato-aviso.saindo { animation: atoSai .5s ease both; }
+@keyframes atoEntra { from { opacity: 0; transform: translate(-50%, -16px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes atoSai { to { opacity: 0; transform: translate(-50%, -12px); } }
+.ato-ic { display: grid; place-items: center; width: 52px; height: 52px; color: var(--ac);
+  background: color-mix(in srgb, var(--ac) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ac) 45%, transparent);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.ato-k { font-family: var(--mono); font-size: 8.5px; letter-spacing: .2em; color: var(--ac); }
+.ato-nome { font-family: var(--disp); font-size: clamp(22px, 4vw, 34px); letter-spacing: .04em; color: #eaf1ff; }
+.ato-lema { font-size: 13px; color: var(--ac); }
+.ato-txt { font-size: 12.5px; line-height: 1.6; color: var(--fraco); max-width: 62ch; margin: 0; }
+
+@media (max-width: 900px) { .mnd-faixa { display: none; } }

@@ -311,7 +311,26 @@ Legado no fim (reusa `feitos.js`) + tela final com campeão e coroas.
 >   fecha entre 200 e 300, na mesma ordem de grandeza do Destino, para que nenhuma das
 >   duas metades da conta vire decoração.
 
-**Fase 2 — O ritmo.** Os cinco Mandatos e os três Atos.
+**Fase 2 — O ritmo. 🟢 FEITA em 2026-07-28.** Os cinco Mandatos e os três Atos.
+
+> **O que entrou:** `jogo/mandatos.js` (catálogo de 5 cobranças por doutrina, emissão
+> com alvo congelado, leitura de progresso e julgamento), `jogo/atos.js` (a régua dos
+> três atos, num lugar só), `ui/mandato.js` (a cobrança, a faixa da HUD e o veredito) e
+> `estilo-mandato.css`.
+>
+> **Detalhes que valem lembrar antes de mexer:**
+> - O alvo do Mandato é **congelado na emissão** (`partida` + N). Medir total acumulado
+>   premiaria quem já fez, e a cobrança viraria troféu de participação.
+> - **Uma cerimônia por virada de ano:** ano par julga o Mandato, ano ímpar entrega a
+>   retrospectiva. Nunca as duas — a segunda seria sempre fechada sem ler.
+> - A **reincidência** é o que dói: falhar dois seguidos dobra o tombo e vira plantão.
+>   O multiplicador para em 2× de propósito; mais que isso é espiral da morte.
+> - Os Atos modulam de fora: `ritmoDeGuerra` em `mundoVivo.js` (×0,35 no Ato I, ×1,45
+>   no III) e `fatorCooldownONU` em `ui/onu.js` (metade no Ato III). A régua é uma só —
+>   não espalhar `if (turno > 84)` pelos arquivos.
+> - Trava de UI que já mordeu uma vez: os modais checam `.mnd-over:not(.saindo)`. Sem o
+>   `:not`, a cobrança seguinte batia no veredito que ainda saía de cena e o jogador
+>   ficava dois anos sem objetivo.
 
 **Fase 3 — A abertura.** As cinco cenas com o tutorial embutido.
 
