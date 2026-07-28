@@ -12,9 +12,13 @@
 //   coluna esquerda → categorias
 //   centro          → grade de cards com foto, bandeira e selo de política
 //   direita         → ficha do item + ação
-import { UNIDADES, aplicarForcas } from '../dados/forcas.js';
+import { UNIDADES, UNIDADE_POR_ID, aplicarForcas } from '../dados/forcas.js';
 import { ARSENAL, arsenalDaUnidade, POLITICAS, podeComprar, precoEfetivo } from '../dados/arsenal.js';
 import { solicitar, cancelarPedido, pedidosPendentes, relacaoCom, caixaEmCustodia, historicoPedidos, resumoPedidos } from '../jogo/compras.js';
+import { podeFornecer, itensFabricados, precoDeEncomenda, tempoDeProducao, criarPedido, ENTRADA } from '../jogo/encomendas.js';
+// A folha da encomenda vem junto: o bloco de fornecedores usa as classes dela e o
+// mercado pode ser aberto sem que o painel de encomendas tenha carregado antes.
+import '../estilo-encomendas.css';
 import { precoVendaBase, compradores, melhorOferta } from '../dados/mercado.js';
 import { bandeira, ISO2_DE, FOTO_UNIDADE } from '../dados/imagens.js';
 import { aplicarEfeitos } from '../jogo/efeitos.js';
@@ -27,11 +31,18 @@ const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<
 const PA = 1;
 const round4 = (n) => Math.round(n * 1e4) / 1e4;
 
-export function abrirMercado(jogo, { onFim } = {}) {
+// `humanos` = [{ iso, nome }] — quem, na sala, é gente de verdade governando um país.
+// O mercado NÃO descobre isso sozinho de propósito: quem sabe quem está online é o
+// dono da conexão (ui/jogo.js/online.js). Offline a lista chega vazia e a tela é
+// exatamente a de antes — a compra nacional e a solicitação a NPC não mudam uma linha.
+// `onEncomendar(pedido)` avisa o chamador que um contrato foi assinado, pra ele mandar
+// o bilhete `pedido_novo` pela rede. Sem ele, o pedido existe só no meu save.
+export function abrirMercado(jogo, { onFim, humanos = [], onEncomendar } = {}) {
   let cat = 'cacas';
   let sel = null;
   let qtd = 1;
   let aba = 'comprar';
+  let encMsg = null;   // recibo/erro da última encomenda, mostrado na própria ficha
   // venda
   let selV = null; let qtdV = 0; let oferta = null; let ofertasCache = {};
 
@@ -197,15 +208,99 @@ export function abrirMercado(jogo, { onFim } = {}) {
           ? `<div class="mf-nota">${ico('handshake', 12)} Melhore a relação com ${esc(PAISES[it.origem]?.nome || it.origem)} — acordo comercial, ajuda ou aliança — e volte aqui.</div>`
           : `<div class="mf-nota">${ico('factory', 12)} Sistemas jamais exportados só existem para quem os constrói. A única via é desenvolver o seu.</div>`}
       `}
+      <div id="mf-enc-box">${encomendaHTML(it)}</div>
     </div>`;
+  }
+
+  // ── ENCOMENDA A UM GOVERNO HUMANO ───────────────────────────────────
+  // Fica FORA do `if (av.pode)` de propósito: é justamente quando o catálogo te barra
+  // (política de exportação, relação no chão) que perguntar a outro presidente vira a
+  // única porta. "Não vendem pra você" nunca deveria ser o fim da conversa numa sala
+  // com gente dentro.
+  //
+  // O item encomendado é o QUE ELE FABRICA, não o que você estava olhando: pedir um
+  // F-35 pra Alemanha é pedir um Eurofighter. A tela diz isso na cara ("entrega o X no
+  // lugar") em vez de fingir que todo mundo produz tudo — a origem das armas é metade
+  // da graça deste mercado. Sem item no catálogo (exportador tradicional de classe
+  // leve), vai o genérico da classe pelo preço de tabela.
+  function fornecedoresHumanos(it) {
+    const eu = meuIso();
+    return (humanos || [])
+      .filter((h) => h?.iso && h.iso !== eu)
+      .map((h) => {
+        const av = podeFornecer(jogo.estado, h.iso, it.unidade);
+        if (!av.pode) return null;
+        const deles = itensFabricados(h.iso, it.unidade);
+        // O mesmo item, se ele for o fabricante original; senão, o carro-chefe dele.
+        const item = deles.find((x) => x.id === it.id)
+          || deles.slice().sort((a, b) => (b.poder || 0) - (a.poder || 0))[0]
+          || null;
+        const precoUnit = precoDeEncomenda(jogo.estado, { iso: h.iso, itemId: item?.id || null, unidadeId: it.unidade });
+        const total = round4(precoUnit * qtd);
+        return {
+          iso: h.iso, nome: h.nome || PAISES[h.iso]?.nome || h.iso, item, precoUnit, total,
+          entrada: round4(total * ENTRADA),
+          meses: tempoDeProducao(it.unidade, qtd, jogo.estado, h.iso),
+          mesmo: item?.id === it.id,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function encomendaHTML(it) {
+    const fs = fornecedoresHumanos(it);
+    if (!fs.length && !encMsg) return '';
+    return `<div class="mf-enc">
+      <div class="mf-enc-rot">${ico('handshake', 12)} Encomendar de um governo</div>
+      ${encMsg ? `<div class="mf-enc-${encMsg.erro ? 'erro' : 'ok'}">${ico(encMsg.erro ? 'triangle-alert' : 'check', 12)} ${esc(encMsg.txt)}</div>` : ''}
+      ${fs.length ? `<div class="mf-enc-sub">Sem sorteio de aprovação e 10% abaixo da tabela — mas ele precisa dizer sim, e a fábrica leva meses. ${Math.round(ENTRADA * 100)}% saem do caixa na assinatura.</div>` : ''}
+      ${fs.map((f) => {
+        const semCaixa = f.entrada > jogo.estado.tesouro;
+        const semPA = jogo.estado.pontos_acao < PA;
+        return `<button class="mf-forn" data-f="${f.iso}" ${semCaixa || semPA ? 'disabled' : ''}>
+          ${ISO2_DE[f.iso] ? `<img class="enc-flag" src="${bandeira(ISO2_DE[f.iso], 40)}" alt="">` : ''}
+          <div class="mf-forn-info">
+            <b>${esc(f.nome)}</b>
+            <small>${f.mesmo ? 'fabrica exatamente este sistema' : `entrega o ${esc(f.item?.nome || UNIDADE_POR_ID[it.unidade]?.nome || it.unidade)} no lugar`}</small>
+          </div>
+          <div class="mf-forn-num">
+            <b>${dinheiro(f.total)}</b>
+            <span>${semCaixa ? `entrada ${dinheiro(f.entrada)} não cabe` : semPA ? 'sem pontos de ação' : `${f.meses} ${f.meses === 1 ? 'mês' : 'meses'} · entrada ${dinheiro(f.entrada)}`}</span>
+          </div>
+        </button>`;
+      }).join('')}
+    </div>`;
+  }
+
+  function ligarEncomenda() {
+    modal.querySelectorAll('.mf-forn[data-f]').forEach((btn) => btn.addEventListener('click', () => {
+      const f = fornecedoresHumanos(sel).find((x) => x.iso === btn.dataset.f);
+      if (!f) return;
+      const r = criarPedido(jogo.estado, {
+        de: meuIso(), deNome: PAISES[meuIso()]?.nome || meuIso(),
+        para: f.iso, paraNome: f.nome,
+        unidadeId: sel.unidade, itemId: f.item?.id || null,
+        nomeItem: f.item?.nome || UNIDADE_POR_ID[sel.unidade]?.nome || sel.nome,
+        qtd, precoUnit: f.precoUnit,
+      });
+      if (r.falha) { encMsg = { erro: true, txt: r.falha }; render(); return; }
+      // Custa o mesmo ponto de ação de uma compra: mandar um adido negociar um contrato
+      // de bilhões é um ato de governo, não um clique de vitrine.
+      jogo.estado.pontos_acao -= PA;
+      encMsg = { erro: false, txt: `Proposta enviada a ${f.nome}. Enquanto ele não responder, os ${dinheiro(r.pedido.entrada)} de entrada ficam reservados. Acompanhe em ENCOMENDAS.` };
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '📦 Chancelaria', cor: '#35e0ff',
+        texto: `Encomendamos ${r.pedido.qtd}× ${r.pedido.nomeItem} a ${f.nome}. Agora depende de outro governo querer nos armar.` }]);
+      onEncomendar?.(r.pedido);
+      render();
+    }));
   }
 
   function ligarCatalogo() {
     modal.querySelectorAll('.mk-cat').forEach((b) => b.addEventListener('click', () => {
-      cat = b.dataset.c; sel = null; qtd = 1; render();
+      cat = b.dataset.c; sel = null; qtd = 1; encMsg = null; render();
     }));
     modal.querySelectorAll('.mk-card').forEach((b) => b.addEventListener('click', () => {
-      sel = ARSENAL.find((a) => a.id === b.dataset.id); qtd = 1; render();
+      sel = ARSENAL.find((a) => a.id === b.dataset.id); qtd = 1; encMsg = null; render();
     }));
     ligarFicha();
   }
@@ -216,6 +311,7 @@ export function abrirMercado(jogo, { onFim } = {}) {
   function ligarFicha() {
     const sl = modal.querySelector('#mf-slider');
     const inp = modal.querySelector('#mf-q');
+    ligarEncomenda();
     if (!sl) { modal.querySelector('#mf-go')?.addEventListener('click', comprar); return; }
     const maxQ = Number(sl.max);
 
@@ -238,6 +334,11 @@ export function abrirMercado(jogo, { onFim } = {}) {
         ? `PRODUZIR — ${dinheiro(total)}` : `SOLICITAR COMPRA — ${dinheiro(total)}`;
       const btn = modal.querySelector('#mf-go');
       btn.disabled = total > jogo.estado.tesouro || jogo.estado.pontos_acao < PA;
+      // O prazo e o preço da encomenda dependem da QUANTIDADE (lote grande demora mais),
+      // então o bloco de fornecedores é reescrito junto — só ele, não a ficha inteira,
+      // pela mesma razão de sempre: redesenhar tudo mataria o arrasto da barra.
+      const box = modal.querySelector('#mf-enc-box');
+      if (box) { box.innerHTML = encomendaHTML(sel); ligarEncomenda(); }
     };
 
     sl.addEventListener('input', () => aplicarQtd(sl.value, { mexeuSlider: false }));

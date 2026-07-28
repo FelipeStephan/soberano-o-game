@@ -1,0 +1,179 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   ENCOMENDAS — folha própria (importada por ui/encomendas.js)
+   ═══════════════════════════════════════════════════════════════════════
+   Fora do estilo.css de propósito: o arquivo principal já passou de 4 mil linhas e
+   um sistema novo não deve engordá-lo. Vale a mesma gramática de sempre — chanfro em
+   vez de raio, cor semântica, var(--mono) em rótulo e var(--disp) em título.
+
+   A cor aqui é FUNCIONAL: cada cartão recebe --sc (status color) do JS e a barra
+   lateral do cartão é essa cor. Você lê a situação de dez pedidos sem ler uma palavra:
+   âmbar espera decisão, ciano está produzindo, verde chegou, vermelho quebrou. */
+
+.enc-painel {
+  background: var(--painel-solido);
+  width: min(96%, 900px); max-height: 88vh; display: flex; flex-direction: column;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px));
+  box-shadow: var(--sombra), 0 0 70px -22px var(--cyan);
+  animation: subir .28s ease;
+}
+
+/* ── CABEÇALHO ─────────────────────────────────────────────────────── */
+.enc-cab { display: flex; align-items: center; gap: 13px; padding: 15px 20px;
+  background: linear-gradient(90deg, rgba(53,224,255,.1), transparent 70%); box-shadow: inset 3px 0 0 var(--cyan); }
+.enc-cab-ic { display: grid; place-items: center; width: 42px; height: 42px; flex: none; color: var(--cyan); background: rgba(53,224,255,.09); }
+.enc-tit { flex: 1; min-width: 0; }
+.enc-tit h2 { margin: 0; font-family: var(--disp); font-size: 21px; letter-spacing: .05em; color: var(--texto); }
+.enc-sub { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco); margin-top: 3px; }
+.enc-caixa { text-align: right; flex: none; }
+.enc-caixa span { display: block; font-family: var(--mono); font-size: 8px; letter-spacing: .12em; text-transform: uppercase; color: var(--fraco); }
+.enc-caixa b { font-family: var(--disp); font-size: 17px; color: var(--ambar); }
+.enc-caixa i { display: block; font-style: normal; font-family: var(--mono); font-size: 8.5px; color: var(--fraco); margin-top: 2px; }
+
+/* ── ABAS ──────────────────────────────────────────────────────────── */
+.enc-abas { display: flex; gap: 2px; padding: 0 20px; box-shadow: inset 0 -1px 0 rgba(150,190,240,.12); }
+.enc-aba { border: 0; cursor: pointer; background: transparent; color: var(--fraco);
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  padding: 12px 16px; display: flex; align-items: center; gap: 7px; }
+.enc-aba:hover { color: #c3d4ee; }
+.enc-aba.on { color: var(--cyan); box-shadow: inset 0 -2px 0 var(--cyan); background: rgba(53,224,255,.05); }
+.enc-aba i { font-style: normal; font-size: 9px; padding: 2px 6px; background: rgba(150,190,240,.14); color: #dbe6fb; }
+/* O contador de pendências pisca porque tem alguém do outro lado ESPERANDO. */
+.enc-aba i.urg { background: var(--ambar); color: #1a0e00; animation: piscar 1.4s steps(2) infinite; }
+
+.enc-corpo { flex: 1; overflow-y: auto; padding: 16px 20px 20px; display: flex; flex-direction: column; gap: 12px; }
+.enc-sec { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--fraco);
+  display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+
+/* ── CARTÃO ────────────────────────────────────────────────────────── */
+.enc-card { --sc: var(--cyan); background: rgba(9,15,26,.92); padding: 13px 15px 14px;
+  box-shadow: inset 3px 0 0 var(--sc); display: flex; flex-direction: column; gap: 11px; }
+.enc-card.pendente { background: linear-gradient(100deg, rgba(255,176,32,.05), rgba(9,15,26,.92) 55%); }
+
+.enc-topo { display: flex; align-items: center; gap: 10px; }
+.enc-flag { width: 34px; height: 23px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px rgba(180,215,255,.22); }
+.enc-quem { flex: 1; min-width: 0; }
+.enc-quem b { display: block; font-family: var(--disp); font-size: 16px; color: var(--texto); }
+.enc-quem small { font-family: var(--mono); font-size: 8.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--fraco); }
+.enc-selo { flex: none; display: inline-flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 8.5px;
+  font-weight: 700; letter-spacing: .1em; color: var(--sc); padding: 4px 8px; background: color-mix(in srgb, var(--sc) 12%, transparent); }
+
+.enc-item { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.enc-foto { width: 74px; height: 48px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px rgba(150,190,240,.16); filter: saturate(.85); }
+.enc-item-txt { min-width: 150px; }
+.enc-item-txt b { display: block; font-family: var(--disp); font-size: 15px; color: #fff; }
+.enc-item-txt small { font-family: var(--mono); font-size: 9px; color: var(--fraco); }
+.enc-nums { margin-left: auto; display: flex; gap: 16px; flex-wrap: wrap; }
+.encn span { display: block; font-family: var(--mono); font-size: 8px; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco); }
+.encn b { font-family: var(--disp); font-size: 15px; color: #dbe6fb; }
+.encn b.amb { color: var(--ambar); } .encn b.bom { color: var(--verde); }
+.encn b.cy { color: var(--cyan); } .encn b.ruim { color: var(--perigo); }
+
+/* ── O AVISO ANTES DO BOTÃO ────────────────────────────────────────── */
+/* Ele vem em bloco largo e não em tooltip: armar quem te odeia tem de custar dois
+   segundos de leitura. Se coubesse num ícone discreto, ninguém leria. */
+.enc-alerta { display: flex; align-items: flex-start; gap: 9px; padding: 10px 12px; font-size: 12px; line-height: 1.5;
+  background: rgba(4,8,17,.75); --ac: var(--cyan); box-shadow: inset 3px 0 0 var(--ac); color: #c8d6ef; }
+.enc-alerta .ico { color: var(--ac); flex: none; margin-top: 1px; }
+.enc-alerta.perigo { --ac: var(--perigo); color: #ffc2cc; background: rgba(255,59,92,.07); }
+.enc-alerta.aviso { --ac: var(--ambar); color: #ffdfae; }
+.enc-alerta.ok { --ac: var(--verde); }
+
+/* ── BARRA DE PRODUÇÃO ─────────────────────────────────────────────── */
+.enc-linha { background: rgba(4,8,17,.7); padding: 10px 12px; }
+.enc-linha-cab { display: flex; align-items: center; justify-content: space-between; font-family: var(--mono);
+  font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--fraco); margin-bottom: 7px; }
+.enc-linha-cab b { font-family: var(--disp); font-size: 13px; color: var(--cyan); }
+.enc-barra { height: 7px; background: rgba(9,15,26,.95); box-shadow: inset 0 0 0 1px rgba(150,190,240,.14); overflow: hidden; }
+.enc-barra i { display: block; height: 100%; background: linear-gradient(90deg, #1090b8, var(--cyan));
+  box-shadow: 0 0 12px -2px var(--cyan); transition: width .45s ease; position: relative; }
+/* Listras andando: a barra não pode parecer parada entre uma batida e outra — a
+   fábrica está trabalhando mesmo quando o número não mudou. */
+.enc-barra i::after { content: ''; position: absolute; inset: 0; opacity: .35;
+  background: repeating-linear-gradient(115deg, transparent 0 7px, rgba(4,8,17,.85) 7px 14px);
+  animation: encEsteira .9s linear infinite; }
+@keyframes encEsteira { to { transform: translateX(-14px); } }
+.enc-linha-pe { display: flex; align-items: baseline; gap: 6px; margin-top: 7px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--fraco); }
+.enc-linha-pe b { font-family: var(--disp); font-size: 22px; color: var(--texto); line-height: 1; }
+
+/* ── AÇÕES ─────────────────────────────────────────────────────────── */
+.enc-acoes { display: flex; gap: 8px; }
+.enc-acoes button { border: 0; cursor: pointer; padding: 11px; font-family: var(--mono); font-size: 10px; font-weight: 700;
+  letter-spacing: .08em; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.enc-sim { flex: 1; background: var(--verde); color: #01120c; }
+.enc-sim:hover { filter: brightness(1.12); }
+.enc-nao { flex: none; padding-inline: 18px !important; background: rgba(255,59,92,.13); color: #ff9aab; box-shadow: inset 0 0 0 1px var(--perigo); }
+.enc-nao:hover { background: var(--perigo); color: #fff; }
+.enc-cancelar { flex: 1; background: rgba(255,176,32,.1); color: var(--ambar); box-shadow: inset 0 0 0 1px rgba(255,176,32,.45); }
+.enc-cancelar:hover { background: var(--ambar); color: #1a0e00; }
+.enc-acoes button.falhou { background: var(--perigo) !important; color: #fff !important; box-shadow: none !important; }
+
+.enc-motivos { display: flex; flex-direction: column; gap: 5px; background: rgba(4,8,17,.75); padding: 11px 12px; }
+.enc-motivos-rot { font-family: var(--mono); font-size: 8.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--perigo); margin-bottom: 3px; }
+.enc-motivo { border: 0; cursor: pointer; text-align: left; padding: 9px 11px; font-size: 12px; color: #ffc2cc;
+  background: rgba(255,59,92,.07); box-shadow: inset 2px 0 0 rgba(255,59,92,.5); }
+.enc-motivo:hover { background: rgba(255,59,92,.18); color: #fff; }
+.enc-voltar { border: 0; cursor: pointer; background: transparent; color: var(--fraco); font-family: var(--mono);
+  font-size: 9px; letter-spacing: .08em; text-transform: uppercase; padding: 6px; display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; }
+.enc-voltar:hover { color: #dbe6fb; }
+
+.enc-conf { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px;
+  background: rgba(255,176,32,.07); box-shadow: inset 3px 0 0 var(--ambar); }
+.enc-conf > span { flex: 1; min-width: 200px; font-size: 12px; line-height: 1.45; color: #ffdfae; }
+.enc-conf-ok { border: 0; cursor: pointer; padding: 9px 14px; background: var(--ambar); color: #1a0e00;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; display: inline-flex; align-items: center; gap: 5px; }
+.enc-conf-ok.falhou { background: var(--perigo); color: #fff; }
+
+.enc-nota { display: flex; align-items: center; gap: 7px; font-size: 10.5px; color: var(--fraco); line-height: 1.45; }
+.enc-nota .ico { color: var(--cyan); flex: none; }
+.enc-nota.ok { color: #9fe8c9; } .enc-nota.ok .ico { color: var(--verde); }
+
+/* ── HISTÓRICO E VAZIO ─────────────────────────────────────────────── */
+.enc-hist { --sc: var(--fraco); display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  background: rgba(9,15,26,.6); box-shadow: inset 2px 0 0 var(--sc); opacity: .85; }
+.enc-hist-txt { flex: 1; min-width: 0; }
+.enc-hist-txt b { font-family: var(--disp); font-size: 13px; color: #dbe6fb; }
+.enc-hist-txt small { display: block; font-family: var(--mono); font-size: 8.5px; color: var(--fraco); }
+.enc-hist-txt i { display: block; font-size: 11px; color: #96a8c6; margin-top: 3px; }
+
+.enc-vazio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 9px;
+  padding: 46px 30px; color: var(--fraco); }
+.enc-vazio .ico { color: rgba(53,224,255,.4); }
+.enc-vazio b { font-family: var(--disp); font-size: 17px; color: #dbe6fb; }
+.enc-vazio span { font-size: 12px; line-height: 1.6; max-width: 460px; }
+
+/* ── CARTÃO DE NOTIFICAÇÃO (herda .onl-alerta do estilo.css) ───────── */
+.enc-cartao .onl-txt b { color: #fff; }
+.enc-cartao-av { display: flex; align-items: flex-start; gap: 6px; font-family: var(--mono); font-size: 9px;
+  line-height: 1.5; letter-spacing: .02em; color: var(--fraco); padding: 8px 9px; margin-bottom: 10px;
+  background: rgba(4,8,17,.7); box-shadow: inset 2px 0 0 var(--oc); }
+.enc-cartao-av .ico { color: var(--oc); flex: none; }
+.enc-cartao-av.perigo { color: #ffc2cc; }
+.enc-cartao-av.aviso { color: #ffdfae; }
+.enc-cartao-depois { width: 100%; margin-top: 7px; border: 0; cursor: pointer; background: transparent; color: var(--fraco);
+  font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 7px;
+  display: flex; align-items: center; justify-content: center; gap: 5px; }
+.enc-cartao-depois:hover { color: var(--cyan); }
+
+/* ── MERCADO: o bloco de fornecedores humanos na ficha do item ─────── */
+/* Mora aqui e não no estilo.css porque é a mesma feature: se um dia a encomenda sair,
+   sai inteira, sem deixar CSS órfão no arquivo grande. */
+.mf-enc { display: flex; flex-direction: column; gap: 7px; padding: 11px 12px; margin-top: 10px;
+  background: rgba(53,224,255,.05); box-shadow: inset 3px 0 0 var(--cyan); }
+.mf-enc-rot { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .12em; text-transform: uppercase; color: var(--cyan); }
+.mf-enc-sub { font-size: 11px; line-height: 1.5; color: var(--fraco); margin-bottom: 2px; }
+.mf-forn { display: flex; align-items: center; gap: 9px; width: 100%; border: 0; cursor: pointer; text-align: left;
+  padding: 9px 10px; background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 rgba(53,224,255,.45); color: var(--texto); }
+.mf-forn:hover:not(:disabled) { background: rgba(53,224,255,.14); box-shadow: inset 2px 0 0 var(--cyan); }
+.mf-forn:disabled { opacity: .45; cursor: not-allowed; }
+.mf-forn .enc-flag { width: 28px; height: 19px; }
+.mf-forn-info { flex: 1; min-width: 0; }
+.mf-forn-info b { display: block; font-family: var(--disp); font-size: 13.5px; }
+.mf-forn-info small { display: block; font-family: var(--mono); font-size: 8.5px; color: var(--fraco); }
+.mf-forn-num { text-align: right; flex: none; }
+.mf-forn-num b { display: block; font-family: var(--disp); font-size: 14px; color: var(--ambar); }
+.mf-forn-num span { font-family: var(--mono); font-size: 8px; letter-spacing: .06em; text-transform: uppercase; color: var(--cyan); }
+.mf-enc-ok { font-size: 11px; line-height: 1.5; color: #9fe8c9; display: flex; align-items: center; gap: 6px; }
+.mf-enc-ok .ico { color: var(--verde); flex: none; }
+.mf-enc-erro { font-size: 11px; line-height: 1.5; color: #ffc2cc; display: flex; align-items: center; gap: 6px; }

@@ -40,6 +40,10 @@ import { statsVivos } from '../jogo/indiceMundial.js';
 import { diagnosticoQueda, obituarioDaQueda, textosDaQueda } from './relatorioQueda.js';
 import { tomDoFim } from '../jogo/destino.js';
 import { climaGlobal, quemReduziuConflito } from '../jogo/mundoVivo.js';
+// Socorro a aliado: o motor mora em jogo/coalizao.js, as telas em ui/aliadoSocorro.js.
+import { registrarSocorro, socorroDe, territoriosRetomaveis, expirarSocorros } from '../jogo/coalizao.js';
+import { ehAliado } from '../jogo/aliancas.js';
+import { abrirChamadoSocorro, abrirOperacaoRetomada, avisarSocorroRecebido } from './aliadoSocorro.js';
 import { postsParaEvento } from '../dados/vozesX.js';
 import { registrarFeito, fechouAno, placarDoAno, titulosDoAno, limparAno, jaFechou, anoDoTurno, recompensaDoTitulo, mancheteDoTitulo, rotuloAno } from '../jogo/feitos.js';
 import { abrirRelatorioAno } from './relatorioAno.js';
@@ -262,6 +266,16 @@ export function iniciarJogo(container, jogo, opts = {}) {
       // #9 — o Conselho de Segurança vive nos MESMOS eventos da sala. Ele responde
       // `true` quando consumiu o bilhete, e aí o fluxo normal nem toca no assunto.
       aoEventoExtra: (ev) => !!onuCtrl?.aoEvento(ev),
+      // SOCORRO A ALIADO: o chamado abre no cliente de quem PODE ir; o aviso de que
+      // alguém veio abre no cliente de quem FOI socorrido.
+      aoAliadoAtacado: ({ aliado, agressor, estados }) => {
+        const s = registrarSocorro(jogo.estado, { aliado, agressor, estados, remoto: true });
+        if (s) abrirChamadoSocorro(jogo, s, {
+          onFim: () => { renderHud(); renderTopo(); globoCtrl?.atualizar?.(); },
+          onAtender: () => abrirOperacaoRetomada(jogo, aliado, { globoCtrl, onFim: () => { renderHud(); renderTopo(); } }),
+        });
+      },
+      aoSocorroRecebido: (ev) => { avisarSocorroRecebido(jogo, ev); renderFeed(); },
       // #6.2 — a ogiva caiu em CIMA de você. Não é derrota por aprovação nem por
       // dívida: o país deixou de existir. Encerramos a partida como fim de reinado
       // (com o motivo certo) e caímos direto na porta do #11 — a sala segue viva.
@@ -1123,6 +1137,17 @@ export function iniciarJogo(container, jogo, opts = {}) {
     avisarOperacoesDetectadas();            // o ALVO detectou a MINHA ofensiva se montando?
     onuCtrl?.aplicarPenasNoBeat();          // #9 — as penas do Conselho sangram e expiram
     checarViradaDeAno();                    // fechou 12 meses? entrega os títulos do ano
+    // SOCORRO NÃO ESPERA PARA SEMPRE: o chamado tem prazo, e deixar vencer custa MAIS
+    // que recusar na cara. Sumir é a pior resposta possível a um pacto — e é a única
+    // que o jogador dá sem clicar em nada, então o jogo precisa cobrá-la sozinho.
+    for (const { socorro, resultado } of expirarSocorros(jogo.estado)) {
+      jogo._empilharFeed?.((resultado.linhas || []).map((t) => ({ tipo: 'sistema', handle: '⚖ Pacto', cor: '#ff3b5c', texto: t })));
+      alertaUrgente({
+        titulo: '⚖ VOCÊ NÃO RESPONDEU',
+        texto: `O prazo do chamado de ${PAISES[socorro.aliado]?.nome || socorro.aliado} venceu e você não disse nada. Silêncio, num pacto, é pior que um não.`,
+        tom: 'ataque', comSom: false,
+      });
+    }
     const sino = container.querySelector('#btn-onu');
     if (sino) sino.classList.toggle('convocado', !!onuCtrl?.temReuniaoAtiva());
     if (res.desbloqueios?.length) popupDesbloqueio(res.desbloqueios, () => {});
@@ -1433,6 +1458,21 @@ export function iniciarJogo(container, jogo, opts = {}) {
         ${onlineCtrl?.ehHumano(code) ? `<button class="pp-contato" id="pp-contato">${ico('phone', 15)} <span>ENTRAR EM CONTATO</span><i>msg ou ligação</i></button>` : ''}
         <button class="pp-guerra" id="pp-guerra">${ico('swords', 15)} <span>PLANEJAR OFENSIVA MILITAR</span></button>
         ${emGuerra ? `<button class="pp-paz" id="pp-paz">${ico('handshake', 16)} <span>NEGOCIAR SAÍDA DA GUERRA</span><i>propor cessar-fogo ou devolver território</i></button>` : ''}
+        ${(() => {
+          // O ALIADO ATACADO GANHA A PORTA DO SOCORRO no próprio painel — foi o pedido
+          // literal ("quando clicado na nação aliada atacada, você poder recuperar
+          // território"). O botão só existe quando há de fato chão dele em mãos alheias:
+          // oferecer uma operação de resgate sem nada a resgatar seria botão morto.
+          try {
+            if (!ehAliado(jogo.estado, code)) return '';
+            const perdidos = territoriosRetomaveis(jogo.estado, code).filter((t) => !t.meu).length;
+            const s = socorroDe(jogo.estado, code);
+            if (!perdidos && !s) return '';
+            return `<button class="pp-socorro" id="pp-socorro">${ico('handshake', 15)}
+              <span>SOCORRER ${esc((PAISES[code]?.nome || code).toUpperCase())}</span>
+              <i>${perdidos ? `${perdidos} território(s) sob ocupação` : 'chamado aberto'}</i></button>`;
+          } catch { return ''; }
+        })()}
         ${botaoSairGuerra}
         ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 15)} <span>ESPIONAR ESTE PAÍS</span><i>US$ 40 bi · rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
         ${botaoBase}
@@ -1489,6 +1529,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
       abrirPaz(feature, jogo, { tr, onFim: atualizarTudo });
     });
     // #4.1 — SAIR DA GUERRA: unilateral, imediato, com a conta na cara antes do sim.
+    modal.querySelector('#pp-socorro')?.addEventListener('click', () => {
+      fechar();
+      globoCtrl?.focar?.(feature);
+      abrirOperacaoRetomada(jogo, code, { globoCtrl, onFim: atualizarTudo });
+    });
     modal.querySelector('#pp-sair-guerra')?.addEventListener('click', () => {
       fechar();
       confirmarSaidaGuerra(code);

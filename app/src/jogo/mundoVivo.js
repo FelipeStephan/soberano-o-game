@@ -288,11 +288,27 @@ export function tickMundoVivo(estado) {
   const climaAgora = (estado.temp_guerra || 30) / 100;
   for (const c of [...estado.conflitosNPC]) {
     c.turnos += 1;
-    const exaustao = (1 - climaAgora) * 6;
-    c.intensidade = clamp(c.intensidade + (rand() * 24 - 10) - exaustao, 5, 100);
+    // EXAUSTÃO POR IDADE (novo: `+ c.turnos * 0.35`). A exaustão só olhava o clima, então
+    // num mundo morno (clima 0.5) a deriva média ficava em −1/turno e uma guerra podia
+    // arrastar 40 batidas segurando o piso de tensão sozinha. Guerra cansa POR DURAR:
+    // munição acaba, recruta some, o país quebra. Agora quanto mais velha, mais rápido ela
+    // morre — que é como guerra de verdade termina quando ninguém consegue vencer.
+    const exaustao = (1 - climaAgora) * 6 + c.turnos * 0.35;
+    // Deriva 24−10 (média +2) → 22−11 (média 0). A média positiva era o motor silencioso
+    // do "sempre uma guerra": toda guerra NPC tendia a ESCALAR por padrão e só desescalava
+    // se o mundo estivesse frio — e o mundo nunca estava, justamente porque as guerras não
+    // acabavam. Com média zero, quem decide o destino do conflito é a exaustão, não o viés.
+    c.intensidade = clamp(c.intensidade + (rand() * 22 - 11) - exaustao, 5, 100);
 
-    if (c.intensidade < 14 || (c.turnos > 5 && chance(0.3))) {
+    // Fim por cansaço: era `turnos > 5 && 30%` fixo — chance constante, então guerra velha
+    // tinha a mesma sobrevida de guerra nova. Agora a chance CRESCE com a idade
+    // (turno 6 ≈ 39%, turno 10 ≈ 53%): nenhuma guerra NPC vira mobília permanente do mapa.
+    if (c.intensidade < 14 || (c.turnos > 5 && chance(0.18 + c.turnos * 0.035))) {
       estado.conflitosNPC = estado.conflitosNPC.filter((x) => x.id !== c.id);
+      // Guerra que acaba ESFRIA o planeta — e some do piso de tensão junto. Sem este
+      // degrau, o fim de um conflito era um evento de texto: bonito no feed e invisível na
+      // matemática. `porMim=false` porque o mérito não é seu: eles se cansaram sozinhos.
+      esfriarMundo(estado, 2 + (c.intensidade / 100) * 3, `fim da guerra ${nomeDe(c.a)}×${nomeDe(c.b)}`, false);
       eventos.push({
         tom: 'bom', visual: { tipo: 'fimConflito', a: c.a, b: c.b },
         texto: sorteioDe([
@@ -319,15 +335,35 @@ export function tickMundoVivo(estado) {
   }
 
   // 2) CONFLITO NOVO nasce da rivalidade estrutural + temperatura do mundo
-  if (estado.conflitosNPC.length < 3) {
+  //
+  // AQUI ESTAVA O PROBLEMA QUE O DONO SENTIU. A conta antiga: 11 rivalidades sorteando
+  // ~4% cada, por batida, dava ~34% de chance de nascer uma guerra TODO TURNO. Com vida
+  // média de ~8 turnos por conflito, o equilíbrio ficava colado no teto de 3 — ou seja, o
+  // planeta tinha três guerras simultâneas o tempo inteiro, permanentemente, e o
+  // `pisoDeTensao` não deixava o clima descer nunca. Não era o jogador que levava o mundo
+  // pra guerra: o mundo já nascia em guerra e ele só assistia.
+  //
+  // Três freios, nesta ordem de importância:
+  //   TETO 3 → 2. Com a Rússia×Ucrânia semeada, sobra espaço pra UM conflito extra. Fundo
+  //     de geopolítica quente sem virar mapa de tabuleiro pegando fogo em todo canto.
+  //   TAXA 0.07 → 0.022 (estrutural) e 0.03 → 0.02 (clima). Cai de ~34% para ~13% por
+  //     batida. Com a exaustão nova (vida média ~7 turnos) o equilíbrio fica em ~1 guerra
+  //     de fundo: quase sempre há conflito no mundo, quase nunca há três.
+  //   CARÊNCIA de 5 batidas entre nascimentos. Sem ela, o sorteio agrupava: duas guerras
+  //     estourando em turnos seguidos é o que faz o jogador achar que o mundo enlouqueceu,
+  //     mesmo com a taxa média baixa. Espaçar é o que dá à guerra peso de acontecimento.
+  const turnoAgora = estado.turno || 0;
+  const carencia = turnoAgora - (estado._ultimaGuerraNPC ?? -99) >= 5;
+  if (estado.conflitosNPC.length < 2 && carencia) {
     const quente = (estado.temp_guerra || 30) / 100;
     for (const r of RIVALIDADES) {
       if (r.a === eu || r.b === eu) continue;                       // guerra SUA é outra mecânica
       if (humanoNPC(estado, r.a) || humanoNPC(estado, r.b)) continue; // país de outro humano: a IA não declara guerra por ele
       if (estado.conflitosNPC.find((c) => c.a === r.a && c.b === r.b)) continue;
-      if (chance((r.tensao / 100) * 0.07 + quente * 0.03)) {
+      if (chance((r.tensao / 100) * 0.022 + quente * 0.02)) {
         const novo = { id: `${r.a}_${r.b}_${estado.turno || 0}`, a: r.a, b: r.b, intensidade: 45 + rand() * 25, turnos: 0, tema: r.tema };
         estado.conflitosNPC.push(novo);
+        estado._ultimaGuerraNPC = turnoAgora;   // marca a carência (JSON puro, viaja no save/multiplayer)
         eventos.push({
           tom: 'ruim', visual: { tipo: 'conflito', a: r.a, b: r.b, novo: true },
           texto: `GUERRA: ${nomeDe(r.a)} abre fogo contra ${nomeDe(r.b)} — o estopim: ${r.tema}. O mundo tinha planos pra esta década.`,

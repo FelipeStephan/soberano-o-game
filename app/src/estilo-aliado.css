@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   SOCORRO AO ALIADO — o chamado e a operação de retomada
+   ═══════════════════════════════════════════════════════════════════════
+   A cor conta a decisão: VERDE é honrar (o pacto valendo), VERMELHO é a conta de
+   recusar, ÂMBAR é a tentação de ficar com o chão. As duas colunas de consequência
+   ficam lado a lado de propósito — a pergunta não é "quer ajudar?", é "aceita entrar
+   numa guerra por isso?", e essa pergunta só é honesta com as duas contas à vista. */
+.soc-chamado { position: fixed; top: 74px; right: 22px; z-index: var(--z-popover); width: 380px;
+  background: linear-gradient(155deg, rgba(10,16,28,.98), rgba(4,7,13,.97));
+  box-shadow: inset 3px 0 0 var(--verde), 0 18px 50px rgba(0,0,0,.8);
+  clip-path: polygon(0 0, calc(100% - 13px) 0, 100% 13px, 100% 100%, 13px 100%, 0 calc(100% - 13px));
+  animation: subir .3s cubic-bezier(.2,1.1,.3,1) both; }
+.soc-chamado.pacto { box-shadow: inset 3px 0 0 var(--ambar), 0 18px 50px rgba(0,0,0,.8), 0 0 32px -12px var(--ambar); }
+.soc-cab { display: flex; align-items: center; gap: 7px; padding: 11px 14px; font-family: var(--mono);
+  font-size: 9px; letter-spacing: .1em; color: var(--verde); border-bottom: 1px solid var(--borda); }
+.soc-chamado.pacto .soc-cab { color: var(--ambar); }
+.soc-corpo { padding: 12px 14px; }
+.soc-duo { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 10px; }
+.soc-flag { width: 44px; height: 30px; object-fit: cover; box-shadow: 0 0 0 1px var(--borda); }
+.soc-flag.sem { display: grid; place-items: center; font-family: var(--mono); font-size: 9px; color: var(--fraco); }
+.soc-vs { color: var(--perigo); display: grid; place-items: center; }
+.soc-txt { font-size: 12px; line-height: 1.55; color: #c8d6ef; margin-bottom: 11px; }
+.soc-txt b { color: #fff; }
+.soc-contas { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.soc-conta { padding: 9px 10px; background: rgba(6,13,24,.85); display: flex; flex-direction: column; gap: 5px; }
+.soc-conta.sim { box-shadow: inset 2px 0 0 var(--verde); }
+.soc-conta.nao { box-shadow: inset 2px 0 0 var(--perigo); }
+.soc-conta-rot { display: flex; align-items: center; gap: 5px; font-family: var(--mono); font-size: 8px;
+  letter-spacing: .1em; color: var(--fraco); }
+.soc-conta.sim .soc-conta-rot { color: var(--verde); }
+.soc-conta.nao .soc-conta-rot { color: var(--perigo); }
+.soc-conta span { font-size: 10.5px; line-height: 1.45; color: #a9bcda; }
+.soc-conta span.bom { color: #9ff0cf; }
+.soc-conta span.ruim { color: #ffb3c0; }
+.soc-acoes { display: flex; gap: 6px; padding: 0 14px 13px; }
+.soc-sim, .soc-nao { flex: 1; display: flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer;
+  border: 0; padding: 10px; font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .07em; }
+.soc-sim { background: var(--verde); color: #01120c; }
+.soc-nao { background: rgba(255,59,92,.14); color: #ff9aab; box-shadow: inset 0 0 0 1px rgba(255,59,92,.4); }
+
+/* ── A OPERAÇÃO ─────────────────────────────────────────────────────── */
+.soc-painel { width: min(96%, 620px); max-height: 90vh; overflow-y: auto; background: var(--painel-solido);
+  box-shadow: var(--sombra), 0 0 70px -24px var(--verde);
+  clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  animation: subir .28s ease; }
+.soc-op-cab { display: flex; align-items: center; gap: 12px; padding: 15px 18px;
+  background: linear-gradient(90deg, rgba(34,224,160,.1), transparent 70%); box-shadow: inset 3px 0 0 var(--verde); }
+.soc-op-ic { display: grid; place-items: center; width: 40px; height: 40px; color: var(--verde); background: rgba(34,224,160,.1); }
+.soc-op-tit { flex: 1; min-width: 0; }
+.soc-op-tit h2 { margin: 0; font-size: 15px; letter-spacing: .05em; }
+.soc-op-tit span { font-family: var(--mono); font-size: 9px; letter-spacing: .08em; color: var(--fraco); }
+.soc-x { margin-left: auto; }
+.soc-lab { display: flex; align-items: center; gap: 6px; margin: 14px 18px 7px; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: .12em; color: var(--fraco); text-transform: uppercase; }
+.soc-lab b { color: var(--verde); }
+.soc-lab.devolver b { color: var(--ambar); }
+.soc-lista { display: flex; flex-direction: column; gap: 5px; padding: 0 18px; max-height: 30vh; overflow-y: auto; }
+.soc-alvo { display: flex; align-items: center; gap: 9px; padding: 9px 11px; cursor: pointer; text-align: left;
+  border: 0; background: rgba(9,15,26,.9); color: var(--texto); box-shadow: inset 2px 0 0 var(--borda); font-family: var(--corpo); }
+.soc-alvo:hover { box-shadow: inset 2px 0 0 var(--verde); }
+.soc-alvo.on { background: rgba(34,224,160,.09); box-shadow: inset 2px 0 0 var(--verde); }
+.soc-alvo-n { flex: 1; font-size: 12.5px; }
+.soc-alvo-d { display: inline-flex; align-items: center; gap: 4px; font-family: var(--mono); font-size: 9px; color: var(--perigo); }
+.soc-forca { margin: 12px 18px; padding: 10px 12px; background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--cyan); }
+.soc-forca label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-family: var(--mono);
+  font-size: 8.5px; letter-spacing: .1em; color: var(--fraco); }
+.soc-forca label b { font-family: var(--disp); font-size: 15px; color: var(--cyan); letter-spacing: 0; }
+.soc-frac-un { margin-left: auto; color: #9fb4d4; }
+.soc-forca input[type=range] { width: 100%; margin: 6px 0 4px; accent-color: var(--cyan); }
+.soc-frac-nota { font-size: 9.5px; line-height: 1.45; color: var(--fraco); display: flex; gap: 5px; align-items: flex-start; }
+.soc-aviso { display: flex; gap: 8px; align-items: flex-start; margin: 0 18px 12px; padding: 10px 12px;
+  background: rgba(255,176,32,.08); box-shadow: inset 2px 0 0 var(--ambar); font-size: 11px; line-height: 1.5; color: #ffd79a; }
+.soc-aviso b { color: #fff; }
+.soc-lancar { width: calc(100% - 36px); margin: 0 18px 16px; display: flex; align-items: center; justify-content: center;
+  gap: 8px; cursor: pointer; border: 0; padding: 12px; font-family: var(--mono); font-size: 10.5px;
+  font-weight: 700; letter-spacing: .1em; background: var(--verde); color: #01120c; }
+.soc-lancar:disabled { opacity: .4; cursor: not-allowed; filter: grayscale(.5); }
+.soc-vazio { display: flex; gap: 9px; align-items: center; margin: 18px; padding: 14px; font-size: 12px;
+  color: var(--fraco); background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--verde); }
+.soc-devolver { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 5px; }
+.soc-dev { display: flex; align-items: center; gap: 7px; padding: 8px 11px; background: rgba(9,15,26,.9);
+  box-shadow: inset 2px 0 0 var(--ambar); font-size: 12px; }
+.soc-dev span { flex: 1; }
+.soc-restituir, .soc-ficar { border: 0; cursor: pointer; padding: 6px 10px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .06em; display: inline-flex; align-items: center; gap: 5px; }
+.soc-restituir { background: rgba(34,224,160,.14); color: var(--verde); box-shadow: inset 0 0 0 1px rgba(34,224,160,.4); }
+.soc-ficar { background: rgba(255,59,92,.12); color: #ff9aab; box-shadow: inset 0 0 0 1px rgba(255,59,92,.4); }
+.soc-dev-nota { font-size: 9.5px; color: var(--fraco); display: flex; gap: 5px; align-items: flex-start; margin-top: 4px; }
+
+/* botão de socorro no painel do país */
+.pp-socorro { width: 100%; display: flex; align-items: center; gap: 9px; padding: 11px 13px; margin-top: 7px; cursor: pointer;
+  background: rgba(34,224,160,.08); border: 0; box-shadow: inset 0 0 0 1px rgba(34,224,160,.4); color: var(--verde);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%); font-family: var(--mono); letter-spacing: .04em; }
+.pp-socorro:hover { box-shadow: inset 0 0 0 1px var(--verde); }
+.pp-socorro i { margin-left: auto; font-style: normal; font-size: 9px; color: var(--fraco); }
+@media (max-width: 640px) { .soc-chamado { right: 12px; left: 12px; width: auto; } .soc-contas { grid-template-columns: 1fr; } }

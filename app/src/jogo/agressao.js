@@ -32,20 +32,41 @@ const BONUS_OGIVA = 3;
 // O mundo não te ataca "por azar": ele responde ao que VOCÊ faz. Jogar limpo (sem
 // ofensivas, mundo frio, relações ok) mantém a paz; atacar alguém ou deixar o clima de
 // guerra ferver ACENDE o apetite dos rivais. Resolve a queixa "não fiz nada e me atacaram".
+// A janela do rancor: 6 → 10 turnos. Seis meses era curto demais pro que o modelo quer
+// dizer. Com 6, dava pra invadir alguém, esperar meia dúzia de batidas e voltar a ser
+// "inocente" — a provocação evaporava antes de a mobilização do vizinho sequer amadurecer
+// (mobilização leva até 7 batidas). Agora quem atira carrega o ato por quase um ano, que é
+// o tempo em que o mundo de fato ainda está reagindo àquilo.
 function ofensivasRecentes(estado) {
   const agora = estado.turno || 0;
-  return (estado.minhasOfensivas || []).filter((o) => agora - (o.turno || 0) <= 6).length;
+  return (estado.minhasOfensivas || []).filter((o) => agora - (o.turno || 0) <= 10).length;
 }
 export function culpaDoJogador(estado) {
   const of = ofensivasRecentes(estado);
   const quente = (estado.temp_guerra || 30) / 100;
+  // `turnosDeCalmaria` REALMENTE acumula (motor._checarInvasao soma 1 por batida sem
+  // guerra e zera ao atacar) — mas o estado nasce em 10 e o divisor era 10, ou seja:
+  // `calmo` já valia 1 no turno zero e continuava 1 pra sempre. O termo era uma constante
+  // disfarçada de progressão. Mantive a saturação em 10 de propósito (não quero punir o
+  // começo de partida obrigando o jogador a "merecer" a paz que ele ainda não teve tempo
+  // de construir), mas aprofundei o DESCONTO que ela dá — é ali que a calmaria vira
+  // proteção de verdade.
   const calmo = Math.min(1, (estado.turnosDeCalmaria ?? 10) / 10);   // começa em paz
-  const porOfensiva = Math.min(1.6, of * 0.55);                       // cada ataque MEU pesa
-  const porClima = quente > 0.6 ? (quente - 0.6) * 2.0 : 0;           // só o mundo MUITO quente puxa
-  // BASE 0.45 (não 1): num mundo pacífico e sem provocação minha, o apetite fica baixo o
-  // suficiente pra quase nunca cruzar o piso de risco. Provocar sobe rápido.
-  let culpa = (0.45 + porOfensiva + porClima) * (1 - calmo * 0.55);
-  return Math.max(0.12, culpa);
+  const porOfensiva = Math.min(2.2, of * 0.8);                        // cada ataque MEU pesa
+  const porClima = quente > 0.7 ? (quente - 0.7) * 2.4 : 0;           // só o mundo MUITO quente puxa
+  // As três mudanças, e o porquê de cada uma:
+  //   base 0.45 → 0.32 e desconto da calmaria 0.55 → 0.72: em paz o apetite cai de 0.20
+  //     para 0.09. O piso de risco (0.22 lá embaixo) passa a ser inalcançável sem que eu
+  //     tenha feito alguma coisa. Era esta a queixa do dono: guerra que se instaura sozinha.
+  //   por ofensiva 0.55 → 0.80 (teto 1.6 → 2.2): provocar tem de doer MAIS, não menos.
+  //     Uma ofensiva já leva a culpa de 0.09 pra 1.12 — salto de 12×. É o contraste que
+  //     ensina o jogador: a guerra é escolha dele, não clima.
+  //   clima entra só acima de 0.70 (era 0.60) e com inclinação 2.4 (era 2.0): calor de
+  //     fundo que não é obra minha deixa de convocar invasões; fervura de verdade morde.
+  const culpa = (0.32 + porOfensiva + porClima) * (1 - calmo * 0.72);
+  // Piso 0.12 → 0.05: o piso antigo sozinho já garantia apetite residual eterno. Se o
+  // jogador construiu paz, o resíduo tem de ser resíduo mesmo.
+  return Math.max(0.05, culpa);
 }
 
 // Quanto tempo (em BATIDAS do mundo) o agressor leva pra MONTAR o ataque. Ataque grande
@@ -121,7 +142,11 @@ export function ameacas(estado) {
     const dissuasao = Math.min(0.85, (estado.ogivas || 0) / 400);
 
     const risco = Math.max(0, (odio * 0.5 + oportunidade * 0.3 + mundoQuente * 0.2) * (1 - dissuasao) * culpa);
-    if (risco < 0.18) continue;
+    // Corte 0.18 → 0.22. Subiu junto com a base porque 0.18 deixava passar o caso mais
+    // injusto do jogo: país fraco, sem ogiva, com UMA relação azeda por herança do cenário
+    // e nenhum ato meu — e mesmo assim entrava na lista de ameaças. Rancor antigo não é
+    // motivo pra invadir; rancor antigo MAIS uma provocação minha é.
+    if (risco < 0.22) continue;
     out.push({
       iso, nome: info.nome, rel: Math.round(rel), forca,
       risco: Math.round(risco * 100),

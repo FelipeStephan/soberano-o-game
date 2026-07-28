@@ -166,7 +166,13 @@ export function ligarOnline(jogo, net, hooks) {
     if (ev.tipo === 'naval_resultado') { aplicarResultadoNaval(ev); return; }
     // CONQUISTA TERRITORIAL: os estados atingidos mudam de dono/entram em conflito
     // no mapa de TODOS — o atacado vê o próprio território marcado, como o atacante.
-    if (ev.tipo === 'guerra_resultado') { aplicarImpactoTerritorial(ev); return; }
+    if (ev.tipo === 'guerra_resultado') { aplicarImpactoTerritorial(ev); checarSocorroAliado(ev); return; }
+    // SOCORRO: alguém veio pelo meu lado. Metade da recompensa de uma aliança é ver
+    // isso chegar na tela — sem o aviso, o socorro acontece e o socorrido nunca sabe.
+    if (ev.tipo === 'socorro_resultado' && (ev.paraVoce || ev.alvo === meuIso)) {
+      hooks.aoSocorroRecebido?.(ev);
+      return;
+    }
     // PLANTÃO de outro jogador: o mesmo breaking, o mesmo texto, na tela de todos.
     if (ev.tipo === 'breaking') { breakingRemoto(jogo, ev.dados || {}); return; }
     // FAKE NEWS: a mentira plantada por outro jogador aparece no X de todos, com a
@@ -422,6 +428,18 @@ export function ligarOnline(jogo, net, hooks) {
       dados: ev.dados || null,
       onFim: () => hooks.atualizar?.(),
     });
+  }
+
+  // ── O ALIADO PERDEU CHÃO: abre o chamado de socorro ──────────────────
+  // Roda no cliente de QUEM PODE SOCORRER, sobre o resultado de uma ofensiva alheia.
+  // A checagem "é meu aliado?" mora no motor (registrarSocorro devolve null se não
+  // for), então aqui não há regra duplicada — só o gatilho.
+  function checarSocorroAliado(ev) {
+    const vitima = ev.alvo;
+    const caem = ev.dados?.caem || [];
+    if (!vitima || vitima === meuIso || !caem.length) return;
+    if (!aliancaCom(jogo.estado, vitima)) return;
+    hooks.aoAliadoAtacado?.({ aliado: vitima, agressor: ev.dePais, estados: caem, deNome: ev.deNome });
   }
 
   // ── #4.1 · A RETIRADA DO OUTRO LADO ──────────────────────────────────
