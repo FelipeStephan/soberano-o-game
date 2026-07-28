@@ -260,6 +260,13 @@ export function ligarOnline(jogo, net, hooks) {
     // escolhe encerrar (o conflito some do seu mapa) ou continuar em cima de um inimigo
     // que já recuou — que é uma jogada legítima, e cara na reputação.
     if (ev.tipo === 'saida_guerra') { retiradaRecebida(ev); return; }
+    // ── ENCOMENDAS: o ciclo comercial entre dois governos ──────────────
+    // Três bilhetes, três papéis. `pedido_entregue` usa o MESMO tipo nos dois sentidos
+    // (fornecedor avisa que ficou pronto; comprador avisa se pagou) — o campo `pronto`
+    // é o que diz de que lado da mesa você está.
+    if (ev.tipo === 'pedido_novo' && (ev.paraVoce || ev.dados?.pedido?.para === meuIso)) { hooks.aoPedidoNovo?.(ev); return; }
+    if (ev.tipo === 'pedido_resposta') { hooks.aoPedidoResposta?.(ev); return; }
+    if (ev.tipo === 'pedido_entregue') { hooks.aoPedidoEntregue?.(ev); return; }
     // #11 — UM GOVERNO CAIU. O país não sai do mapa: passa à Máquina, e quem o
     // derrubou (ou quem só assistiu) precisa VER isso acontecer — inclusive porque a
     // partir daqui aquele país volta a agir sozinho contra todo mundo.

@@ -177,3 +177,12 @@
 .mf-enc-ok { font-size: 11px; line-height: 1.5; color: #9fe8c9; display: flex; align-items: center; gap: 6px; }
 .mf-enc-ok .ico { color: var(--verde); flex: none; }
 .mf-enc-erro { font-size: 11px; line-height: 1.5; color: #ffc2cc; display: flex; align-items: center; gap: 6px; }
+
+/* botão de ENCOMENDAS no cabeçalho: o número é quem está esperando você responder */
+.ta-btn.enc { position: relative; }
+.ta-btn.enc:hover { border-color: var(--verde); box-shadow: 0 0 18px -8px var(--verde); }
+.ta-btn.enc.pendente { border-color: var(--verde); color: #9ff0cf; }
+.ta-enc-n { position: absolute; top: 2px; right: 3px; min-width: 15px; height: 15px; padding: 0 3px;
+  display: grid; place-items: center; font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  color: #01120c; background: var(--verde); border-radius: 8px; font-style: normal; }
+.ta-enc-n:empty { display: none; }

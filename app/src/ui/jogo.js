@@ -47,6 +47,9 @@ import { abrirChamadoSocorro, abrirOperacaoRetomada, avisarSocorroRecebido } fro
 import { postsParaEvento } from '../dados/vozesX.js';
 import { registrarFeito, fechouAno, placarDoAno, titulosDoAno, limparAno, jaFechou, anoDoTurno, recompensaDoTitulo, mancheteDoTitulo, rotuloAno } from '../jogo/feitos.js';
 import { abrirRelatorioAno } from './relatorioAno.js';
+// Encomendas entre governos: motor puro + as telas.
+import { abrirEncomendas, cartaoPedidoRecebido, badgeEncomendas } from './encomendas.js';
+import { registrarPedidoRecebido, aplicarResposta, tickEncomendas, receberEntrega, aplicarPagamento } from '../jogo/encomendas.js';
 import { aplicarEfeitos } from '../jogo/efeitos.js';
 import { abrirFakeNews } from './fakeNews.js';
 import { abrirBlocosVisor } from './blocos.js';
@@ -165,6 +168,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
           <button class="ta-btn mercado" id="btn-mercado" ${tipAttr('Onde se compra material de guerra: caça, tanque, navio, satélite. Preço e prazo mudam com o bloco a que você pertence e com o clima do mundo — em tempo de tensão, tudo fica mais caro.', { t: 'Mercado', k: 'COMPRA DE ARMAS', cor: 'ambar' })}>${ico('store', 15)}<span>MERCADO</span></button>
           <button class="ta-btn blocos" id="btn-blocos" ${tipAttr('O tabuleiro das alianças: todos os blocos ativos — militares e econômicos — com membros, poder somado, PIB e intensidade. É onde você funda e acompanha a sua própria aliança.', { t: 'Blocos', k: 'ALIANÇAS GLOBAIS', cor: 'cyan' })}>${ico('handshake', 15)}<span>BLOCOS</span></button>
           <button class="ta-btn indice" id="btn-indice" ${tipAttr('O placar do planeta — o mesmo pra todos os jogadores. Veja quem lidera em PIB, poder militar, petróleo e território, e onde VOCÊ está no ranking.', { t: 'Índice Mundial', k: 'RANKING GLOBAL', cor: 'cyan' })}>${ico('trophy', 15)}<span>ÍNDICE</span></button>
+          ${online ? `<button class="ta-btn enc" id="btn-encomendas" ${tipAttr('Contratos de armamento entre governos. Quem te pediu material espera a sua resposta — aprovar arma outro país e enche o seu caixa; recusar é dizer não a um chefe de Estado. E o que você encomendou fica aqui, produzindo mês a mês.', { t: 'Encomendas', k: 'COMÉRCIO DE ARMAS', cor: 'verde' })}>${ico('package', 15)}<span>ENCOMENDAS</span><i class="ta-enc-n"></i></button>` : ''}
           ${online ? `<button class="ta-btn onu" id="btn-onu" ${tipAttr('A mesa coletiva da sala: convoque uma sessão, ponha um país no banco dos réus e vote a pena. Congelar o caixa, embargar armas, suspender o comércio — punição que a sala inteira assina, e que dói de verdade.', { t: 'Conselho de Segurança', k: 'SÓ NO ONLINE', cor: 'perigo' })}>${ico('gavel', 15)}<span>CONSELHO</span><i class="ta-onu-sino"></i></button>` : ''}
         </div>
         <span class="badge" id="badge-modo">–</span>
@@ -276,6 +280,39 @@ export function iniciarJogo(container, jogo, opts = {}) {
         });
       },
       aoSocorroRecebido: (ev) => { avisarSocorroRecebido(jogo, ev); renderFeed(); },
+      // ── ENCOMENDAS: os três bilhetes do ciclo comercial ──────────────
+      // pedido_novo    → EU sou o fornecedor: alguém quer que eu arme ele
+      // pedido_resposta→ EU sou o comprador: aceitaram ou recusaram
+      // pedido_entregue→ EU sou o comprador: o material chegou (e eu pago o resto)
+      aoPedidoNovo: (ev) => {
+        const p = registrarPedidoRecebido(jogo.estado, ev.dados?.pedido);
+        if (!p) return;
+        cartaoPedidoRecebido(jogo, p, {
+          onResponder: (pp, r) => responderPedido(pp, r),
+          onAbrirPainel: () => abrirPainelEncomendas('recebidos'),
+        });
+      },
+      aoPedidoResposta: (ev) => {
+        const d = ev.dados || {};
+        if (!d.cancelado) aplicarResposta(jogo.estado, d);
+        painelEnc?.atualizar();
+        renderFeed(); renderHud(); renderTopo();
+      },
+      // MESMO tipo nos dois sentidos; quem manda define o papel de quem recebe.
+      // fornecedor → comprador: { id, pronto: true }  ·  comprador → fornecedor: { id, pago }
+      aoPedidoEntregue: (ev) => {
+        const d = ev.dados || {};
+        if (d.pronto) {
+          const r = receberEntrega(jogo.estado, d.id);     // paga o saldo — ou dá o calote
+          if (r?.ok) {
+            onlineCtrl?.notificar('pedido_entregue', ev.dePais,
+              r.pago ? 'Quitou o contrato.' : 'Não pagou o saldo.',
+              { id: d.id, pago: r.pago, motivo: r.pedido?.motivo });
+          }
+        } else aplicarPagamento(jogo.estado, d);           // sou o fornecedor: entra o dinheiro
+        painelEnc?.atualizar();
+        renderFeed(); renderHud(); renderTopo();
+      },
       // #6.2 — a ogiva caiu em CIMA de você. Não é derrota por aprovação nem por
       // dívida: o país deixou de existir. Encerramos a partida como fim de reinado
       // (com o motivo certo) e caímos direto na porta do #11 — a sala segue viva.
@@ -326,8 +363,20 @@ export function iniciarJogo(container, jogo, opts = {}) {
 
   const refresh = () => { renderHud(); renderFeed(); renderTopo(); renderAcoes(); };
   container.querySelector('#btn-mercado').addEventListener('click', () => {
-    if (jogo.fase !== 'planejamento') return;
-    abrirMercado(jogo, { onFim: refresh });
+    if (jogo.fase !== 'planejamento' || jogo.espectador) return;
+    // ENCOMENDAR DE OUTRO JOGADOR: o mercado precisa saber quem, na sala, é gente de
+    // verdade governando um país — só esses podem receber um pedido e responder.
+    abrirMercado(jogo, {
+      onFim: refresh,
+      humanos: (onlineCtrl?.jogadores?.() || []).filter((j) => j.pais && j.pais !== (jogo.estado.iso || 'USA')).map((j) => ({ iso: j.pais, nome: j.nome || PAISES[j.pais]?.nome || j.pais })),
+      onEncomendar: (pedido) => {
+        // O pedido viaja INTEIRO: o fornecedor precisa decidir com o contrato na mão,
+        // não com um aviso vago de que alguém quer alguma coisa.
+        onlineCtrl?.notificar('pedido_novo', pedido.para,
+          `${jogo.ficha.pais} quer encomendar ${pedido.qtd}× ${pedido.nomeItem}.`, { pedido });
+        refresh();
+      },
+    });
   });
   container.querySelector('#btn-empresas').addEventListener('click', () => {
     if (jogo.fase !== 'planejamento') return;
@@ -342,6 +391,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // ÍNDICE MUNDIAL: o ranking global — pode abrir a qualquer hora (é só leitura).
   container.querySelector('#btn-indice')?.addEventListener('click', () => abrirIndiceMundial(jogo));
   // CONSELHO: com mesa aberta entra na sessão; sem mesa, abre a convocação.
+  container.querySelector('#btn-encomendas')?.addEventListener('click', () => abrirPainelEncomendas('recebidos'));
   container.querySelector('#btn-onu')?.addEventListener('click', () => {
     // um governo caído não senta na mesa do Conselho — nem como presidente, nem como voto
     if (jogo.espectador) { toastFila('Seu governo caiu. Assuma outra nação para voltar à mesa.'); return; }
@@ -1137,6 +1187,18 @@ export function iniciarJogo(container, jogo, opts = {}) {
     avisarOperacoesDetectadas();            // o ALVO detectou a MINHA ofensiva se montando?
     onuCtrl?.aplicarPenasNoBeat();          // #9 — as penas do Conselho sangram e expiram
     checarViradaDeAno();                    // fechou 12 meses? entrega os títulos do ano
+    // A LINHA DE PRODUÇÃO ANDA COM O MUNDO, não com um cronômetro próprio: um mês de
+    // jogo é uma batida, e é por isso que a encomenda tem PESO — você espera de verdade.
+    try {
+      const { prontas } = tickEncomendas(jogo.estado) || {};
+      for (const p of (prontas || [])) {
+        jogo._empilharFeed?.([{ tipo: 'sistema', handle: '📦 Linha de produção', cor: '#22e0a0',
+          texto: `${p.qtd}× ${p.nomeItem} saiu da linha e está pronto para embarque a ${p.deNome || p.de}.` }]);
+        onlineCtrl?.notificar('pedido_entregue', p.de, `${p.nomeItem} pronto para embarque.`, { id: p.id, pronto: true });
+      }
+      if (prontas?.length) renderFeed();
+      painelEnc?.atualizar();
+    } catch { /* encomendas nunca derrubam a batida do mundo */ }
     // SOCORRO NÃO ESPERA PARA SEMPRE: o chamado tem prazo, e deixar vencer custa MAIS
     // que recusar na cara. Sumir é a pior resposta possível a um pacto — e é a única
     // que o jogador dá sem clicar em nada, então o jogo precisa cobrá-la sozinho.
@@ -1150,6 +1212,16 @@ export function iniciarJogo(container, jogo, opts = {}) {
     }
     const sino = container.querySelector('#btn-onu');
     if (sino) sino.classList.toggle('convocado', !!onuCtrl?.temReuniaoAtiva());
+    // O NÚMERO NO BOTÃO É QUEM ESTÁ ESPERANDO VOCÊ. Um contrato parado é outro governo
+    // com a mão estendida — e não responder tem custo diplomático, então o aviso é devido.
+    const be = container.querySelector('#btn-encomendas');
+    if (be) {
+      try {
+        const b = badgeEncomendas(jogo.estado);
+        be.classList.toggle('pendente', b.aguardando > 0);
+        be.querySelector('.ta-enc-n').textContent = b.aguardando > 0 ? String(b.aguardando) : '';
+      } catch { /* sem encomendas */ }
+    }
     if (res.desbloqueios?.length) popupDesbloqueio(res.desbloqueios, () => {});
     if (res.invasao) cenaInvasaoTempo(res.invasao); // a batida pausa enquanto a cena está aberta
     else if (res.ofensivas?.length) cenaOfensivasResolvidas(res.ofensivas.slice()); // minhas ofensivas amadureceram
@@ -2382,6 +2454,31 @@ export function iniciarJogo(container, jogo, opts = {}) {
       if (!alvo) return;
       alvo.innerHTML = String(texto).split(/\n{2,}/).map((p) => `<p>${esc(p.trim())}</p>`).join('');
     }).catch(() => {});
+  }
+
+  // ── ENCOMENDAS: o painel e a resposta do fornecedor ─────────────────
+  // O painel NÃO fala com a rede: ele aplica no motor e devolve por callback. É o que
+  // faz a mesma tela funcionar idêntica offline — e é aqui, num lugar só, que a
+  // decisão vira bilhete pra sala.
+  let painelEnc = null;
+  function abrirPainelEncomendas(aba = 'recebidos') {
+    if (jogo.espectador) return;
+    painelEnc = abrirEncomendas(jogo, {
+      aba,
+      onFim: () => { painelEnc = null; refresh(); },
+      onMudou: refresh,
+      onResponder: (p, r) => responderPedido(p, r),
+      onCancelar: (p) => onlineCtrl?.notificar('pedido_resposta', p.para, 'Cancelou a encomenda.', { id: p.id, cancelado: true }),
+    });
+  }
+  function responderPedido(p, r) {
+    onlineCtrl?.notificar('pedido_resposta', p.de,
+      r.aceito ? `Aprovou a encomenda de ${p.qtd}× ${p.nomeItem}.` : `Recusou a encomenda de ${p.qtd}× ${p.nomeItem}.`,
+      { id: p.id, aceito: r.aceito, motivo: r.motivo, meses: r.meses });
+    // VENDER ARMA É UM ATO, e entra no livro do ano como qualquer outro: quem armou
+    // meio mundo merece o título do fim do ano tanto quanto quem curou uma doença.
+    if (r.aceito) { try { registrarFeito(jogo.estado, { iso: jogo.estado.iso || 'USA', tipo: 'armas_vendidas', valor: (p.precoUnit || 0) * (p.qtd || 1), alvo: p.de, turno: jogo.turno }); } catch { /* registro é enfeite */ } }
+    refresh();
   }
 
   // ── A VIRADA DE ANO ─────────────────────────────────────────────────
