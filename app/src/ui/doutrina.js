@@ -18,7 +18,7 @@
 // Não há botão de fechar. Uma década sem rumo é exatamente o jogo que existia antes
 // desta tela — e o jogador que pula a escolha é o que vai reclamar que falta rumo.
 import { ico } from './icones.js';
-import { DOUTRINAS, ORDEM_DOUTRINAS, definirDoutrina, epitetoDaDecada } from '../jogo/doutrinas.js';
+import { DOUTRINAS, ORDEM_DOUTRINAS, definirDoutrina } from '../jogo/doutrinas.js';
 import { bandeira, ISO2_DE } from '../dados/imagens.js';
 import { tocarEfeito } from './audio.js';
 
@@ -94,91 +94,10 @@ export function abrirEscolhaDoutrina(jogo, { onEscolher } = {}) {
   return fechar;
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// TELA 2 — O LEGADO, na tela de fim de partida
-// ═══════════════════════════════════════════════════════════════════════
-// Devolve HTML para ser INJETADO no cartão de fim que já existe (ui/jogo.js), em vez
-// de abrir um segundo modal por cima. Dois modais empilhados no momento mais dramático
-// do jogo é como se perde o momento: o jogador fecha um sem ler e o outro vira ruído.
-//
-// A ORDEM DE LEITURA foi desenhada para responder três perguntas nesta sequência —
-// "quanto eu fiz?", "onde eu ganhei ponto?", "eu ganhei?". Trocar a ordem transforma
-// a tela num extrato: o número sozinho não significa nada até o jogador ver de onde
-// veio, e o pódio não significa nada até ele saber quanto valeu.
-export function blocoLegadoHTML(legado, ranking, { anos = 10 } = {}) {
-  if (!legado?.doutrina) return '';
-  const d = legado.doutrina;
-  const pos = ranking?.linhas?.find((l) => l.eu)?.pos || 1;
-  const epiteto = epitetoDaDecada(d.id, pos, !!ranking?.disputado);
-
-  const linha = (l) => {
-    const rot = ROTULO[l.tipo] || l.tipo;
-    return `<div class="lgd-linha ${l.naDoutrina ? 'dentro' : ''} ${l.negativo ? 'ruim' : ''}">
-      <span class="lgd-rot">${esc(rot)}</span>
-      <span class="lgd-qtd">${l.qtd}</span>
-      ${l.naDoutrina ? `<i class="lgd-x3">×3</i>` : ''}
-      <b class="lgd-pts">${l.pontos > 0 ? '+' : ''}${l.pontos}</b>
-    </div>`;
-  };
-
-  return `
-    <div class="fim-sec">${ico(d.ic, 13)} O LEGADO DA DÉCADA</div>
-    <div class="lgd-bloco" style="--cd:${d.cor}">
-      <div class="lgd-topo">
-        <div class="lgd-doutrina">
-          <div class="lgd-ic">${ico(d.ic, 22)}</div>
-          <div><b>${esc(d.nome)}</b><span>${esc(d.mede)}</span></div>
-        </div>
-        <div class="lgd-total"><i>LEGADO</i><b>${legado.total}</b></div>
-      </div>
-      <div class="lgd-epiteto">${ico('award', 14)} <span>${esc(epiteto)}</span></div>
-
-      <div class="lgd-somas">
-        <div class="lgd-soma dentro"><i>NA SUA DOUTRINA</i><b>+${legado.dentro}</b><small>peso ×3</small></div>
-        <div class="lgd-soma"><i>FORA DELA</i><b>${legado.fora >= 0 ? '+' : ''}${legado.fora}</b><small>peso ×1</small></div>
-        <div class="lgd-soma"><i>DESTINO FINAL</i><b>+${legado.destino}</b><small>de 100</small></div>
-      </div>
-
-      ${legado.linhas.length ? `<div class="lgd-detalhe">${legado.linhas.slice(0, 10).map(linha).join('')}</div>`
-        : `<div class="lgd-vazio">Dez anos e nenhum feito que o mundo tenha registrado. O Legado é o Destino, e mais nada.</div>`}
-
-      ${ranking?.disputado ? `
-      <div class="lgd-lab">${ico('trophy', 11)} O PÓDIO DA DÉCADA</div>
-      <div class="lgd-rank">
-        ${ranking.linhas.slice(0, 8).map((l) => `
-          <div class="lgd-r ${l.eu ? 'eu' : ''} ${l.pos === 1 ? 'primeiro' : ''}">
-            <span class="lgd-pos">${l.pos}</span>
-            ${flag(l.iso, 40)}
-            <div class="lgd-quem"><b>${esc(l.nome)}</b><i>${esc(DOUTRINAS[l.doutrina]?.nome || 'SEM DOUTRINA')}</i></div>
-            <b class="lgd-rleg">${l.legado}</b>
-          </div>`).join('')}
-      </div>
-      ${ranking.coroas.length ? `
-      <div class="lgd-lab">${ico('crown', 11)} AS COROAS — o maior de cada caminho</div>
-      <div class="lgd-coroas">
-        ${ranking.coroas.map((c) => `
-          <div class="lgd-coroa" style="--cd:${c.cor}">
-            <div class="lgd-cic">${ico(c.ic, 15)}</div>
-            <div><i>${esc(c.nome)}</i><b>${esc(c.vencedor.nome)}</b></div>
-            <span>${c.vencedor.legado}</span>
-          </div>`).join('')}
-      </div>` : ''}` : `
-      <div class="lgd-solo">${ico('info', 12)} Partida contra a Máquina: não há pódio a disputar.
-        O Legado é a sua marca — e a régua para a próxima década, com outra doutrina.</div>`}
-    </div>`;
-}
-
-// Os rótulos do detalhamento. Vêm daqui e não de `feitos.js` porque lá o rótulo é do
-// FEITO ("Territórios tomados", voz de jornal) e aqui é da LINHA DE PLACAR — texto
-// curto que precisa caber numa coluna e ser lido de relance.
-const ROTULO = {
-  conquista: 'Territórios tomados', anexacao: 'Nações anexadas', libertacao: 'Soberanias devolvidas',
-  ofensiva: 'Ofensivas lançadas', invasao_repelida: 'Invasões repelidas', territorio_perdido: 'Territórios perdidos',
-  nuclear: 'Ogivas detonadas', cura_invest: 'Investido em saúde (tri)', cura_final: 'Pandemias curadas',
-  mediacao: 'Rodadas de mediação', paz_final: 'Guerras encerradas', ajuda: 'Ajuda enviada (tri)',
-  alianca: 'Pactos selados', sancao_aplicada: 'Sanções impostas', sancao_sofrida: 'Sanções sofridas',
-  espionagem: 'Segredos roubados', armas_vendidas: 'Armas vendidas (tri)', pib_delta: 'Riqueza gerada (%)',
-};
+// A TELA DO LEGADO NÃO MORA MAIS AQUI. Ela era um bloco de HTML injetado no cartão
+// de fim — e o cartão de fim virou um carrossel de sete etapas (ui/fimDaEra.js), onde
+// o Legado tem uma tela inteira só pra ele. Manter uma segunda versão do mesmo bloco
+// aqui garantiria que uma das duas ficasse para trás na primeira mudança de copy.
 
 // ── A INSÍGNIA NO TOPO ────────────────────────────────────────────────
 // Um selo permanente ao lado do nome do país. Existe por um motivo prático: a

@@ -122,7 +122,7 @@ function tocarNuclear() {
 // curto de quem já a chamava.
 //
 // TROCAR A FAIXA DO FIM DA ERA é mudar uma string: ponha o mp3 em `public/audio/` e
-// passe o nome dele em `ui/fimAbertura.js`. Hoje as duas cenas dividem a mesma trilha
+// passe o nome dele em `ui/fimDaEra.js`. Hoje as duas cenas dividem a mesma trilha
 // de suspense porque não existe outra no acervo — e uma cena muda seria pior.
 let conselhoAtual = null;
 export function tocarConselho() { return tocarTrilha('conselho-suspense'); }

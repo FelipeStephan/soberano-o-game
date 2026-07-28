@@ -115,6 +115,20 @@ const VALOR = {
   pib_delta: 3,          // por ponto percentual de PIB no ano
 };
 
+// Os rótulos curtos de cada tipo, para o detalhamento do Legado. Vivem AQUI, junto de
+// `VALOR`, e não na tela: são a mesma lista, e listas irmãs em arquivos diferentes é
+// como um tipo novo entra na conta e nunca ganha nome na tela. Note que são diferentes
+// dos rótulos de `feitos.js` — lá é voz de jornal ("Territórios tomados" numa manchete),
+// aqui é coluna de placar, texto curto que precisa ser lido de relance.
+export const ROTULO_FEITO = {
+  conquista: 'Territórios tomados', anexacao: 'Nações anexadas', libertacao: 'Soberanias devolvidas',
+  ofensiva: 'Ofensivas lançadas', invasao_repelida: 'Invasões repelidas', territorio_perdido: 'Territórios perdidos',
+  nuclear: 'Ogivas detonadas', cura_invest: 'Investido em saúde (tri)', cura_final: 'Pandemias curadas',
+  mediacao: 'Rodadas de mediação', paz_final: 'Guerras encerradas', ajuda: 'Ajuda enviada (tri)',
+  alianca: 'Pactos selados', sancao_aplicada: 'Sanções impostas', sancao_sofrida: 'Sanções sofridas',
+  espionagem: 'Segredos roubados', armas_vendidas: 'Armas vendidas (tri)', pib_delta: 'Riqueza gerada (%)',
+};
+
 const PESO_DENTRO = 3;   // feito da SUA doutrina
 const PESO_FORA = 1;     // feito de outra — conta, mas não define
 const round1 = (n) => Math.round(n * 10) / 10;
@@ -217,6 +231,41 @@ export function calcularLegado(estado, { destino = null, incluirAnoCorrente = tr
   const dest = Number.isFinite(destino) ? Math.round(destino) : 0;
   const total = Math.round(dentro + fora + dest);
   return { total, dentro: Math.round(dentro), fora: Math.round(fora), destino: dest, linhas, doutrina: dout };
+}
+
+// ── AS PATENTES DO LEGADO ─────────────────────────────────────────────
+// O DONO OLHOU A TELA E PERGUNTOU: "o que seria esses números? não é pontos? é o que
+// precisa de número certo? recorde? não sei..."
+//
+// Ele estava certo em não saber — a tela mostrava 480 e não dizia nem a UNIDADE nem a
+// RÉGUA. Um número sem escala não é informação: é um enfeite grande. O jogador não
+// tinha como responder a única pergunta que importa ali, que é "isso é bom?".
+//
+// Então o Legado ganhou faixas, exatamente como o Destino já tem (`BANDAS` em
+// destino.js) — e pela mesma razão. A calibragem vem do teto real: uma década
+// intensa produz ~15 conquistas, 3 anexações e 2 curas, o que dá ~150 na doutrina
+// certa; somado ao Destino (até 100) e ao que sobra fora da doutrina, um jogador
+// muito bom fecha entre 300 e 500. Passar de 700 exige uma década quase perfeita —
+// por isso a última faixa é rara de propósito. Faixa que todo mundo alcança não
+// classifica ninguém.
+export const FAIXAS_LEGADO = [
+  { min: 700, nome: 'LENDA DA DÉCADA',   nota: 'Praticamente o teto. Quase ninguém chega aqui.' },
+  { min: 450, nome: 'DÉCADA HISTÓRICA',  nota: 'Um governo que os livros vão citar pelo nome.' },
+  { min: 280, nome: 'DÉCADA DE PESO',    nota: 'Uma potência de verdade, construída e entregue.' },
+  { min: 150, nome: 'NOME LEMBRADO',     nota: 'Fez o suficiente para não virar nota de rodapé.' },
+  { min: 60,  nome: 'MANDATO DISCRETO',  nota: 'Governou. O mundo seguiu sem reparar muito.' },
+  { min: -999, nome: 'RODAPÉ DA HISTÓRIA', nota: 'Pouco ficou de pé, e menos ainda ficou registrado.' },
+];
+export function faixaDeLegado(total) {
+  const t = Number(total) || 0;
+  const i = FAIXAS_LEGADO.findIndex((f) => t >= f.min);
+  const atual = FAIXAS_LEGADO[i < 0 ? FAIXAS_LEGADO.length - 1 : i];
+  // A faixa SEGUINTE e quanto faltou. É a informação que transforma "480" numa
+  // história — "faltaram 220 pontos para LENDA" dá ao jogador um motivo concreto
+  // para começar a próxima década. É a mesma lógica de `proximaBanda` no Destino.
+  const acima = FAIXAS_LEGADO[Math.max(0, (i < 0 ? FAIXAS_LEGADO.length - 1 : i) - 1)];
+  const proxima = acima && acima !== atual ? acima : null;
+  return { atual, proxima, faltam: proxima ? Math.max(1, proxima.min - t) : 0 };
 }
 
 // ── O RANKING FINAL ───────────────────────────────────────────────────

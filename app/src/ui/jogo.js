@@ -49,9 +49,10 @@ import { registrarFeito, fechouAno, placarDoAno, titulosDoAno, limparAno, jaFech
 import { abrirRelatorioAno } from './relatorioAno.js';
 // A DOUTRINA — a espinha da década (ver docs/ENREDO-E-CAMPANHA.md, Fase 1). Motor puro
 // no jogo/, as duas telas (as cinco cartas e o Legado) em ui/doutrina.js.
-import { temDoutrina, acumularAno, calcularLegado, rankingLegado, epitetoDaDecada } from '../jogo/doutrinas.js';
-import { abrirEscolhaDoutrina, blocoLegadoHTML, insigniaDoutrinaHTML } from './doutrina.js';
-import { abrirFimDaEra } from './fimAbertura.js';
+import { temDoutrina, acumularAno, calcularLegado, rankingLegado, epitetoDaDecada, DOUTRINAS, ROTULO_FEITO, faixaDeLegado } from '../jogo/doutrinas.js';
+import { abrirEscolhaDoutrina, insigniaDoutrinaHTML } from './doutrina.js';
+import { abrirFimDaEra } from './fimDaEra.js';
+import { situacaoDoFim } from '../dados/copyFim.js';
 // Encomendas entre governos: motor puro + as telas.
 import { abrirEncomendas, cartaoPedidoRecebido, badgeEncomendas } from './encomendas.js';
 import { registrarPedidoRecebido, aplicarResposta, tickEncomendas, receberEntrega, aplicarPagamento } from '../jogo/encomendas.js';
@@ -2364,93 +2365,93 @@ export function iniciarJogo(container, jogo, opts = {}) {
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // O FIM DA PARTIDA — cinemática primeiro, dossiê depois
+  // O FIM DO REINADO — sete etapas, no ritmo do jogador
   // ═══════════════════════════════════════════════════════════════════
-  // O PEDIDO DO DONO: "a tela de fim da era poderia ser um carrossel, uma coisa meio
-  // épica cinemática igual fizemos no conselho da ONU".
+  // O PEDIDO DO DONO, em duas mensagens:
+  //   "poderia ser um carrossel, uma coisa meio épica cinemática igual fizemos no
+  //    conselho da ONU" — e depois, ao ver a primeira tentativa: "pra mim ficar
+  //    aparecendo em uma única tela um monte de informação, pra dar rolagem... então
+  //    por etapa, eu vou passando próximo, próximo e próximo."
   //
-  // O momento mais importante da partida entrava como um cartão de rolagem com
-  // dezesseis números — tudo o que havia de dramático chegava de uma vez e por baixo
-  // de uma barra de scroll. Agora as cinco cenas contam a história em ordem
-  // (parou → o que ficou de pé → o que você prometeu → quanto valeu → o veredito) e
-  // só então o dossiê completo entra, para quem quiser reler com calma.
+  // A PRIMEIRA VERSÃO ERRAVA A MÃO: eu pus uma cinemática automática de 15s ANTES do
+  // cartão, e o cartão continuou lá, com dezesseis números e barra de rolagem. Ou
+  // seja: entreguei o carrossel E mantive o problema. Duas telas onde o pedido era
+  // uma.
   //
-  // A cinemática NÃO substitui nada: o cartão é idêntico ao que já existia. Cena para
-  // sentir, cartão para conferir.
-  let cancelarCineFim = null;
+  // Agora o dossiê É o carrossel. Sete etapas, uma tela cada, nada automático — no
+  // fim de uma década de uma hora, ninguém quer ler no relógio de outra pessoa. A
+  // tela mora em ui/fimDaEra.js; aqui fica só o que ela não pode saber: como ler o
+  // `jogo`, e o que precisa acontecer no MUNDO quando um governo termina.
+  //
+  // ── O QUE ESTA FUNÇÃO GUARDA PARA SI ─────────────────────────────────
+  // Os EFEITOS. A tela é só tela: não dispara plantão, não posta no X, não avisa a
+  // sala. Isso tudo continua aqui embaixo e roda ANTES de qualquer pixel aparecer —
+  // se o jogador fechar a tela em dois segundos, o mundo já soube do mesmo jeito.
+  let fecharFim = null;
   function mostrarFim(fim) {
     cancelarFlash();
-    tr?.parar();          // o mundo não bate por baixo de uma cinemática de 15s
-    cancelarCineFim?.();
-    let dados = null;
-    try { dados = dadosDaCinematica(fim); } catch { dados = null; }
-    // Sem dados (algum campo do estado quebrou), o dossiê entra direto. A cinemática
-    // é cerimônia — nunca pode ser o motivo de o jogador não ver o fim da partida.
-    if (!dados) { desenharDossieFim(fim); return; }
-    cancelarCineFim = abrirFimDaEra(dados, () => { cancelarCineFim = null; desenharDossieFim(fim); });
-  }
+    tr?.parar();
+    fecharFim?.();
 
-  // O que a cinemática precisa saber, montado num lugar só. Ela não conhece `jogo`:
-  // recebe texto e número prontos, e por isso pode ser testada e reordenada sem
-  // arrastar meia HUD junto.
-  function dadosDaCinematica(fim) {
-    const e = jogo.estado;
-    const tom = tomDoFim(fim);
-    let leg = null; let rank = null; let epiteto = null;
-    try {
-      if (temDoutrina(e)) {
-        leg = calcularLegado(e, { destino: jogo.destino });
-        rank = rankingLegado(e, { meuLegado: leg.total, meuDestino: jogo.destino });
-        const pos = rank.linhas.find((l) => l.eu)?.pos || 1;
-        epiteto = epitetoDaDecada(leg.doutrina?.id, pos, rank.disputado);
-      }
-    } catch { leg = null; }
-    const apr = Math.round(e.aprovacao || 0);
-    return {
-      tom: fim.tipo, acento: tom.acento, tag: tom.tag, titulo: fim.titulo,
-      iso: e.iso || 'USA', pais: jogo.ficha.pais,
-      presidente: e.presidenteNome || jogo.ficha.presidente || '',
-      meses: jogo.turno,
-      numeros: {
-        territorio: e.territorio || 1, pib: dinheiro(e.pib),
-        aprovacao: `${apr}%`, aprovacaoBaixa: apr < 30,
-        forca: Math.round(forcaCombate(e.forcas)),
-      },
-      // A frase do balanço muda com o desfecho: elogiar o patrimônio de quem acabou
-      // de ser deposto soaria escárnio, e é exatamente o tipo de erro de tom que o
-      // dono já flagrou uma vez nesta mesma tela.
-      frasePatrimonio: fim.tipo === 'derrota'
-        ? 'É o país que fica para o próximo. Ele não vai perguntar como chegou assim.'
-        : 'É o país que você entrega — números fechados, sem arredondamento a seu favor.',
-      doutrina: leg?.doutrina || null,
-      legado: leg,
-      epiteto,
-      fraseLegado: leg
-        ? (rank?.disputado
-          ? `Feito da sua doutrina vale três vezes; o resto, uma. ${rank.campeao?.eu ? 'Ninguém nesta sala fez mais.' : `${rank.campeao?.nome} terminou na frente.`}`
-          : 'Feito da sua doutrina vale três vezes; o resto, uma. É a régua para a próxima década.')
-        : '',
-    };
-  }
-
-  function desenharDossieFim(fim) {
-    const venceu = fim.tipo === 'vitoria';
     const e = jogo.estado;
     const diag = diagnosticoQueda(jogo, fim);   // POR QUE caiu — determinístico, sempre existe
+
+    // ── 1. O MUNDO FICA SABENDO (antes da tela) ──────────────────────
+    // O pedido antigo: "quando um presidente é deposto, eu quero essa notificação
+    // tanto no breaking news quanto na página do X, com o motivo apontando para o que
+    // ele deixou passar". Governo não cai em silêncio — cai no jornal. `textosDaQueda`
+    // escreve as duas vozes a partir do MESMO diagnóstico, pra o plantão e o X não
+    // contarem versões diferentes do mesmo governo.
+    const tq = textosDaQueda(jogo, fim, diag);
+    dispararBreaking(jogo, {
+      assunto: tq.manchete,
+      contexto: `${fim.titulo}. ${tq.motivoCurto}. ${diag.explicacao || ''}`,
+      tom: fim.tipo === 'legado' ? 'frio' : 'quente',
+      iso: e.iso,
+    });
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Fim de governo', cor: fim.tipo === 'legado' ? '#35e0ff' : '#ff3b5c', texto: tq.postX }]);
+    renderFeed();
+    if (jogo.ehOnline) {
+      onlineCtrl?.notificar('queda', null,
+        `${jogo.ficha.presidente || jogo.ficha.pais} — ${tq.manchete}`,
+        { iso: e.iso || 'USA', nome: jogo.ficha.pais, motivo: tq.motivoCurto, tipo: fim.tipo, postX: tq.postX });
+    }
+
+    // ── 2. O OBITUÁRIO COMEÇA A SER ESCRITO AGORA ────────────────────
+    // Disparado aqui e entregue como PROMESSA à tela: a IA escreve enquanto o jogador
+    // lê as primeiras etapas, e o texto entra na etapa da imprensa quando chegar. Se
+    // a IA estiver desligada, o fallback escrito à mão entra no lugar — nunca vazio.
+    const obituario = obituarioDaQueda(jogo, fim, diag).catch(() => null);
+
+    // ── 3. A TELA ────────────────────────────────────────────────────
+    fecharFim = abrirFimDaEra(dadosDoFim(fim, diag), {
+      obituario,
+      onNovo: () => { window.location.reload(); },
+      // #11 · A SALA CONTINUA SEM VOCÊ (e você pode voltar a ela). Offline, cair é o
+      // fim da história e recarregar a página é a resposta certa. Online, não: os
+      // outros humanos seguem jogando, e sair da partida deles porque o SEU governo
+      // caiu é punir a mesa inteira pelo seu erro. Ver ui/renascer.js (opção B).
+      onRenascer: jogo.ehOnline ? () => entrarEmEspectador() : null,
+    });
+  }
+
+  // Tudo o que as sete etapas precisam saber, montado num lugar só. A tela não conhece
+  // `jogo`: recebe texto e número prontos. É o que permite reordenar as etapas (a
+  // primeira coisa que o dono vai querer mexer) sem arrastar meia HUD junto.
+  function dadosDoFim(fim, diag) {
+    const e = jogo.estado;
+    const tom = tomDoFim(fim);
+
     // Tempo no poder em anos + meses (cada batida = 1 mês).
     const anosI = Math.floor(jogo.turno / 12); const mesesI = jogo.turno % 12;
-    const anos = anosI > 0
-      ? `${anosI} ano${anosI > 1 ? 's' : ''}${mesesI ? ` e ${mesesI} ${mesesI > 1 ? 'meses' : 'mês'}` : ''}`
-      : `${mesesI || 1} ${(mesesI || 1) === 1 ? 'mês' : 'meses'}`;
-    const guerras = jogo.historico.filter((h) => /guerra|ofensiva/i.test(h.carta || '')).length;
-    const conq = e.conquistados?.length || 0;
-    const imprensaFinal = jogo.imprensa().sort((a, b) => b.valor - a.valor);
-    const amiga = imprensaFinal[0]; const inimiga = imprensaFinal[imprensaFinal.length - 1];
+    const tempoNoPoder = anosI > 0
+      ? `${anosI} ANO${anosI > 1 ? 'S' : ''}${mesesI ? ` E ${mesesI} ${mesesI > 1 ? 'MESES' : 'MÊS'}` : ''}`
+      : `${mesesI || 1} ${(mesesI || 1) === 1 ? 'MÊS' : 'MESES'}`;
 
-    // O rótulo de legado também parava de fazer sentido no fim de era: quem governou
-    // uma década inteira e terminou como Grande Potência não é "esquecido, nem herói
-    // nem vilão" — é alguém que entregou o mandato. Cada desfecho tem a sua frase.
-    const legado = fim.tipo === 'vitoria'
+    // O rótulo de legado: uma frase que resume o governo inteiro. Quem governou uma
+    // década e terminou como Grande Potência não é "esquecido, nem herói nem vilão" —
+    // é alguém que entregou o mandato. Cada desfecho tem a sua.
+    const rotuloLegado = fim.tipo === 'vitoria'
       ? (e.territorio > 1 ? 'Conquistador. Redesenhou o mapa e obrigou o mundo a decorar seu nome.' : 'Estadista. Atravessou a tempestade sem afundar o barco — e poucos conseguem isso.')
       : fim.tipo === 'legado'
         ? (e.territorio > 1 ? `Expansionista. Entregou o mandato com ${e.territorio} territórios sob a bandeira — e a década leva o seu nome.`
@@ -2461,131 +2462,60 @@ export function iniciarJogo(container, jogo, opts = {}) {
           : e.divida >= 200 ? 'Quebrado. Você tinha o maior PIB do planeta e ainda assim deixou a conta na mesa.'
           : 'Derrubado. A conta chegou antes do fim do mandato.');
 
-    const pill = (rot, val, cor) => `<div class="fim-pill"><span>${rot}</span><b style="color:${cor || 'var(--texto)'}">${val}</b></div>`;
-
-    // ── O TOM VEM DO MOTOR, NÃO DE UM `if` AQUI ──────────────────────
-    // Era `venceu ? crown : skull`, e QUALQUER desfecho que não fosse vitória caía na
-    // caveira — inclusive fechar uma década como Superpotência. Foi exatamente isso que
-    // o dono viu: fez tudo certo, chegou ao fim da era e o jogo o tratou como deposto.
-    // Agora existe um terceiro desfecho ('legado') e quem decide cor, ícone e etiqueta
-    // é `tomDoFim`, num lugar só (jogo/destino.js).
-    const tom = tomDoFim(fim);
-
-    // ── O LEGADO — a resposta a "então, quem foi o melhor?" ───────────
-    // Calculado AQUI e não no fim do ano porque uma partida pode terminar em março
-    // (queda) ou no Ano VII (império): `calcularLegado` soma o acumulador dos anos
-    // fechados com o ano corrente ainda em aberto. Quem fecha a década inteira não
-    // sente diferença; quem cai no meio, sente muita.
-    let blocoLegado = '';
+    // O Legado é calculado AQUI e não no fim do ano porque uma partida pode terminar
+    // em março (queda) ou no Ano VII (império): `calcularLegado` soma o acumulador dos
+    // anos fechados com o ano corrente ainda em aberto. Quem fecha a década inteira
+    // não sente diferença; quem cai no meio, sente muita.
+    let legado = null; let ranking = null;
     try {
-      const leg = calcularLegado(jogo.estado, { destino: jogo.destino });
-      const rank = rankingLegado(jogo.estado, { meuLegado: leg.total, meuDestino: jogo.destino });
-      blocoLegado = blocoLegadoHTML(leg, rank, { anos });
-    } catch { blocoLegado = ''; }   // sem doutrina (save antigo) a tela é a de sempre
+      if (temDoutrina(e)) {
+        legado = calcularLegado(e, { destino: jogo.destino });
+        ranking = rankingLegado(e, { meuLegado: legado.total, meuDestino: jogo.destino });
+        // A tela do pódio mostra o NOME da doutrina de cada um, não o id. Traduzir
+        // aqui evita que ui/fimDaEra.js precise importar o catálogo inteiro só pra
+        // escrever cinco palavras.
+        for (const l of ranking.linhas) l.doutrinaNome = DOUTRINAS[l.doutrina]?.nome || null;
+        // O epíteto entra no lugar do título genérico quando existe: "O FAROL DA
+        // DÉCADA" diz mais que "Fim da Era — Superpotência".
+        const pos = ranking.linhas.find((l) => l.eu)?.pos || 1;
+        legado.linhas = (legado.linhas || []).map((l) => ({ ...l, rotulo: ROTULO_FEITO[l.tipo] || l.tipo }));
+        legado.epiteto = epitetoDaDecada(legado.doutrina?.id, pos, ranking.disputado);
+      }
+    } catch { legado = null; ranking = null; }   // save antigo, sem doutrina: as etapas somem sozinhas
 
-    container.insertAdjacentHTML('beforeend', `
-      <div class="modal-fundo fim-fundo ${tom.classe}">
-        <div class="fim-card ${tom.classe}" style="--acento:${tom.acento}">
-          <div class="fim-luz"></div>
-          <div class="fim-selo">${ico(tom.icone, 46)}</div>
-          <div class="fim-tag">${esc(tom.tag)}</div>
-          <h1 class="fim-tit">${esc(fim.titulo)}</h1>
-          <p class="fim-txt">${esc(fim.texto)}</p>
+    const imprensaFinal = jogo.imprensa().sort((a, b) => b.valor - a.valor);
 
-          <div class="fim-legado">${ico('gavel', 15)} <span>${esc(legado)}</span></div>
-
-          <!-- O BALANÇO. Nunca mais "nenhum indicador explica": quando não houve culpado,
-               a explicação vira aritmética honesta — quantos pontos de Destino faltaram e
-               em quais alavancas eles estavam. O obituário narrado chega logo abaixo. -->
-          <div class="fim-causa">
-            <div class="fim-causa-rot">${ico('search', 13)} ${esc(diag.causaRot)}</div>
-            <div class="fim-explica">${esc(diag.explicacao || '')}</div>
-            ${diag.feitos?.length ? `<div class="fim-feitos-rot">${ico('award', 11)} O QUE VOCÊ CONSTRUIU</div>
-            <div class="fim-culpados bons">${diag.feitos.slice(0, 5).map((c) => `
-              <span class="fim-culpado bom"><i>${esc(c.k)}</i><b>${esc(c.v)}</b><small>${esc(c.txt || '')}</small></span>`).join('')}</div>` : ''}
-            ${diag.culpados.length ? `<div class="fim-feitos-rot ruim">${ico('trending-down', 11)} O QUE PESOU CONTRA</div>
-            <div class="fim-culpados">${diag.culpados.map((c) => `
-              <span class="fim-culpado"><i>${esc(c.k)}</i><b>${esc(c.v)}</b><small>${esc(c.txt)}</small></span>`).join('')}</div>` : ''}
-          </div>
-
-          <div class="fim-sec">${ico('feather', 13)} O OBITUÁRIO POLÍTICO</div>
-          <div class="fim-obito" id="fim-obito"><i class="fim-obito-load">${ico('loader', 13)} a imprensa está escrevendo sobre você…</i></div>
-
-          <div class="fim-sec">${ico('chart-line', 13)} O QUE VOCÊ DEIXOU PRA TRÁS</div>
-          <div class="fim-grid">
-            ${pill('Tempo no poder', anos, 'var(--cyan)')}
-            ${pill('Destino final', `${jogo.destino}/100`, jogo.banda.cor)}
-            ${pill('Regime', jogo.rotulo.label, 'var(--roxo)')}
-            ${pill('PIB', dinheiro(e.pib), 'var(--ambar)')}
-            ${pill('Tesouro', dinheiro(e.tesouro), 'var(--ambar)')}
-            ${pill('Dívida/PIB', `${Math.round(e.divida)}%`, e.divida >= 150 ? 'var(--perigo)' : 'var(--texto)')}
-            ${pill('Territórios', e.territorio, e.territorio > 1 ? 'var(--verde)' : 'var(--texto)')}
-            ${pill('Ogivas', e.ogivas, e.ogivas ? 'var(--perigo)' : 'var(--fraco)')}
-            ${pill('Força militar', forcaCombate(e.forcas), 'var(--cyan)')}
-            ${pill('Aprovação', Math.round(e.aprovacao), e.aprovacao < 30 ? 'var(--perigo)' : 'var(--verde)')}
-            ${pill('Soft Power', Math.round(e.soft_power), 'var(--roxo)')}
-            ${pill('Ocupações', conq, conq ? '#ff9628' : 'var(--fraco)')}
-          </div>
-
-          ${blocoLegado}
-
-          <div class="fim-sec">${ico('radio', 13)} COMO A IMPRENSA VAI TE LEMBRAR</div>
-          <div class="fim-imprensa">
-            <div class="fim-jor"><b style="color:${amiga.cor}">${esc(amiga.nome)}</b><span>${esc(amiga.tom)}</span></div>
-            <div class="fim-jor"><b style="color:${inimiga.cor}">${esc(inimiga.nome)}</b><span>${esc(inimiga.tom)}</span></div>
-          </div>
-
-          ${jogo.historico.length ? `<div class="fim-sec">${ico('scale', 13)} DECISÕES QUE TE DEFINIRAM</div>
-          <div class="fim-hist">${jogo.historico.slice(-4).reverse().map((h) => `
-            <div class="fim-h"><span class="fh-t">Turno ${h.turno}</span><span class="fh-c">${esc(h.carta)}</span><span class="fh-e">${esc(h.escolha)}</span></div>`).join('')}</div>` : ''}
-
-          <div class="fim-acoes">
-            ${jogo.ehOnline ? `<button class="fim-btn fim-renascer" id="fim-renascer">${ico('users-round', 16)} ASSUMIR OUTRA NAÇÃO</button>` : ''}
-            <button class="fim-btn ${jogo.ehOnline ? 'sec' : ''}" id="fim-novo">${ico('rotate-ccw', 16)} ${jogo.ehOnline ? 'SAIR DA SALA' : 'NOVO REINADO'}</button>
-          </div>
-        </div>
-      </div>`);
-
-    // ── #11 · A SALA CONTINUA SEM VOCÊ (e você pode voltar a ela) ────────
-    // Offline, cair é o fim da história e recarregar a página é a resposta certa.
-    // Online, não: os outros humanos seguem jogando, e sair da partida deles porque
-    // o SEU governo caiu é punir a mesa inteira pelo seu erro. Aqui a queda vira dois
-    // fatos separados — o seu país passa à Máquina (público, todos veem no mapa) e
-    // VOCÊ vira espectador com direito a assumir outra nação livre. Ver ui/renascer.js
-    // para a decisão de produto por trás disto (opção B).
-    container.querySelector('#fim-novo')?.addEventListener('click', () => { window.location.reload(); });
-    container.querySelector('#fim-renascer')?.addEventListener('click', () => {
-      container.querySelector('.fim-fundo')?.remove();
-      entrarEmEspectador();
-    });
-    // ── A QUEDA VIRA NOTÍCIA, COM O MOTIVO ───────────────────────────
-    // O pedido do dono: "quando um presidente é deposto, eu quero essa notificação
-    // tanto no breaking news quanto na página do X, com o motivo apontando para o que
-    // ele deixou passar". Governo não cai em silêncio — cai no jornal. `textosDaQueda`
-    // escreve as duas vozes a partir do MESMO diagnóstico, pra o plantão e o X não
-    // contarem versões diferentes do mesmo governo.
-    const tq = textosDaQueda(jogo, fim, diag);
-    dispararBreaking(jogo, {
-      assunto: tq.manchete,
-      contexto: `${fim.titulo}. ${tq.motivoCurto}. ${diag.explicacao || ''}`,
-      tom: fim.tipo === 'legado' ? 'frio' : 'quente',
-      iso: jogo.estado.iso,
-    });
-    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Fim de governo', cor: fim.tipo === 'legado' ? '#35e0ff' : '#ff3b5c', texto: tq.postX }]);
-    renderFeed();
-    if (jogo.ehOnline) {
-      onlineCtrl?.notificar('queda', null,
-        `${jogo.ficha.presidente || jogo.ficha.pais} — ${tq.manchete}`,
-        { iso: jogo.estado.iso || 'USA', nome: jogo.ficha.pais, motivo: tq.motivoCurto, tipo: fim.tipo, postX: tq.postX });
-    }
-
-    // O OBITUÁRIO chega depois (a IA escreve enquanto o jogador lê os números). Se a
-    // IA estiver desligada, o fallback escrito à mão entra no lugar — nunca fica vazio.
-    obituarioDaQueda(jogo, fim, diag).then((texto) => {
-      const alvo = container.querySelector('#fim-obito');
-      if (!alvo) return;
-      alvo.innerHTML = String(texto).split(/\n{2,}/).map((p) => `<p>${esc(p.trim())}</p>`).join('');
-    }).catch(() => {});
+    return {
+      tom: fim.tipo, icone: tom.icone, titulo: fim.titulo, texto: fim.texto,
+      // A SITUAÇÃO é mais fina que o desfecho: cair com o povo na rua, cair quebrado e
+      // cair na guerra são três histórias, e o banco de frases (dados/copyFim.js) tem
+      // texto próprio para cada uma. A SEMENTE trava o sorteio numa partida — a frase
+      // não pode mudar enquanto o jogador lê — e o solta entre partidas.
+      situacao: situacaoDoFim({
+        tipo: fim.tipo, nivel: fim.nivel, aprovacao: e.aprovacao, divida: e.divida,
+        estabilidade: e.estabilidade, guerras: (e.emGuerra || []).length,
+      }),
+      semente: `${e.iso}|${jogo.ficha.presidente}|${jogo.turno}|${jogo.destino}`,
+      iso: e.iso || 'USA', pais: jogo.ficha.pais,
+      presidente: e.presidenteNome || jogo.ficha.presidente || '',
+      tempoNoPoder, rotuloLegado, corBanda: jogo.banda?.cor || 'var(--cyan)',
+      numeros: {
+        destino: jogo.destino, regime: jogo.rotulo.label,
+        pib: dinheiro(e.pib), tesouro: dinheiro(e.tesouro),
+        divida: Math.round(e.divida), territorio: e.territorio || 1,
+        ogivas: e.ogivas || 0, forca: forcaCombate(e.forcas),
+        aprovacao: Math.round(e.aprovacao), softPower: Math.round(e.soft_power),
+        ocupacoes: e.conquistados?.length || 0,
+      },
+      diag,
+      doutrina: legado?.doutrina || null,
+      legado, ranking,
+      // A régua do Legado. Sem ela o jogador vê "480" e não tem como saber se é muito
+      // ou pouco — foi exatamente a pergunta que o dono fez ao olhar a tela.
+      faixaLegado: legado ? faixaDeLegado(legado.total) : null,
+      amiga: imprensaFinal[0], inimiga: imprensaFinal[imprensaFinal.length - 1],
+      historico: jogo.historico.slice(-4).reverse(),
+    };
   }
 
   // ── ENCOMENDAS: o painel e a resposta do fornecedor ─────────────────

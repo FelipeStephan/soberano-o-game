@@ -11,6 +11,7 @@
 //      Se a IA estiver desligada/falhar, cai num fallback escrito à mão que continua
 //      afiado — o jogador jamais fica sem explicação.
 import { chamarIA } from '../maquina/openrouter.js';
+import { situacaoDoFim, obituarioLocal } from '../dados/copyFim.js';
 import { lacunasDeDestino, proximaBanda, bandaDe } from '../jogo/destino.js';
 import { resumoVigilia } from '../jogo/efeitos.js';
 
@@ -236,9 +237,20 @@ export async function obituarioDaQueda(jogo, fim, diag) {
   const manchetes = (jogo.feed || []).filter((p) => p.manchete || p.texto).slice(0, 8)
     .map((p) => `- ${String(p.manchete || p.texto).slice(0, 120)}`).join('\n');
 
+  // ── TRÊS PROMPTS, PORQUE SÃO TRÊS HISTÓRIAS ─────────────────────────
+  // BUG QUE ISTO CONSERTA (o dono colou o texto): "Franklin P. Vane governou os
+  // Estados Unidos por 120 MESES e saiu pela porta dos fundos". Cento e vinte meses é
+  // a década inteira — aquele governo não caiu, ele TERMINOU. Havia só dois prompts
+  // (venceu / não venceu), e tudo que não era império recebia o necrológio de deposto.
+  // Quem entregou o mandato no prazo levava um texto de derrubado.
+  //
+  // Agora o fim de era tem voz própria: nem triunfo, nem execução — balanço. É a mesma
+  // correção que `tomDoFim` fez no visual, aplicada ao texto.
   const system = vitoria
     ? 'Você é um colunista político veterano escrevendo o RETRATO FINAL de um governante que terminou o mandato no topo. Tom: irônico, elegante, com admiração relutante — elogio que ainda alfineta. 3 parágrafos curtos. Português do Brasil. Sem emoji, sem títulos, sem aspas na abertura. Devolva só o texto.'
-    : 'Você é um colunista político mordaz escrevendo o OBITUÁRIO POLÍTICO de um governante que acabou de cair. Tom: sarcástico e cruel na medida, com humor negro e frases curtas que doem — mas ancorado nos NÚMEROS que te derem. Nada de clichê motivacional. 3 parágrafos curtos. Português do Brasil. Sem emoji, sem títulos, sem aspas na abertura. Devolva só o texto.';
+    : fim?.tipo === 'legado'
+      ? 'Você é um colunista político veterano escrevendo o BALANÇO DE UMA DÉCADA de governo que chegou ao fim NO PRAZO — o governante NÃO foi deposto, NÃO caiu, NÃO fugiu: ele cumpriu o mandato inteiro e entregou o cargo. NUNCA use imagens de queda, fuga, porta dos fundos, deposição ou sucessor apressado. Tom: seco, adulto, sem bajulação e sem deboche — reconhece o que foi construído e cobra o que ficou pendente, sempre com os números que te derem. 3 parágrafos curtos. Português do Brasil. Sem emoji, sem títulos, sem aspas na abertura. Devolva só o texto.'
+      : 'Você é um colunista político mordaz escrevendo o OBITUÁRIO POLÍTICO de um governante que acabou de cair. Tom: sarcástico e cruel na medida, com humor negro e frases curtas que doem — mas ancorado nos NÚMEROS que te derem. Nada de clichê motivacional. 3 parágrafos curtos. Português do Brasil. Sem emoji, sem títulos, sem aspas na abertura. Devolva só o texto.';
 
   const user = `Governante: ${jogo.ficha?.presidente || 'O presidente'} — país: ${jogo.ficha?.pais}.
 Desfecho oficial: ${fim?.titulo} (${fim?.tipo}). Causa formal: ${diag.causaRot} (${diag.causaDica}).
@@ -258,19 +270,28 @@ Escreva o texto final sobre a queda/encerramento deste governo.`;
   } catch { return fallbackObituario(jogo, fim, diag); }
 }
 
-// Fallback afiado: sem IA o jogador AINDA recebe uma narrativa com personalidade.
+// ── O FALLBACK, AGORA VINDO DO BANCO ──────────────────────────────────
+// Sem IA (desligada, sem cota, fora do ar) o jogador AINDA recebe uma narrativa com
+// personalidade — e a última tela da partida não pode ser a que denuncia que a IA
+// caiu. Antes eram dois textos fixos escritos aqui; agora são três famílias × 3
+// aberturas × 3 meios × 3 fechos em `dados/copyFim.js`, sorteados por uma semente da
+// partida. Vinte e sete combinações por família, e nenhuma frase de queda alcançando
+// quem terminou o mandato.
 function fallbackObituario(jogo, fim, diag) {
-  const nome = jogo.ficha?.presidente || 'O presidente';
-  const pais = jogo.ficha?.pais || 'a nação';
-  const principal = diag.culpados[0];
-  if (fim?.tipo === 'vitoria') {
-    return `${nome} deixa o poder com o que todo governante jura buscar e quase nenhum alcança: ${pais} maior do que encontrou. ${diag.meses} meses, destino ${jogo.destino}/100.\n\n`
-      + `Os manuais dirão que foi visão estratégica. Os arquivos dirão que também foi sorte, e que ninguém checou a conta enquanto o gráfico subia.\n\n`
-      + `De qualquer forma, a História é escrita por quem fica de pé no fim — e desta vez, foi você.`;
-  }
-  return `${nome} governou ${pais} por ${diag.meses} meses e saiu pela porta dos fundos. Causa oficial: ${diag.causaDica || 'o próprio governo'}.\n\n`
-    + (principal
-      ? `O detalhe que ninguém no gabinete queria olhar: ${principal.k.toLowerCase()} em ${principal.v}. Foi assim — ${principal.txt} — enquanto os discursos ficavam cada vez mais longos.\n\n`
-      : `Não houve um desastre único. Houve a soma paciente de decisões medianas, que é como a maioria dos governos morre.\n\n`)
-    + `${diag.conquistas ? `Deixa ${diag.conquistas} território(s) ocupado(s) e uma fatura que outro vai pagar. ` : ''}A Máquina embaralha as cartas. O próximo já está a caminho, prometendo exatamente as mesmas coisas.`;
+  const e = jogo.estado || {};
+  const situacao = situacaoDoFim({
+    tipo: fim?.tipo, nivel: fim?.nivel, aprovacao: e.aprovacao, divida: e.divida,
+    estabilidade: e.estabilidade, guerras: (e.emGuerra || []).length,
+  });
+  return obituarioLocal(situacao, {
+    nome: jogo.ficha?.presidente || 'O presidente',
+    pais: jogo.ficha?.pais || 'a nação',
+    meses: diag.meses,
+    destino: jogo.destino,
+    causa: diag.causaDica || 'o próprio governo',
+    principal: diag.culpados?.[0] || null,
+    feito: diag.feitos?.[0] || null,
+    conquistas: diag.conquistas || 0,
+    semente: `${e.iso}|${jogo.ficha?.presidente}|${diag.meses}|${jogo.destino}`,
+  });
 }

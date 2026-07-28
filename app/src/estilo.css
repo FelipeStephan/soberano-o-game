@@ -920,44 +920,9 @@ button:disabled { opacity: .38; cursor: not-allowed; }
 .fa-nuke .ico { color: var(--perigo); }
 
 /* ── TELA FINAL (legado) ───────────────────────────────────── */
-.fim-fundo { background: rgba(2,3,6,.94); overflow-y: auto; padding: 20px; align-items: start; }
-.fim-fundo.v { background: radial-gradient(1000px 600px at 50% 0%, rgba(53,224,255,.14), rgba(2,3,6,.96)); }
-.fim-fundo.d { background: radial-gradient(1000px 600px at 50% 0%, rgba(255,59,92,.14), rgba(2,3,6,.96)); }
-.fim-card { position: relative; overflow: hidden; width: min(96%, 720px); margin: auto; padding: 34px 38px 30px;
-  border-radius: 14px; background: linear-gradient(180deg, #101c33, #080e1a); text-align: center; animation: epicoIn .6s cubic-bezier(.2,1.3,.4,1); }
-.fim-card.v { border: 2px solid var(--cyan); box-shadow: 0 0 80px rgba(53,224,255,.3); }
-.fim-card.d { border: 2px solid var(--perigo); box-shadow: 0 0 80px rgba(255,59,92,.3); }
-.fim-luz { position: absolute; top: -50%; left: -20%; width: 140%; height: 200%; pointer-events: none;
-  background: conic-gradient(from 0deg, transparent, rgba(255,255,255,.045), transparent 30%); animation: rodar 12s linear infinite; }
-.fim-card > * { position: relative; }
-.fim-selo { margin-bottom: 6px; }
-.fim-card.v .fim-selo { color: var(--ambar); filter: drop-shadow(0 0 18px rgba(255,204,60,.7)); }
-.fim-card.d .fim-selo { color: var(--perigo); filter: drop-shadow(0 0 18px rgba(255,59,92,.7)); }
-.fim-tag { font-family: var(--mono); font-size: 10px; letter-spacing: .26em; color: var(--fraco); }
-.fim-tit { font-family: var(--disp); font-size: clamp(30px, 5vw, 46px); margin: 8px 0 10px; line-height: 1; }
-.fim-card.v .fim-tit { color: var(--cyan); text-shadow: 0 0 30px rgba(53,224,255,.5); }
-.fim-card.d .fim-tit { color: var(--perigo); text-shadow: 0 0 30px rgba(255,59,92,.5); }
-.fim-txt { font-size: 15px; line-height: 1.6; color: #cfdbf5; max-width: 560px; margin: 0 auto 18px; }
-.fim-legado { display: inline-flex; align-items: center; gap: 8px; font-family: var(--disp); font-size: 16px; font-weight: 600;
-  border: 1px dashed var(--borda); border-radius: 30px; padding: 9px 20px; margin-bottom: 22px; color: var(--ambar); }
-.fim-sec { display: flex; align-items: center; gap: 6px; justify-content: center; font-family: var(--mono); font-size: 10px;
-  letter-spacing: .18em; color: var(--cyan); margin: 18px 0 10px; }
-.fim-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.fim-pill { background: #0a1626; border: 1px solid var(--borda); border-radius: 9px; padding: 9px 6px; }
-.fim-pill span { display: block; font-family: var(--mono); font-size: 8px; color: var(--fraco); text-transform: uppercase; letter-spacing: .05em; }
-.fim-pill b { font-family: var(--mono); font-size: 16px; }
-.fim-imprensa { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.fim-jor { background: #0a1626; border: 1px solid var(--borda); border-radius: 9px; padding: 10px; }
-.fim-jor b { display: block; font-family: var(--disp); font-size: 15px; }
-.fim-jor span { font-size: 11px; color: var(--fraco); }
-.fim-hist { display: grid; gap: 5px; text-align: left; }
-.fim-h { display: grid; grid-template-columns: 60px 1fr 1fr; gap: 8px; align-items: center; background: rgba(255,255,255,.02);
-  border-left: 2px solid var(--borda); padding: 7px 10px; border-radius: 0 6px 6px 0; }
 .fh-t { font-family: var(--mono); font-size: 9px; color: var(--fraco); }
 .fh-c { font-size: 12px; font-weight: 600; }
 .fh-e { font-size: 11px; color: var(--fraco); font-style: italic; }
-.fim-btn { display: inline-flex; align-items: center; gap: 8px; margin-top: 24px; padding: 14px 34px; font-size: 15px;
-  letter-spacing: .1em; background: linear-gradient(120deg, var(--cyan), #1f9dff); border: none; color: #04121f; font-weight: 700; }
 @media (max-width: 700px) { .fim-grid { grid-template-columns: repeat(2, 1fr); } .fim-imprensa { grid-template-columns: 1fr; } }
 
 /* o tesouro sob congelamento do Conselho: o número continua lá, e é exatamente isso
@@ -998,10 +963,6 @@ button:disabled { opacity: .38; cursor: not-allowed; }
    Duas saídas na tela de fim, e a hierarquia diz qual é a boa: assumir outra nação
    é a primária (a sala continua e você continua nela); "sair da sala" é o secundário,
    apagado, porque é o caminho que fecha a porta atrás de você. */
-.fim-acoes { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.fim-btn.sec { background: transparent; box-shadow: inset 0 0 0 1px var(--borda); color: var(--fraco); font-weight: 600; padding: 14px 24px; font-size: 13px; }
-.fim-btn.sec:hover { box-shadow: inset 0 0 0 1px var(--cyan); color: var(--cyan); }
-.fim-btn.fim-renascer { background: linear-gradient(120deg, var(--verde), #12a173); color: #01120c; }
 
 .rnc-painel { background: var(--painel-solido); width: min(96%, 720px); max-height: 90vh; overflow-y: auto;
   box-shadow: var(--sombra), 0 0 70px -20px var(--verde);
@@ -5799,24 +5760,6 @@ button[data-tip], .tip-q { cursor: pointer; }
 .fah-dom:not(.hostil) { background: rgba(255,176,32,.18); color: var(--ambar); }
 
 /* ═══ QUEDA: causa + obituário político ═══ */
-.fim-causa { margin: 12px 0 6px; padding: 11px 13px; background: rgba(255,59,92,.07);
-  box-shadow: inset 2px 0 0 var(--perigo);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%); }
-.fim-causa-rot { display: flex; align-items: center; gap: 7px; font-family: var(--mono);
-  font-size: 10px; letter-spacing: .14em; color: var(--perigo); margin-bottom: 9px; }
-.fim-culpados { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 7px; }
-.fim-culpado { display: flex; flex-direction: column; gap: 1px; padding: 7px 9px; background: rgba(5,7,13,.45); }
-.fim-culpado i { font-style: normal; font-family: var(--mono); font-size: 8px; letter-spacing: .12em; color: var(--fraco); }
-.fim-culpado b { font-family: var(--mono); font-size: 14px; color: var(--perigo); }
-.fim-culpado small { font-size: 10px; color: var(--fraco); }
-.fim-culpados-vazio { font-size: 11.5px; color: var(--fraco); }
-.fim-obito { padding: 4px 2px 8px; }
-.fim-obito p { font-size: 13.5px; line-height: 1.62; color: var(--texto); margin: 0 0 10px; }
-.fim-obito p:first-child::first-letter { font-family: var(--disp); font-size: 30px; font-weight: 700;
-  color: var(--ambar); float: left; line-height: .92; margin: 2px 7px 0 0; }
-.fim-obito-load { display: flex; align-items: center; gap: 7px; font-family: var(--mono);
-  font-size: 10px; letter-spacing: .1em; color: var(--fraco); font-style: normal; }
-.fim-obito-load .ico { animation: girar 1.1s linear infinite; }
 
 /* ═══ FAKE NEWS (@Choquei) ═══ */
 .fkn-painel { width: min(94%, 560px); background: var(--painel-solido); box-shadow: inset 0 0 0 1px var(--borda), var(--sombra);
@@ -5897,13 +5840,9 @@ button[data-tip], .tip-q { cursor: pointer; }
 .mundo-vivo[data-nivel="beira"] { box-shadow: inset 2px 0 0 var(--perigo), 0 0 26px -12px var(--perigo); }
 .mundo-vivo[data-nivel="beira"] .mv-clima b { color: var(--perigo); animation: piscar 1.4s steps(2) infinite; }
 
-/* ── A TELA DE FIM, agora com três desfechos ──────────────────────────────
-   O 'legado' (fim da era) não é derrota: ganhou cor própria e perdeu a caveira. */
-.fim-fundo.l .fim-card, .fim-card.l { box-shadow: var(--sombra), 0 0 90px -30px var(--acento, var(--cyan)); }
-.fim-card.l .fim-selo { color: var(--acento, var(--cyan)); }
-.fim-explica { font-size: 12.5px; line-height: 1.65; color: #c8d6ef; margin: 8px 0 2px; }
-.fim-feitos-rot { display: flex; align-items: center; gap: 6px; margin: 12px 0 6px; font-family: var(--mono);
-  font-size: 8.5px; letter-spacing: .12em; color: var(--verde); text-transform: uppercase; }
-.fim-feitos-rot.ruim { color: var(--perigo); }
-.fim-culpado.bom { box-shadow: inset 2px 0 0 var(--verde); }
-.fim-culpado.bom b { color: var(--verde); }
+/* ── A TELA DE FIM SAIU DAQUI ─────────────────────────────────────────────
+   O cartão único e rolável (.fim-*) virou um carrossel de sete etapas — o pedido
+   foi literal: "um monte de informação numa tela só, pra dar rolagem... então por
+   etapa, eu vou passando próximo". Estilo em estilo-fimera.css, tela em
+   ui/fimDaEra.js. As ~50 regras que moravam aqui foram apagadas, não comentadas:
+   CSS morto que ninguém remove é o que faz uma folha passar de cinco mil linhas. */
