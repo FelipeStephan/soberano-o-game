@@ -103,6 +103,147 @@ const NOMES_EXTRA = {
 };
 const nomeDe = (iso) => PAISES[iso]?.nome || NOMES_EXTRA[iso] || iso;
 
+// ═══════════════════════════════════════════════════════════════════════
+// O CLIMA GLOBAL — a paz precisa ser um lugar aonde dá pra CHEGAR
+// ═══════════════════════════════════════════════════════════════════════
+// O diagnóstico que motivou tudo isto: `temp_guerra` era uma catraca. Vinte e poucos
+// pontos do código SOMAM tensão (invasão +32, ogiva +5, prontidão +8, doutrina +6…) e
+// só um punhado SUBTRAI — todos presos a ações raras. Não existia decaimento nenhum.
+// Resultado: o número só subia, e como ele realimenta o apetite dos agressores
+// (`culpaDoJogador` → porClima) e o nascimento de guerras NPC aqui embaixo, o mundo
+// entrava numa espiral da qual não havia saída. O jogador sentia "sempre uma guerra"
+// porque era literalmente verdade: a matemática não tinha marcha à ré.
+//
+// A partir daqui o clima é um SISTEMA com os dois sentidos:
+//   sobe  — por ato do jogador (atacar, armar, ameaçar) e por guerra alheia;
+//   desce — sozinho, quando ninguém joga lenha, e de repente quando alguém faz as pazes.
+// E o mais importante: chegar a zero é um MARCO que o jogo reconhece e credita.
+
+// ── O PISO ────────────────────────────────────────────────────────────
+// O mundo não pode marcar "paz total" enquanto a Ucrânia queima. Cada guerra NPC ativa
+// segura um piso de tensão proporcional à intensidade dela. Isto não é obstáculo: é o
+// que transforma "mediar o conflito dos outros" numa alavanca REAL — a única forma de
+// derrubar o piso é apagar as guerras alheias, exatamente o que o dono pediu com
+// "tensão global ficar zero baseado em ações".
+export function pisoDeTensao(estado) {
+  const cs = estado.conflitosNPC || [];
+  let p = 0;
+  for (const c of cs) p += ((c.intensidade || 0) / 100) * 4;   // guerra a 82 de intensidade ≈ 3,3 de piso
+  return Math.min(18, Math.round(p * 10) / 10);                // teto: nem 5 guerras travam o clima em "fervendo"
+}
+
+// ── ESFRIAR ───────────────────────────────────────────────────────────
+// A porta de entrada única pra QUALQUER coisa que reduza a tensão: mediar, ajudar,
+// cessar-fogo, sair da guerra, curar pandemia, tratado. Passa por aqui porque além de
+// baixar o número ela REGISTRA a autoria — é isso que alimenta `quemReduziuConflito`
+// e permite o jogo dizer "fulano reduziu o conflito", em vez de o número cair no escuro.
+// `porMim=false` para o mundo esfriando sozinho (fim de guerra NPC): não é mérito seu.
+export function esfriarMundo(estado, pontos, motivo, porMim = true) {
+  const antes = Number(estado.temp_guerra || 0);
+  const queda = Math.max(0, Number(pontos) || 0);
+  if (!queda) return { antes, depois: antes, queda: 0 };
+  estado.temp_guerra = clamp(antes - queda, 0, 100);
+  const real = Math.round((antes - estado.temp_guerra) * 10) / 10;
+  if (porMim && real > 0) {
+    estado.creditosDePaz = estado.creditosDePaz || [];
+    estado.creditosDePaz.push({ turno: estado.turno || 0, pontos: real, motivo: motivo || 'gesto diplomático' });
+    if (estado.creditosDePaz.length > 40) estado.creditosDePaz.shift();  // memória curta: só o que a UI ainda publica
+  }
+  return { antes, depois: estado.temp_guerra, queda: real };
+}
+
+// ── DECAIMENTO NATURAL ────────────────────────────────────────────────
+// O mundo esfria sozinho quando ninguém joga lenha. Roda uma vez por batida dentro do
+// tick — o dono não precisa plugar nada.
+// A calibragem: uma partida limpa começa em temp 30 (EUA) e o passo cresce com a
+// calmaria (0,40/turno no começo → 1,20/turno depois de 12 meses quietos). São ~30
+// batidas até o piso, ou seja ~2,5 anos de jogo — "um punhado de anos", não uma década.
+// Não decai enquanto você está em guerra ou acabou de atacar: o mundo não esquece
+// enquanto o tiro ainda ecoa, e sem essa trava o jogador esfriaria a tensão fazendo nada
+// no meio da própria ofensiva.
+function decairTensao(estado) {
+  const temp = Number(estado.temp_guerra || 0);
+  const turno = estado.turno || 0;
+  const emGuerra = ((estado.emGuerra || []).length) > 0;
+  const atacouAgora = (estado.minhasOfensivas || []).some((o) => turno - (o.turno || 0) <= 1);
+  if (emGuerra || atacouAgora) return null;
+  const piso = pisoDeTensao(estado);
+  if (temp <= piso) return null;
+  const calmo = Math.min(1, (estado.turnosDeCalmaria ?? 0) / 12);
+  const passo = 0.40 + 0.80 * calmo;
+  const alvo = Math.max(piso, temp - passo);
+  estado.temp_guerra = Math.round(alvo * 10) / 10;
+  return { de: temp, para: estado.temp_guerra, piso };
+}
+
+// ── LEITURA DO CLIMA (o que a UI mostra permanentemente) ──────────────
+// Puro: não muda nada. Devolve o nível, o número, o piso e POR QUE o piso existe —
+// a UI precisa poder dizer "não dá pra esfriar mais enquanto Rússia×Ucrânia arde",
+// senão o jogador fica olhando uma barra travada sem entender o motivo.
+export function climaGlobal(estado) {
+  const temp = Math.round(Number(estado.temp_guerra || 0) * 10) / 10;
+  const guerras = (estado.emGuerra || []).filter(Boolean);
+  const conflitos = estado.conflitosNPC || [];
+  const piso = pisoDeTensao(estado);
+  const hist = estado._climaHist || [];
+  const deltaRecente = hist.length >= 2 ? Math.round((hist[hist.length - 1] - hist[0]) * 10) / 10 : 0;
+
+  // Guerra ABERTA sua impede qualquer leitura melhor que "tenso", por mais frio que o
+  // termômetro esteja: seu país está trocando tiro. Rótulo bonito com sangue no chão
+  // seria mentira — e mentira que o jogador flagra na hora.
+  let nivel;
+  if (guerras.length) nivel = temp >= 75 ? 'beira' : temp >= 50 ? 'fervendo' : 'tenso';
+  else if (temp <= 5) nivel = 'paz';
+  else if (temp <= 25) nivel = 'calmo';
+  else if (temp <= 50) nivel = 'tenso';
+  else if (temp <= 75) nivel = 'fervendo';
+  else nivel = 'beira';
+
+  const seta = deltaRecente <= -1 ? 'caindo' : deltaRecente >= 1 ? 'subindo' : 'estável';
+  const maisQuente = [...conflitos].sort((a, b) => (b.intensidade || 0) - (a.intensidade || 0))[0];
+  const motivo = guerras.length
+    ? `Você tem ${guerras.length} guerra${guerras.length > 1 ? 's' : ''} aberta${guerras.length > 1 ? 's' : ''}.`
+    : temp <= piso && piso > 0 && maisQuente
+      ? `O clima não desce de ${piso} enquanto ${nomeDe(maisQuente.a)} e ${nomeDe(maisQuente.b)} estiverem em guerra.`
+      : conflitos.length
+        ? `${conflitos.length} guerra${conflitos.length > 1 ? 's' : ''} em curso no mundo, nenhuma sua.`
+        : 'Nenhuma guerra em curso no planeta.';
+
+  const TEXTO = {
+    paz: 'PAZ MUNDIAL. Nenhum tiro trocado em lugar nenhum, e a sua parte nisso está registrada. Obrigado — poucos chegam aqui.',
+    calmo: 'Mundo calmo. As chancelarias trabalham, os generais esperam. Dá pra governar pensando em outra coisa.',
+    tenso: 'Mundo tenso. Nada pegou fogo ainda, mas todo mundo dorme com a bota do lado da cama.',
+    fervendo: 'Mundo fervendo. Qualquer incidente de fronteira agora vira manchete de guerra.',
+    beira: 'ALERTA MÁXIMO: o mundo está na beira. Nesta temperatura uma faísca basta — e a faísca costuma ser sua.',
+  };
+
+  return {
+    nivel, temp, piso, deltaRecente, seta, motivo,
+    guerras: guerras.length, guerrasNPC: conflitos.length,
+    listaGuerras: guerras,
+    texto: TEXTO[nivel],
+  };
+}
+
+// ── QUEM ESFRIOU O MUNDO ──────────────────────────────────────────────
+// Pro X e pro plantão: "fulano reduziu o conflito". Lê o livro-caixa que `esfriarMundo`
+// escreve. Janela de 12 batidas — crédito de um ano; mais que isso é história, não notícia.
+// Devolve null quando não há nada a comemorar (a UI simplesmente não publica).
+export function quemReduziuConflito(estado, janela = 12) {
+  const turno = estado.turno || 0;
+  const cr = (estado.creditosDePaz || []).filter((c) => turno - (c.turno || 0) <= janela);
+  if (!cr.length) return null;
+  const pontos = Math.round(cr.reduce((a, c) => a + (c.pontos || 0), 0) * 10) / 10;
+  if (pontos < 1) return null;
+  const nome = nomeDe(estado.iso || 'USA');
+  const feitos = [...new Set(cr.map((c) => c.motivo).filter(Boolean))];
+  const clima = climaGlobal(estado);
+  const texto = clima.nivel === 'paz'
+    ? `${nome} derrubou a tensão global a zero. ${feitos.slice(0, 3).join(', ')} — e o mundo amanheceu sem uma guerra sequer. Vai demorar pra alguém repetir isso.`
+    : `${nome} reduziu o conflito global em ${pontos} pontos no último ano (${feitos.slice(0, 3).join(', ')}). O termômetro do mundo desceu porque alguém trabalhou pra isso.`;
+  return { nome, iso: estado.iso || 'USA', pontos, feitos, ocorrencias: cr.length, nivel: clima.nivel, texto };
+}
+
 // ── SEMENTE ───────────────────────────────────────────────────────────
 // O mundo já começa em movimento: a guerra Rússia–Ucrânia está acontecendo em 2026,
 // não esperando o jogador dar o primeiro clique.
@@ -133,10 +274,22 @@ export function tickMundoVivo(estado) {
   const eu = estado.iso || 'USA';
   const eventos = [];
 
+  // 0) O MUNDO ESFRIA SOZINHO. Primeira coisa da batida, de propósito: tudo o que vem
+  //    depois (nascimento de guerra, escalada) lê `temp_guerra` já atualizada, então o
+  //    alívio vale JÁ neste turno em vez de só no próximo.
+  decairTensao(estado);
+  estado._climaHist = [...(estado._climaHist || []), Number(estado.temp_guerra || 0)].slice(-8);
+
   // 1) CONFLITOS ATIVOS evoluem: escalam, sangram ou terminam
+  //    O `quente` entra na deriva da intensidade: num mundo frio as guerras MINGUAM
+  //    (deriva média ≈ −4/turno), num mundo fervendo elas se alimentam (≈ +2/turno).
+  //    Sem isso a deriva era +2 sempre e nenhuma guerra NPC morria de exaustão — só de
+  //    sorteio. Agora a paz é auto-reforçante, que é o comportamento que o dono quer ver.
+  const climaAgora = (estado.temp_guerra || 30) / 100;
   for (const c of [...estado.conflitosNPC]) {
     c.turnos += 1;
-    c.intensidade = clamp(c.intensidade + (rand() * 24 - 10), 5, 100);
+    const exaustao = (1 - climaAgora) * 6;
+    c.intensidade = clamp(c.intensidade + (rand() * 24 - 10) - exaustao, 5, 100);
 
     if (c.intensidade < 14 || (c.turnos > 5 && chance(0.3))) {
       estado.conflitosNPC = estado.conflitosNPC.filter((x) => x.id !== c.id);

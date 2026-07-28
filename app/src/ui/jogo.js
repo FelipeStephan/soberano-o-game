@@ -37,7 +37,13 @@ import { dispararBreaking } from './breaking.js';
 import { abrirPontosQuentes, fecharPontosQuentes } from './pontosQuentes.js';
 import { abrirIndiceMundial } from './indiceMundial.js';
 import { statsVivos } from '../jogo/indiceMundial.js';
-import { diagnosticoQueda, obituarioDaQueda } from './relatorioQueda.js';
+import { diagnosticoQueda, obituarioDaQueda, textosDaQueda } from './relatorioQueda.js';
+import { tomDoFim } from '../jogo/destino.js';
+import { climaGlobal, quemReduziuConflito } from '../jogo/mundoVivo.js';
+import { postsParaEvento } from '../dados/vozesX.js';
+import { registrarFeito, fechouAno, placarDoAno, titulosDoAno, limparAno, jaFechou, anoDoTurno, recompensaDoTitulo, mancheteDoTitulo, rotuloAno } from '../jogo/feitos.js';
+import { abrirRelatorioAno } from './relatorioAno.js';
+import { aplicarEfeitos } from '../jogo/efeitos.js';
 import { abrirFakeNews } from './fakeNews.js';
 import { abrirBlocosVisor } from './blocos.js';
 import { montarChatBloco } from './blocoChat.js';
@@ -142,6 +148,12 @@ export function iniciarJogo(container, jogo, opts = {}) {
         <div class="stat" ${tipAttr('Para onde o seu governo está indo, somando tudo o que você fez até aqui. É a sentença que a História vai escrever se você continuar neste caminho.', { t: 'Destino', k: 'TRAJETÓRIA DO REINADO' })}><span class="rot">Destino${q('Para onde o seu governo está indo, somando tudo o que você fez até aqui. É a sentença que a História vai escrever se você continuar neste caminho.', { t: 'Destino', k: 'TRAJETÓRIA DO REINADO' })}</span><span class="val" id="t-destino">–</span></div>
         <button class="stat stat-btn brent-stat" id="t-brent-stat"><span class="rot">${ico('fuel', 11)} Brent</span><span class="val"><span id="t-brent">–</span> <span class="brent-mov" id="t-brent-mov"></span> <span class="stat-seta">${ico('chevron-down', 13)}</span></span></button>
         <button class="stat stat-btn crises-btn" id="t-focos-stat"><span class="rot">${ico('flame', 11)} Crises</span><span class="val"><span id="t-focos">–</span> <span class="stat-seta">${ico('chevron-down', 13)}</span></span></button>
+        ${/* O TERMÔMETRO DO MUNDO, permanente. O dono pediu as duas pontas: "seria legal
+             ter um aviso na tela quando não tiver conflito, tipo um agradecimento, e um
+             quando tiver muito conflito, de aviso". Ficou no topo e não como popup porque
+             clima não é evento, é ESTADO — e um estado que muda devagar precisa de um
+             lugar fixo pra onde o jogador possa olhar de novo. */''}
+        <div class="clima-visor" id="t-clima" data-nivel=""><span class="cl-ic"></span><span class="cl-txt"></span></div>
         <span class="espaco"></span>
         <div class="topo-acoes">
           <button class="ta-btn conselho" id="btn-conselho" ${tipAttr('Seu gabinete lê o cenário inteiro — economia, guerra, opinião pública — e diz o que faria no seu lugar, com o motivo de cada sugestão. Conselho de quem só enxerga os números; a decisão continua sendo sua.', { t: 'Conselheiro', k: 'GABINETE', cor: 'roxo' })}>${ico('brain', 15)}<span>CONSELHEIRO</span></button>
@@ -265,7 +277,12 @@ export function iniciarJogo(container, jogo, opts = {}) {
     });
     // Canal de saída pra qualquer módulo (naval, nuclear, envio, frota) ecoar a ação
     // na sala sem depender do onlineCtrl no escopo: jogo._relayOnline(tipo, alvo, texto, dados).
-    jogo._relayOnline = (tipo, alvo, texto, dados) => onlineCtrl?.notificar(tipo, alvo, texto, dados);
+    // NADA SAI EM NOME DE UM GOVERNO QUE CAIU. Sem este gate, um espectador ainda
+    // publicava ataques, stats e anexações na sala — fantasma agindo no mundo dos vivos.
+    jogo._relayOnline = (tipo, alvo, texto, dados) => {
+      if (jogo.espectador) return;
+      onlineCtrl?.notificar(tipo, alvo, texto, dados);
+    };
     jogo._relayFrota = (dados) => onlineCtrl?.relayFrota(dados);
     jogo._ehHumanoOnline = (iso) => !!onlineCtrl?.ehHumano(iso);   // a mesa de alianças pergunta isto
     jogo._souHostOnline = () => !!onlineCtrl?.souHost();            // breaking automático: só o host escreve
@@ -311,7 +328,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // ÍNDICE MUNDIAL: o ranking global — pode abrir a qualquer hora (é só leitura).
   container.querySelector('#btn-indice')?.addEventListener('click', () => abrirIndiceMundial(jogo));
   // CONSELHO: com mesa aberta entra na sessão; sem mesa, abre a convocação.
-  container.querySelector('#btn-onu')?.addEventListener('click', () => onuCtrl?.abrir());
+  container.querySelector('#btn-onu')?.addEventListener('click', () => {
+    // um governo caído não senta na mesa do Conselho — nem como presidente, nem como voto
+    if (jogo.espectador) { toastFila('Seu governo caiu. Assuma outra nação para voltar à mesa.'); return; }
+    onuCtrl?.abrir();
+  });
   container.querySelector('#btn-blocos')?.addEventListener('click', () => abrirBlocosVisor(jogo, {
     onChat: chatBloco ? (bloco) => chatBloco.abrir(bloco) : null,
     ehHumano: (isoAlvo) => !!onlineCtrl?.ehHumano(isoAlvo),
@@ -561,6 +582,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // #9 — CAIXA CONGELADO PELO CONSELHO. A pena não some com o dinheiro: ela tira o
     // acesso. Sem marca no topo, o jogador olharia pro tesouro cheio e concluiria que
     // o jogo travou toda vez que uma ordem fosse recusada. O número fica lá, riscado.
+    pintarClima();
     const gelo = caixaCongelado(jogo.estado);
     el.tesouro.classList.toggle('congelado', gelo.bloqueado);
     if (gelo.bloqueado) el.tesouro.title = `Caixa congelado pelo Conselho de Segurança — ${gelo.restante} mês(es) restantes.`;
@@ -1100,6 +1122,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     avisarMobilizacoes();                   // a inteligência detectou um ataque se montando?
     avisarOperacoesDetectadas();            // o ALVO detectou a MINHA ofensiva se montando?
     onuCtrl?.aplicarPenasNoBeat();          // #9 — as penas do Conselho sangram e expiram
+    checarViradaDeAno();                    // fechou 12 meses? entrega os títulos do ano
     const sino = container.querySelector('#btn-onu');
     if (sino) sino.classList.toggle('convocado', !!onuCtrl?.temReuniaoAtiva());
     if (res.desbloqueios?.length) popupDesbloqueio(res.desbloqueios, () => {});
@@ -1158,6 +1181,10 @@ export function iniciarJogo(container, jogo, opts = {}) {
             impacto: true, surpresa: !o.detectado,
           });
       }
+      // O ATO: a ofensiva entra no prontuário e a internet reage — com o peso do que
+      // você já fez antes. Quem tem cinco guerras nas costas não recebe o mesmo post
+      // de quem está atacando pela primeira vez.
+      registrarAto('declarar_guerra', { alvo: o.alvoIso, alvoNome: o.alvoNome, magnitude: 0.8 });
       const m = multiplicadoresOfensiva(o);
       const res = resolverGuerra(jogo.estado, feature, o.deploy, {
         multPoder: o.multPoder, custo: o.custo, origem: o.origem, prioridade: o.prioridade,
@@ -1165,6 +1192,8 @@ export function iniciarJogo(container, jogo, opts = {}) {
       });
       if (res.falha) { proxima(); return; }
       jogo.aplicarGuerra(feature, res);
+      const tomados = res.campanha?.caem?.length || 0;
+      if (tomados) registrarAto('tomar_territorio', { valor: tomados, alvo: o.alvoIso, alvoNome: o.alvoNome, magnitude: Math.min(1, 0.4 + tomados / 12) });
       // MUNDO ÚNICO: o desfecho da ofensiva viaja pra sala — os territórios tomados
       // mudam de dono no mapa de TODOS, e o atacado vê o próprio país marcado.
       if (jogo.ehOnline) {
@@ -1615,6 +1644,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
       const r = sairDaGuerra(jogo.estado, code);
       fechar();
       jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚙ Chancelaria', cor: '#ffb020', texto: r.manchete }]);
+      // ENCERRAR UMA GUERRA É UM FEITO, e o jogo nunca tratou como tal. Entra no livro
+      // do ano e a internet reage — inclusive quem passou o ano inteiro te xingando.
+      registrarAto('cessar_fogo', { alvo: code, alvoNome: nome, magnitude: 0.7 });
       // ONLINE: a retirada não pode ser um segredo do meu cliente. O outro lado
       // precisa saber que as minhas tropas pararam — e decidir se para também.
       if (jogo.ehOnline) {
@@ -2181,32 +2213,52 @@ export function iniciarJogo(container, jogo, opts = {}) {
     const imprensaFinal = jogo.imprensa().sort((a, b) => b.valor - a.valor);
     const amiga = imprensaFinal[0]; const inimiga = imprensaFinal[imprensaFinal.length - 1];
 
-    const legado = venceu
+    // O rótulo de legado também parava de fazer sentido no fim de era: quem governou
+    // uma década inteira e terminou como Grande Potência não é "esquecido, nem herói
+    // nem vilão" — é alguém que entregou o mandato. Cada desfecho tem a sua frase.
+    const legado = fim.tipo === 'vitoria'
       ? (e.territorio > 1 ? 'Conquistador. Redesenhou o mapa e obrigou o mundo a decorar seu nome.' : 'Estadista. Atravessou a tempestade sem afundar o barco — e poucos conseguem isso.')
-      : (e.aprovacao <= 5 ? 'Deposto. O povo que te aplaudiu foi o mesmo que te arrancou da cadeira.'
-        : e.divida >= 200 ? 'Quebrado. Você tinha o maior PIB do planeta e ainda assim deixou a conta na mesa.'
-        : 'Esquecido. Nem herói, nem vilão — só mais um nome numa lista longa.');
+      : fim.tipo === 'legado'
+        ? (e.territorio > 1 ? `Expansionista. Entregou o mandato com ${e.territorio} territórios sob a bandeira — e a década leva o seu nome.`
+          : (e.emGuerra || []).length === 0 && Math.round(e.temp_guerra || 0) <= 30
+            ? 'Pacificador. Governou uma década sem incendiar o mundo. Raro, e mais difícil do que parece.'
+            : 'Mandatário. Chegou ao fim do mandato de pé, com o país inteiro — o que a maioria não consegue.')
+        : (e.aprovacao <= 5 ? 'Deposto. O povo que te aplaudiu foi o mesmo que te arrancou da cadeira.'
+          : e.divida >= 200 ? 'Quebrado. Você tinha o maior PIB do planeta e ainda assim deixou a conta na mesa.'
+          : 'Derrubado. A conta chegou antes do fim do mandato.');
 
     const pill = (rot, val, cor) => `<div class="fim-pill"><span>${rot}</span><b style="color:${cor || 'var(--texto)'}">${val}</b></div>`;
 
+    // ── O TOM VEM DO MOTOR, NÃO DE UM `if` AQUI ──────────────────────
+    // Era `venceu ? crown : skull`, e QUALQUER desfecho que não fosse vitória caía na
+    // caveira — inclusive fechar uma década como Superpotência. Foi exatamente isso que
+    // o dono viu: fez tudo certo, chegou ao fim da era e o jogo o tratou como deposto.
+    // Agora existe um terceiro desfecho ('legado') e quem decide cor, ícone e etiqueta
+    // é `tomDoFim`, num lugar só (jogo/destino.js).
+    const tom = tomDoFim(fim);
     container.insertAdjacentHTML('beforeend', `
-      <div class="modal-fundo fim-fundo ${venceu ? 'v' : 'd'}">
-        <div class="fim-card ${venceu ? 'v' : 'd'}">
+      <div class="modal-fundo fim-fundo ${tom.classe}">
+        <div class="fim-card ${tom.classe}" style="--acento:${tom.acento}">
           <div class="fim-luz"></div>
-          <div class="fim-selo">${ico(venceu ? 'crown' : 'skull', 46)}</div>
-          <div class="fim-tag">${venceu ? 'FIM DO REINADO · LEGADO GARANTIDO' : 'FIM DO REINADO · A HISTÓRIA SEGUIU SEM VOCÊ'}</div>
+          <div class="fim-selo">${ico(tom.icone, 46)}</div>
+          <div class="fim-tag">${esc(tom.tag)}</div>
           <h1 class="fim-tit">${esc(fim.titulo)}</h1>
           <p class="fim-txt">${esc(fim.texto)}</p>
 
           <div class="fim-legado">${ico('gavel', 15)} <span>${esc(legado)}</span></div>
 
-          <!-- POR QUE VOCÊ CAIU: causa formal + os números que cavaram a cova. Sempre
-               existe (não depende da IA). O obituário narrado chega logo abaixo. -->
+          <!-- O BALANÇO. Nunca mais "nenhum indicador explica": quando não houve culpado,
+               a explicação vira aritmética honesta — quantos pontos de Destino faltaram e
+               em quais alavancas eles estavam. O obituário narrado chega logo abaixo. -->
           <div class="fim-causa">
             <div class="fim-causa-rot">${ico('search', 13)} ${esc(diag.causaRot)}</div>
-            ${diag.culpados.length ? `<div class="fim-culpados">${diag.culpados.map((c) => `
-              <span class="fim-culpado"><i>${esc(c.k)}</i><b>${esc(c.v)}</b><small>${esc(c.txt)}</small></span>`).join('')}</div>`
-    : '<div class="fim-culpados-vazio">Nenhum indicador isolado explica: foi o conjunto da obra.</div>'}
+            <div class="fim-explica">${esc(diag.explicacao || '')}</div>
+            ${diag.feitos?.length ? `<div class="fim-feitos-rot">${ico('award', 11)} O QUE VOCÊ CONSTRUIU</div>
+            <div class="fim-culpados bons">${diag.feitos.slice(0, 5).map((c) => `
+              <span class="fim-culpado bom"><i>${esc(c.k)}</i><b>${esc(c.v)}</b><small>${esc(c.txt || '')}</small></span>`).join('')}</div>` : ''}
+            ${diag.culpados.length ? `<div class="fim-feitos-rot ruim">${ico('trending-down', 11)} O QUE PESOU CONTRA</div>
+            <div class="fim-culpados">${diag.culpados.map((c) => `
+              <span class="fim-culpado"><i>${esc(c.k)}</i><b>${esc(c.v)}</b><small>${esc(c.txt)}</small></span>`).join('')}</div>` : ''}
           </div>
 
           <div class="fim-sec">${ico('feather', 13)} O OBITUÁRIO POLÍTICO</div>
@@ -2257,10 +2309,25 @@ export function iniciarJogo(container, jogo, opts = {}) {
       container.querySelector('.fim-fundo')?.remove();
       entrarEmEspectador();
     });
+    // ── A QUEDA VIRA NOTÍCIA, COM O MOTIVO ───────────────────────────
+    // O pedido do dono: "quando um presidente é deposto, eu quero essa notificação
+    // tanto no breaking news quanto na página do X, com o motivo apontando para o que
+    // ele deixou passar". Governo não cai em silêncio — cai no jornal. `textosDaQueda`
+    // escreve as duas vozes a partir do MESMO diagnóstico, pra o plantão e o X não
+    // contarem versões diferentes do mesmo governo.
+    const tq = textosDaQueda(jogo, fim, diag);
+    dispararBreaking(jogo, {
+      assunto: tq.manchete,
+      contexto: `${fim.titulo}. ${tq.motivoCurto}. ${diag.explicacao || ''}`,
+      tom: fim.tipo === 'legado' ? 'frio' : 'quente',
+      iso: jogo.estado.iso,
+    });
+    jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Fim de governo', cor: fim.tipo === 'legado' ? '#35e0ff' : '#ff3b5c', texto: tq.postX }]);
+    renderFeed();
     if (jogo.ehOnline) {
       onlineCtrl?.notificar('queda', null,
-        `${jogo.ficha.presidente || jogo.ficha.pais} CAIU: ${fim.titulo}. A Máquina assumiu o comando de ${jogo.ficha.pais}.`,
-        { iso: jogo.estado.iso || 'USA', nome: jogo.ficha.pais, motivo: fim.titulo });
+        `${jogo.ficha.presidente || jogo.ficha.pais} — ${tq.manchete}`,
+        { iso: jogo.estado.iso || 'USA', nome: jogo.ficha.pais, motivo: tq.motivoCurto, tipo: fim.tipo, postX: tq.postX });
     }
 
     // O OBITUÁRIO chega depois (a IA escreve enquanto o jogador lê os números). Se a
@@ -2272,14 +2339,167 @@ export function iniciarJogo(container, jogo, opts = {}) {
     }).catch(() => {});
   }
 
+  // ── A VIRADA DE ANO ─────────────────────────────────────────────────
+  // Doze batidas fecham um ano. Aqui o placar é apurado, os títulos são entregues, a
+  // recompensa é aplicada e a retrospectiva sobe na tela. `jaFechou` é a trava que
+  // impede o relatório de abrir duas vezes: no online, a batida do host e a batida
+  // local do convidado podem cair no mesmo mês, e um relatório em dobro seria pior
+  // que nenhum.
+  function checarViradaDeAno() {
+    if (!fechouAno(jogo.turno)) return;
+    const ano = anoDoTurno(jogo.turno);
+    if (jaFechou(jogo.estado, ano)) return;
+    const meu = jogo.estado.iso || 'USA';
+    // Quem entra no placar: eu e todos os humanos da sala (offline, só eu — e é
+    // honesto: não há "o que cada país fez" quando os outros são simulação).
+    const isos = [...new Set([meu, ...(onlineCtrl?.jogadores?.() || []).map((j) => j.pais).filter(Boolean)])];
+    let placar; let titulos = [];
+    try {
+      placar = placarDoAno(jogo.estado, { isos, ano });
+      titulos = titulosDoAno(placar, { ano }) || [];
+    } catch { limparAno(jogo.estado, { ano }); return; }
+
+    // A RECOMPENSA É REAL, e só a minha entra no meu estado. O título dos outros é
+    // informação; o meu é efeito — é isso que o dono pediu ao falar em "ser
+    // recompensado no jogo".
+    for (const t of titulos.filter((x) => x.iso === meu)) {
+      try { aplicarEfeitos(jogo.estado, recompensaDoTitulo(t)); } catch { /* título sem prêmio */ }
+    }
+    for (const t of titulos) { const m = mancheteDoTitulo(t); if (m) jogo._empilharFeed?.([m]); }
+    renderFeed();
+
+    const campeao = titulos.find((t) => t.coroa);
+    if (campeao) {
+      dispararBreaking(jogo, {
+        assunto: `${campeao.pais} fecha ${rotuloAno(ano)} como "${campeao.titulo}"`,
+        contexto: `Retrospectiva do ano: ${campeao.subtitulo} ${titulos.slice(0, 4).map((t) => `${t.pais}: ${t.titulo}`).join('; ')}.`,
+        tom: campeao.tom === 'mau' ? 'quente' : 'frio', auto: true,
+      });
+    }
+    limparAno(jogo.estado, { ano, placar, titulos });
+    if (document.querySelector('.carta-wrap .cena')) return;   // não atropela uma cena aberta
+    abrirRelatorioAno(jogo, { ano, placar, titulos, meuIso: meu, onFim: () => { renderHud(); renderTopo(); } });
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // O ATO — um lugar só para "o jogador acabou de fazer X"
+  // ═══════════════════════════════════════════════════════════════════
+  // Três coisas precisavam acontecer a cada jogada relevante, e antes cada uma vivia
+  // espalhada (ou não existia): o PRONTUÁRIO (dossiê, que decide como o mundo fala de
+  // você), o LIVRO DO ANO (feitos, que vira o relatório e os títulos) e a REAÇÃO (as
+  // vozes do X). Espalhar isso por 20 pontos de chamada garantiria que metade ficasse
+  // pra trás em silêncio — que é exatamente o que acontecia com o reconhecimento dos
+  // feitos bons: o jogo cobrava a guerra e nunca noticiava a cura.
+  //
+  // Um ato, três registros. Quem chama só diz o que aconteceu.
+  const DOSSIE_DE = {
+    declarar_guerra: 'guerrasDeclaradas', tomar_territorio: 'territoriosTomados',
+    perder_territorio: 'territoriosPerdidos', bombardear: 'bombardeios', nuclear: 'ogivasUsadas',
+    cessar_fogo: 'pazesAssinadas', mediar_conflito: 'mediacoes', cura_pandemia: 'curasFinanciadas',
+    ajuda_humanitaria: 'ajudasHumanitarias', sancao_imposta: 'sancoesImpostas',
+    alianca_formada: 'aliancasFormadas', alianca_rompida: 'aliancasRompidas',
+    traicao: 'traicoes', golpe: 'golpes', conselho_seguranca: 'idasAoConselho',
+    sancao_onu: 'condenacoesONU',
+  };
+  // O mesmo ato, no vocabulário do livro do ano (jogo/feitos.js).
+  const FEITO_DE = {
+    declarar_guerra: 'ofensiva', tomar_territorio: 'conquista', perder_territorio: 'territorio_perdido',
+    nuclear: 'nuclear', cessar_fogo: 'paz_final', mediar_conflito: 'mediacao',
+    cura_pandemia: 'cura_final', ajuda_humanitaria: 'ajuda', sancao_imposta: 'sancao_aplicada',
+    sancao_sofrida: 'sancao_sofrida', alianca_formada: 'alianca',
+  };
+
+  function registrarAto(tipo, { valor = 1, alvo = null, alvoNome = null, magnitude = 0.5, publicar = true } = {}) {
+    const e = jogo.estado;
+    const meu = e.iso || 'USA';
+    // 1. prontuário — é o que muda o TOM de todo mundo com você daqui pra frente
+    const campo = DOSSIE_DE[tipo];
+    if (campo) { e.dossie = e.dossie || {}; e.dossie[campo] = (e.dossie[campo] || 0) + valor; }
+    // 2. livro do ano — alimenta o relatório e os títulos
+    const feito = FEITO_DE[tipo];
+    if (feito) { try { registrarFeito(e, { iso: meu, tipo: feito, valor, alvo, turno: jogo.turno }); } catch { /* registro é enfeite, nunca derruba a jogada */ } }
+    // 3. as vozes — a internet reage, e reage de acordo com o seu histórico
+    if (!publicar) return;
+    try {
+      const posts = postsParaEvento(e, {
+        tipo, iso: meu, magnitude, turno: jogo.turno,
+        nomeJogador: jogo.ficha.pais, presidente: jogo.estado.presidenteNome || jogo.ficha.presidente,
+        alvo: alvoNome || (alvo ? (PAISES[alvo]?.nome || alvo) : null),
+      });
+      if (posts.length) { jogo._empilharFeed?.(posts); renderFeed(); }
+    } catch { /* sem vozes: o jogo segue */ }
+  }
+  jogo._ato = registrarAto;   // módulos fora daqui (naval, nuclear, ONU) chamam por este cano
+
+  // ── O TERMÔMETRO DO MUNDO ───────────────────────────────────────────
+  // Duas pontas, uma peça só. Em PAZ o visor agradece — e agradecer é o ponto: o
+  // jogo passa a partida inteira cobrando, e nunca reconhecia quem não incendiou
+  // nada. Na BEIRA ele grita. No meio, informa sem atrapalhar. A seta (subindo,
+  // caindo, estável) é o que transforma um número num movimento: 48 subindo é uma
+  // história diferente de 48 caindo, e é a diferença que faz o jogador agir.
+  const ICO_CLIMA = { paz: 'dove', calmo: 'sun', tenso: 'cloud-alert', fervendo: 'flame', beira: 'siren' };
+  let ultimoNivelClima = null;
+  function pintarClima() {
+    const el = container.querySelector('#t-clima');
+    if (!el) return;
+    let c;
+    try { c = climaGlobal(jogo.estado); } catch { return; }
+    el.dataset.nivel = c.nivel;
+    el.dataset.seta = c.seta;
+    el.querySelector('.cl-ic').innerHTML = ico(ICO_CLIMA[c.nivel] || 'thermometer', 13);
+    el.querySelector('.cl-txt').innerHTML = `<b>${c.nivel === 'paz' ? 'PAZ MUNDIAL' : `TENSÃO ${Math.round(c.temp)}`}</b>`
+      + `<i class="cl-seta ${c.seta}">${c.seta === 'caindo' ? '▼' : c.seta === 'subindo' ? '▲' : '—'}</i>`;
+    el.setAttribute('data-tip', `${c.texto}\n\n${c.motivo}`);
+    el.setAttribute('data-tip-t', 'Clima global');
+    el.setAttribute('data-tip-k', c.nivel.toUpperCase());
+
+    // A VIRADA É QUE VIRA NOTÍCIA, não o estado. Publicar "o mundo está calmo" toda
+    // batida seria ruído; publicar "o mundo ACABOU de chegar à paz" é um evento — e
+    // chegar à paz é a coisa mais difícil de fazer neste jogo.
+    if (ultimoNivelClima && ultimoNivelClima !== c.nivel) anunciarViradaDeClima(ultimoNivelClima, c);
+    ultimoNivelClima = c.nivel;
+  }
+
+  function anunciarViradaDeClima(antes, c) {
+    const ORDEM = ['paz', 'calmo', 'tenso', 'fervendo', 'beira'];
+    const melhorou = ORDEM.indexOf(c.nivel) < ORDEM.indexOf(antes);
+    const credito = melhorou ? quemReduziuConflito(jogo.estado) : null;
+    jogo._empilharFeed?.([{
+      tipo: 'sistema', handle: melhorou ? '🕊 Termômetro global' : '🔥 Termômetro global',
+      cor: c.nivel === 'paz' ? '#22e0a0' : melhorou ? '#35e0ff' : c.nivel === 'beira' ? '#ff3b5c' : '#ffb020',
+      texto: `${c.texto} ${c.motivo}`,
+    }]);
+    if (credito) jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🕊 Crédito de paz', cor: '#22e0a0', texto: credito.texto }]);
+    renderFeed();
+    // Só as duas pontas viram plantão. O meio da escala é informação de topo, não manchete.
+    if (c.nivel === 'paz' || c.nivel === 'beira') {
+      dispararBreaking(jogo, {
+        assunto: c.nivel === 'paz'
+          ? `O mundo amanheceu sem uma guerra sequer`
+          : `Tensão global na beira do colapso`,
+        contexto: `${c.texto} ${c.motivo}${credito ? ` ${credito.texto}` : ''}`,
+        tom: c.nivel === 'paz' ? 'frio' : 'quente',
+      });
+    }
+  }
+
   // ── #11 · MODO ESPECTADOR → ASSUMIR OUTRA NAÇÃO ─────────────────────
   // O relógio local PARA (você não comanda mais nada), mas a conexão com a sala fica
   // de pé: os eventos dos outros continuam chegando e o mundo continua se mexendo na
   // sua tela. É a diferença entre "assistir" e "o jogo travou".
   function entrarEmEspectador() {
+    // ── BUG QUE ISTO CONSERTA: O ESPECTADOR AGIA ────────────────────
+    // Parar o relógio não é o mesmo que tirar o comando das mãos. `tr.parar()` só
+    // congela a batida do mundo — a fila de ordens continuava aceitando, o botão do
+    // CONSELHO não checa fase nenhuma, e os eventos de rede seguiam saindo em nome de
+    // um governo que não existe mais. Resultado: um país morto convocando a ONU e
+    // enfileirando ações. A marca abaixo é o gate ÚNICO que o resto do jogo pergunta —
+    // um lugar só pra desligar, em vez de um `if` por porta (e sempre esquecer uma).
+    jogo.espectador = true;
     tr?.parar();
     removerFaixaEsp?.();
     removerFaixaEsp = faixaEspectador(jogo.ficha.pais, escolherNovaNacao);
+    renderAcoes(); renderTopo();
     escolherNovaNacao();
   }
   function escolherNovaNacao() {

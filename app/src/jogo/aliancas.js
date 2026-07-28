@@ -19,6 +19,7 @@
 import { PAISES, jogadorIso } from '../dados/paises.js';
 import { forcaDe } from './forcasMundo.js';
 import { registrarAliancas } from '../dados/blocos.js';
+import { aplicarEfeitos } from './efeitos.js';
 import { rand } from './rng.js';
 
 // ── REGRAS: cada uma soma intensidade e define o caráter ───────────────
@@ -63,7 +64,16 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 export function intensidadeDe(al) {
   let i = 22;   // um clube existe mesmo sem cláusula: 22 é o piso "arranjo político"
   for (const k of Object.keys(al?.regras || {})) if (al.regras[k]) i += REGRAS_ALIANCA[k]?.intens || 0;
-  return Math.min(95, i);
+  // ── A COESÃO NÃO ESTÁ NO PAPEL, ESTÁ NO HISTÓRICO ────────────────────
+  // Um pacto vale o que ele já fez. Cada socorro HONRADO endurece o bloco; cada
+  // abandono abre uma rachadura. Somamos isso aqui, na fonte, em vez de num campo
+  // novo — porque `intensidadeDe` alimenta `comoBloco`, e `comoBloco` alimenta a
+  // coalizão que te defende, o desconto de armas e a reação mundial. Honrar o pacto
+  // uma vez faz o bloco INTEIRO responder mais forte da próxima. Trair faz o
+  // contrário, e o jogador sente sem precisar ler um tooltip.
+  i += Math.min(15, (al?.honras || 0) * 3);
+  i -= Math.min(30, (al?.rachaduras || 0) * 10);
+  return Math.max(8, Math.min(95, i));
 }
 export function ehMilitar(al) { return !!al?.regras?.defesa_mutua; }
 export function ehEconomica(al) { return !!(al?.regras?.livre_comercio || al?.regras?.coord_sancoes); }
@@ -295,6 +305,116 @@ export function registrarAliancaConhecida(estado, al) {
 export function ehAliadoMilitar(estado, iso) {
   const al = aliancaCom(estado, iso);
   return !!al && ehMilitar(al);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// O PACTO SOB PRESSÃO — honrar custa, abandonar custa mais
+// ═══════════════════════════════════════════════════════════════════════
+// O pedido do dono: "quando um país tomar [território do aliado], você ajudar na
+// guerra e atacar também". A pergunta de design que isso abre é se o socorro é
+// automático ou opcional — e a resposta está aqui, no PREÇO, não num `if`.
+//
+// A DECISÃO: com Defesa Mútua, o socorro é PRESUMIDO mas nunca executado sozinho.
+// Automatizar roubaria a única coisa que faz uma aliança valer alguma coisa —
+// honrar o pacto QUANDO DÓI. Mas deixar puramente opcional esvazia a cláusula que
+// o jogador ligou lá na forja: um Artigo 5 que ninguém é obrigado a nada é um
+// enfeite. Então o compromisso nasce ABERTO com prazo, e o que decide é o custo de
+// cada saída. O motor não escolhe por você; ele só cobra.
+//
+// E a assimetria que dá o tempero: RECUSAR na cara custa caro, mas SUMIR custa mais.
+// Dizer "não vou" é desonra; deixar o aliado esperando socorro que nunca vem é o que
+// dissolve blocos de verdade. Por isso o silêncio TIRA o aliado do bloco e a recusa
+// explícita só abre uma rachadura — quem foi deixado morrer não continua sentado à
+// mesa, mas quem levou um "não" na cara ainda pode achar que o pacto serve pra algo.
+const chaveRel = (iso) => PAISES[iso]?.rel || `rel_${String(iso).toLowerCase()}`;
+
+// Membros do bloco que não sou eu nem o país em questão (a plateia da minha decisão).
+export function testemunhasDe(estado, al, exceto = []) {
+  const eu = estado.iso || jogadorIso();
+  const fora = new Set([eu, ...exceto]);
+  return (al?.membros || []).filter((m) => !fora.has(m));
+}
+
+// A Defesa Mútua ainda está de pé? Depois de duas rachaduras o Artigo 5 morre — o
+// bloco continua existindo (comércio, sanções, não-agressão), mas a cláusula que
+// mandava sangue some. É a OTAN sem o artigo 5: uma sala de reuniões.
+export function defesaMutuaViva(al) { return !!al?.regras?.defesa_mutua && !al?.artigo5Morto; }
+
+// ── HONRAR ────────────────────────────────────────────────────────────
+// Você atendeu. O aliado te deve a existência, o bloco endurece (honras entram na
+// intensidade e portanto na coalizão que TE defende amanhã) e as testemunhas veem
+// que a sua assinatura vale. Nada disso é de graça — a conta da guerra vem em
+// coalizao.js, que é quem sabe contra quem você acabou de se meter.
+export function honrarPacto(estado, al, isoAliado) {
+  if (!al) return { linhas: [], mudancas: [] };
+  al.honras = (al.honras || 0) + 1;
+  al.historico = al.historico || [];
+  al.historico.push({ tipo: 'honrado', iso: isoAliado, quando: estado.turno || 0 });
+  const ef = { [chaveRel(isoAliado)]: 28, soft_power: 6, aprovacao: 2 };
+  for (const m of testemunhasDe(estado, al, [isoAliado])) ef[chaveRel(m)] = 10;
+  const mudancas = aplicarEfeitos(estado, ef);
+  sincronizarBlocos(estado);   // a intensidade mudou: o bloco inteiro fica mais forte
+  const outros = testemunhasDe(estado, al, [isoAliado]);
+  return {
+    mudancas, honras: al.honras,
+    linhas: [
+      `${PAISES[isoAliado]?.nome || isoAliado} pediu e nós fomos. ${al.nome} deixou de ser um papel assinado.`,
+      outros.length
+        ? `${outros.map((m) => PAISES[m]?.nome || m).join(', ')} viram: quem entra neste bloco não morre sozinho.`
+        : 'O mundo viu — e o mundo lembra de quem cumpre.',
+    ],
+  };
+}
+
+// ── ABANDONAR ─────────────────────────────────────────────────────────
+// `silencio` = o prazo venceu sem resposta. É a saída mais cara, de propósito:
+// recusar é uma posição, sumir é uma revelação sobre você.
+export function racharPacto(estado, al, isoAliado, { silencio = false } = {}) {
+  if (!al) return { linhas: [], mudancas: [], saiu: false };
+  const eraMutua = defesaMutuaViva(al);
+  al.rachaduras = (al.rachaduras || 0) + 1;
+  al.historico = al.historico || [];
+  al.historico.push({ tipo: silencio ? 'silencio' : 'recusado', iso: isoAliado, quando: estado.turno || 0 });
+
+  // Sem Defesa Mútua não havia promessa nenhuma: não recusar um CONVITE não racha nada.
+  // O bloco só se parte quando a cláusula existia e não foi cumprida.
+  const peso = eraMutua ? (silencio ? 1 : 0.72) : 0.28;
+  const ef = {
+    [chaveRel(isoAliado)]: -Math.round(60 * peso),
+    soft_power: -Math.round(11 * peso),
+    aprovacao: eraMutua ? -3 : 0,
+  };
+  for (const m of testemunhasDe(estado, al, [isoAliado])) ef[chaveRel(m)] = -Math.round(20 * peso);
+  const mudancas = aplicarEfeitos(estado, ef);
+
+  // O ABANDONADO SAI. Só no silêncio — ver o comentário do topo da seção.
+  let saiu = false;
+  if (eraMutua && silencio) {
+    al.membros = (al.membros || []).filter((m) => m !== isoAliado);
+    saiu = true;
+  }
+  // DUAS RACHADURAS MATAM O ARTIGO 5. Não dissolvemos o bloco: dissolver seria
+  // limpo demais. É mais cruel (e mais verdadeiro) o pacto continuar existindo,
+  // com o nome bonito e a bandeira, e não valer mais nada em guerra.
+  let morreuArtigo5 = false;
+  if (eraMutua && (al.rachaduras || 0) >= 2) { al.artigo5Morto = true; morreuArtigo5 = true; }
+  // Bloco vazio (ou só eu) não é bloco.
+  let dissolveu = false;
+  if ((al.membros || []).length <= 1) {
+    estado.aliancas = (estado.aliancas || []).filter((a) => a.id !== al.id);
+    dissolveu = true;
+  }
+  sincronizarBlocos(estado);
+
+  const nomeAliado = PAISES[isoAliado]?.nome || isoAliado;
+  const linhas = [];
+  if (!eraMutua) linhas.push(`Não fomos ao socorro de ${nomeAliado}. Não havia cláusula obrigando — mas eles pediram, e nós ficamos em casa.`);
+  else if (silencio) linhas.push(`${nomeAliado} pediu socorro e nós não respondemos. Nem sim, nem não: silêncio. Eles esperaram até não dar mais.`);
+  else linhas.push(`Recusamos o chamado de ${nomeAliado}. O Artigo 5 de ${al.nome} foi invocado e nós dissemos não, na cara.`);
+  if (saiu) linhas.push(`${nomeAliado} deixou ${al.nome}. Não houve nota, não houve reunião — só uma cadeira vazia.`);
+  if (morreuArtigo5) linhas.push(`A cláusula de Defesa Mútua de ${al.nome} está morta. O bloco continua no mapa; a promessa, não.`);
+  if (dissolveu) linhas.push(`${al.nome} deixou de existir. Um pacto sem ninguém é só um nome.`);
+  return { mudancas, linhas, saiu, morreuArtigo5, dissolveu, eraMutua };
 }
 
 // TRAIÇÃO: um membro me atacou → sai da aliança na hora. Devolve o que aconteceu

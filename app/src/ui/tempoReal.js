@@ -30,6 +30,10 @@ export function criarTempoReal(jogo, hooks = {}) {
   registrarFila((a) => enfileirar(a)); // encomendas de arsenal (ficha/mercado) entram nesta fila
 
   function podeEnfileirar(acao) {
+    // ESPECTADOR NÃO COMANDA. Esta é a porta por onde TODA ordem paga passa — bloquear
+    // aqui vale mais do que espalhar checagens por cada painel, que é como o vazamento
+    // aconteceu da primeira vez (o país caiu, o relógio parou, e a fila seguiu aceitando).
+    if (jogo.espectador) return { ok: false, motivo: 'Seu governo caiu. Assuma outra nação para voltar a comandar.' };
     const custo = jogo.custoDe(acao);
     // ── #9 · CAIXA CONGELADO PELO CONSELHO ────────────────────────────
     // A pena mais dura da ONU não tira o seu dinheiro: tira o seu ACESSO a ele. O

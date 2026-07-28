@@ -263,8 +263,15 @@ export function ligarOnline(jogo, net, hooks) {
       porPais.delete(iso);
       jogo.estado._humanos = (jogo.estado._humanos || []).filter((i) => i !== iso);
       jogo.estado._caidos = [...caidos];
-      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Chancelaria', cor: '#ffb020',
-        texto: `O governo de ${nomeDe(iso)} CAIU — ${esc(ev.dados.motivo || 'fim do reinado')}. O país segue no mapa, agora conduzido pela Máquina.` }]);
+      // A SALA LÊ O MOTIVO, não só o fato. Um governo que cai é a melhor aula
+      // disponível pros outros jogadores — esconder o porquê desperdiça isso.
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Chancelaria', cor: ev.dados.tipo === 'legado' ? '#35e0ff' : '#ffb020',
+        texto: ev.dados.tipo === 'legado'
+          ? `${nomeDe(iso)} chegou ao fim do mandato: ${esc(ev.dados.motivo || 'a década acabou')}. O país segue no mapa, agora conduzido pela Máquina.`
+          : `O governo de ${nomeDe(iso)} CAIU — ${esc(ev.dados.motivo || 'fim do reinado')}. O país segue no mapa, agora conduzido pela Máquina.` }]);
+      if (ev.dados.postX) {
+        jogo._empilharFeed?.([{ tipo: 'jogador', handle: `⚖ ${ev.deNome || nomeDe(iso)}`, paisOrigem: iso, texto: String(ev.dados.postX), cor: '#ffb020' }]);
+      }
       hooks.renderFeed?.();
       const g = hooks.globoCtrl?.();
       g?.ondaRadar?.(g.ondeEsta?.(iso), { cor: 0xffb020, max: 50 });

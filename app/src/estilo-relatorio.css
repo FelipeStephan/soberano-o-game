@@ -1,0 +1,68 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   RETROSPECTIVA DO ANO — a virada de doze meses
+   ═══════════════════════════════════════════════════════════════════════
+   A tela NÃO pausa o mundo, e o visual diz isso: overlay escuro mas transparente o
+   bastante pra o globo continuar vivo atrás. É uma cerimônia, não um bloqueio.
+   O seu ano vem primeiro e em destaque; o resto do mundo, abaixo, em fila. */
+.ra-over { position: fixed; inset: 0; z-index: var(--z-modal); display: grid; place-items: center;
+  background: rgba(3,6,12,.72); backdrop-filter: blur(3px); animation: subir .3s ease both; padding: 20px; }
+.ra-over.saindo { animation: none; opacity: 0; transition: opacity .3s ease; }
+
+.ra-painel { width: min(96%, 880px); max-height: 88vh; display: flex; flex-direction: column;
+  background: linear-gradient(180deg, #0a1322, #070e1a);
+  box-shadow: inset 0 0 0 1px var(--borda), 0 30px 90px -30px #000;
+  clip-path: polygon(0 0, calc(100% - 18px) 0, 100% 18px, 100% 100%, 18px 100%, 0 calc(100% - 18px)); }
+.ra-cab { display: flex; align-items: center; gap: 13px; padding: 16px 20px; border-bottom: 1px solid var(--borda);
+  background: linear-gradient(90deg, rgba(255,199,80,.1), transparent 70%); }
+.ra-selo { display: grid; place-items: center; width: 42px; height: 42px; flex: none; color: #ffc750;
+  background: rgba(255,199,80,.1); box-shadow: inset 0 0 0 1px rgba(255,199,80,.4);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.ra-tit { flex: 1; min-width: 0; } .ra-tit h2 { margin: 0; font-size: 17px; letter-spacing: .06em; }
+.ra-tit span { font-size: 11.5px; color: var(--fraco); }
+.ra-x { margin-left: auto; }
+.ra-corpo { padding: 16px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+.ra-lab { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .14em; color: var(--fraco); text-transform: uppercase; margin-bottom: 9px; }
+
+.ra-meus, .ra-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 9px; }
+.ra-titulo { padding: 12px 13px; background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--borda);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.ra-titulo.bom { box-shadow: inset 2px 0 0 var(--verde); }
+.ra-titulo.mau { box-shadow: inset 2px 0 0 var(--perigo); }
+.ra-titulo.coroa { box-shadow: inset 2px 0 0 #ffc750, 0 0 26px -12px #ffc750; background: rgba(255,199,80,.07); }
+.ra-titulo.meu { outline: 1px solid rgba(53,224,255,.5); outline-offset: -1px; }
+.ra-tit-cab { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ra-flag { width: 26px; height: 18px; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--borda); }
+.ra-flag.sem { display: grid; place-items: center; font-family: var(--mono); font-size: 7px; color: var(--fraco); }
+.ra-tit-quem { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ra-tit-quem b { font-size: 12px; } .ra-tit-quem i { font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; color: var(--fraco); }
+.ra-titulo.coroa .ra-tit-quem i { color: #ffc750; }
+.ra-tit-num { font-family: var(--disp); font-size: 20px; color: #eaf1ff; }
+.ra-tit-nome { font-family: var(--disp); font-size: 16px; letter-spacing: .03em; margin-bottom: 4px; }
+.ra-titulo.bom .ra-tit-nome { color: var(--verde); } .ra-titulo.mau .ra-tit-nome { color: var(--perigo); }
+.ra-titulo.coroa .ra-tit-nome { color: #ffc750; }
+.ra-tit-sub { font-size: 11px; line-height: 1.5; color: #a9bcda; }
+.ra-vazio { display: flex; gap: 9px; align-items: flex-start; padding: 12px 14px; font-size: 12px; line-height: 1.55;
+  color: var(--fraco); background: rgba(9,15,26,.9); box-shadow: inset 2px 0 0 var(--borda); }
+.ra-numeros { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+.ra-num { display: inline-flex; align-items: baseline; gap: 5px; padding: 5px 9px; background: rgba(6,13,24,.85);
+  box-shadow: inset 0 0 0 1px var(--borda); font-family: var(--mono); font-size: 9px; color: var(--fraco); }
+.ra-num b { font-family: var(--disp); font-size: 14px; color: var(--cyan); }
+.ra-rodape { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 13px 20px; border-top: 1px solid var(--borda); }
+.ra-nota { flex: 1; min-width: 200px; display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--fraco); }
+.ra-ok { display: flex; align-items: center; gap: 7px; border: 0; cursor: pointer; padding: 11px 18px;
+  font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; background: #ffc750; color: #1a1200; }
+.ra-ok:hover { filter: brightness(1.08); }
+
+/* ── ANO MORNO: um cartão, não uma cerimônia ─────────────────────────── */
+.ra-over.compacto { background: transparent; backdrop-filter: none; place-items: end center; padding-bottom: 90px; pointer-events: none; }
+.ra-magro { pointer-events: auto; display: flex; align-items: center; gap: 11px; padding: 11px 15px; max-width: min(520px, 92vw);
+  background: rgba(8,13,24,.96); box-shadow: inset 0 0 0 1px var(--borda), 0 18px 45px -14px #000;
+  clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 11px 100%, 0 calc(100% - 11px)); }
+.ra-magro-ic { color: var(--cyan); display: grid; place-items: center; flex: none; }
+.ra-magro b { display: block; font-size: 12.5px; } .ra-magro span { font-size: 11px; color: var(--fraco); line-height: 1.45; }
+.ra-magro-x { flex: none; border: 0; background: transparent; color: var(--fraco); cursor: pointer; padding: 4px; }
+@media (max-width: 640px) { .ra-meus, .ra-lista { grid-template-columns: 1fr; } }
+
+.ra-eu, .ra-mundo { display: block; }
+.cl-ic { display: inline-grid; place-items: center; }

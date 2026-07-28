@@ -43,6 +43,7 @@ import { agoraServidor } from '../net/lobby.js';
 import { abrirAberturaConselho, DUR_ABERTURA_MS } from './onuAbertura.js';
 import { criarSalaVoz } from '../net/salaVoz.js';
 import { listarMicrofones } from '../net/chamada.js';
+import { dispararBreaking } from './breaking.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -995,6 +996,14 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
     const d = {
       id: sessao.id, aprovada: aprovaria(), sim: c.sim, nao: c.nao, total: c.total,
       acusado: sessao.acusado, pena: sessao.pena, turnos: sessao.turnos, titulo: sessao.titulo,
+      // A CHAMADA NOMINAL VIAJA COM O VEREDITO. Sem ela, cada cliente contava os votos
+      // que por acaso recebeu e a imprensa de cada um citava uma lista diferente — o
+      // pior tipo de divergência, porque ninguém percebe que está lendo outra história.
+      // Com o rol fechado pelo presidente, a manchete é a MESMA na sala inteira, e
+      // "quem votou como" vira fato público — que é metade da diplomacia daqui pra frente.
+      votos: [...sessao.votos.entries()].map(([iso, v]) => ({ iso, v })),
+      presidente: sessao.presidente, presidenteNome: sessao.presidenteNome,
+      motivo: sessao.motivo || '',
     };
     net.evento('onu_veredito', sessao.acusado, d.aprovada ? 'O Conselho aprovou a pena.' : 'O Conselho rejeitou a pena.', d);
     aplicarVeredito(d);
@@ -1045,6 +1054,7 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
     }
 
     telaVeredito(d, def, nomeAcusado);
+    publicarImprensa(d, def, nomeAcusado);
     jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Conselho de Segurança', cor: d.aprovada ? '#ff3b5c' : '#22e0a0',
       texto: d.aprovada
         ? `Por ${d.sim} a ${d.nao}, o Conselho aprovou ${def.rot.toLowerCase()} contra ${nomeAcusado}. A pena vale por ${d.turnos} meses.`
@@ -1053,6 +1063,77 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
     g?.ondaRadar?.(g.ondeEsta?.(d.acusado), { cor: d.aprovada ? 0xff3b5c : 0x22e0a0, max: 55 });
     g?.balao?.(g.ondeEsta?.(d.acusado), d.aprovada ? def.rot : 'ABSOLVIDO', d.aprovada ? 'ruim' : 'aviso');
     sessao = null;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // A IMPRENSA DO CONSELHO
+  // ═══════════════════════════════════════════════════════════════════
+  // O pedido do dono: "criar um destaque maior para o breaking news quando usado a ONU,
+  // criar mensagens criativas para o país que emitiu a reunião e os países que votaram".
+  //
+  // A regra que orienta o texto: uma sessão do Conselho não é um placar, é uma FOTOGRAFIA
+  // DIPLOMÁTICA. Quem convocou expôs a mão; quem votou a favor fez um inimigo; quem votou
+  // contra fez uma promessa; quem se calou disse tudo. É isso que os textos abaixo contam —
+  // e é por isso que a chamada nominal viaja no veredito. Daqui pra frente, na sala,
+  // todo mundo lembra quem levantou a mão.
+  const RAJADA_APROVADA = [
+    (a, p, r) => `O martelo desceu em ${r}. ${a} construiu a maioria e ${r} sai da sala com ${p} carimbado na testa.`,
+    (a, p, r) => `${r} entrou como potência e saiu como réu condenado. ${a} contou os votos antes de abrir o envelope — e contou certo.`,
+    (a, p, r) => `Não foi unanimidade, foi o suficiente. ${p} contra ${r}, com a assinatura de ${a} embaixo.`,
+    (a, p, r) => `${a} pediu a cabeça de ${r} e a mesa entregou. ${p} entra em vigor antes de a poeira assentar.`,
+  ];
+  const RAJADA_REJEITADA = [
+    (a, p, r) => `${a} abriu o envelope, apontou para ${r} — e a mesa virou as costas. ${p} morreu na votação.`,
+    (a, p, r) => `${r} sai de pé. ${a} gastou o capital político da sessão e levou de volta o envelope vazio.`,
+    (a, p, r) => `A acusação não convenceu ninguém além de quem a escreveu. ${r} absolvido, ${a} exposto.`,
+    (a, p, r) => `O Conselho preferiu o benefício da dúvida. ${p} rejeitada — e agora ${r} sabe exatamente quem quis afundá-lo.`,
+  ];
+
+  function nomesDe(lista) {
+    if (!lista.length) return '';
+    if (lista.length === 1) return lista[0];
+    return `${lista.slice(0, -1).join(', ')} e ${lista[lista.length - 1]}`;
+  }
+
+  // O rol de quem votou o quê, em prosa — é o que vira fofoca e vingança depois.
+  function chamadaNominal(d) {
+    const favor = (d.votos || []).filter((x) => x.v === 'sim').map((x) => nomeDe(x.iso));
+    const contra = (d.votos || []).filter((x) => x.v === 'nao').map((x) => nomeDe(x.iso));
+    const partes = [];
+    if (favor.length) partes.push(`${nomesDe(favor)} ${favor.length > 1 ? 'votaram' : 'votou'} pela condenação`);
+    if (contra.length) partes.push(`${nomesDe(contra)} ${contra.length > 1 ? 'seguraram' : 'segurou'} a mão do acusado`);
+    const calados = Math.max(0, (d.total || 0) - favor.length - contra.length);
+    if (calados > 0) partes.push(`${calados} ${calados > 1 ? 'delegações preferiram' : 'delegação preferiu'} o silêncio — que numa mesa dessas também é voto`);
+    return partes.join('; ') + '.';
+  }
+
+  // O PLANTÃO DO CONSELHO tem tratamento próprio (`tom: 'onu'`): faixa maior, selo de
+  // martelo e o texto inteiro, sem corte. Uma sessão da ONU não pode passar na tela com
+  // o mesmo peso de "Brent sobe 2 dólares".
+  function publicarImprensa(d, def, nomeAcusado) {
+    const quem = d.presidenteNome || 'uma delegação';
+    const rajada = d.aprovada ? RAJADA_APROVADA : RAJADA_REJEITADA;
+    const idx = Math.abs(String(d.id).split('').reduce((h, ch) => h + ch.charCodeAt(0), 0)) % rajada.length;
+    const manchete = rajada[idx](quem, def.rot.toLowerCase(), nomeAcusado);
+
+    dispararBreaking(jogo, {
+      assunto: d.aprovada
+        ? `Conselho de Segurança aprova ${def.rot.toLowerCase()} contra ${nomeAcusado}`
+        : `Conselho de Segurança rejeita punição a ${nomeAcusado}`,
+      contexto: `${manchete} Placar: ${d.sim} a ${d.nao}. Sessão convocada por ${quem} (${nomeDe(d.presidente)}) sob o tema "${d.titulo}".${d.motivo ? ` Motivo alegado: ${d.motivo}` : ''} ${chamadaNominal(d)}`,
+      tom: 'onu', iso: d.acusado,
+    });
+
+    // O X cobre por outro ângulo: a manchete conta o QUE aconteceu, o feed conta QUEM
+    // fez acontecer. As duas peças juntas é que fazem a sala se lembrar da sessão.
+    jogo._empilharFeed?.([
+      { tipo: 'sistema', handle: '⚖ Conselho de Segurança', cor: d.aprovada ? '#ff3b5c' : '#22e0a0', texto: manchete },
+      { tipo: 'sistema', handle: '⚖ Chamada nominal', cor: '#35e0ff', texto: chamadaNominal(d) },
+    ]);
+    if (d.motivo) {
+      jogo._empilharFeed?.([{ tipo: 'jogador', handle: `⚖ ${quem}`, paisOrigem: d.presidente, paisAlvo: d.acusado,
+        texto: `"${d.motivo}" — a acusação lida na abertura da sessão contra ${nomeAcusado}.`, cor: '#35e0ff' }]);
+    }
   }
 
   // A pena entra no MEU estado e passa a doer.

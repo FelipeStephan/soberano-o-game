@@ -29,17 +29,22 @@ import { tocarConselho } from './audio.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-// O contrato com o onu.js: 15s cravados. Quem chama agenda a votação em cima
+// O contrato com o onu.js: 18s cravados. Quem chama agenda a votação em cima
 // disto, então o número vive aqui e não duplicado lá.
-export const DUR_ABERTURA_MS = 15000;
+//
+// ERA 15s E O DONO PEDIU 18: "não tá dando pra ler direito os motivos". Os 3s a
+// mais foram TODOS pro motivo (3.2s → 5.4s), que é a única etapa com texto livre
+// e pode chegar a 320 caracteres — a 3,2s isso dava menos de 4 palavras por
+// segundo pra ler, mais rápido do que a maioria das pessoas lê texto novo. As
+// outras quatro etapas ficaram como estavam: elas são placas, já cabiam.
+export const DUR_ABERTURA_MS = 18000;
 
 // Ritmo das 5 etapas — soma EXATA de DUR_ABERTURA_MS.
-// Calibragem: o réu (4ª) ganha a maior fatia porque é o clímax e o jogador
-// precisa de tempo pra reconhecer a bandeira antes de ler o nome. O motivo (3ª)
-// vem em segundo lugar porque é a única etapa com texto livre, escrito pelo
-// convocador, que pode ser longo. O selo (1ª) e a pena (5ª) são placas: leem-se
-// num relance.
-const ETAPAS_MS = [2600, 2600, 3200, 3800, 2800];
+// Calibragem: o réu (4ª) tem a maior fatia depois do motivo porque é o clímax e o
+// jogador precisa de tempo pra reconhecer a bandeira antes de ler o nome. O motivo
+// (3ª) agora é a maior de todas: é a acusação escrita à mão por outro jogador, e é
+// o que dá sentido a tudo que vem depois. O selo (1ª) e a pena (5ª) são placas.
+const ETAPAS_MS = [2600, 2600, 5400, 3800, 2800];
 
 // Bandeira grande com degrau de fallback: se o flagcdn não responder (ou o país
 // não tiver ISO no mapa), sobra uma placa com a sigla. Nunca um buraco na tela —

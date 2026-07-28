@@ -109,8 +109,12 @@ function bombear() {
 
   const el = document.createElement('div');
   el.className = `breaking ${item.tom}`;
+  // O SELO MUDA COM O ASSUNTO: uma sessão do Conselho não é "BREAKING", é o martelo
+  // batendo. Trocar a palavra e o ícone é o que separa a faixa da ONU do plantão do
+  // Brent — antes as duas chegavam com a mesma cara e o mesmo peso.
+  const ehOnu = item.tom === 'onu';
   el.innerHTML = `
-    <span class="brk-pill">${ico('radio', 12)} BREAKING</span>
+    <span class="brk-pill">${ico(ehOnu ? 'gavel' : 'radio', 12)} ${ehOnu ? 'CONSELHO DE SEGURANÇA' : 'BREAKING'}</span>
     <span class="brk-veic">${logo ? `<img src="${logo}" alt="" onerror="this.style.display='none'">` : ''}<b>${esc(item.veiculo.nome)}</b></span>
     <span class="brk-txt">${esc(item.texto)}</span>
     <i class="brk-x">${ico('x', 12)}</i>`;
@@ -123,5 +127,8 @@ function bombear() {
   el.querySelector('.brk-x').addEventListener('click', fechar);
   el.addEventListener('click', fechar);
   // Entra, respira ~7,5s, sai. Se o jogador clicar, sai antes.
-  setTimeout(fechar, 7500);
+  // O CONSELHO FICA MAIS: a manchete dele é uma frase inteira com placar e nomes, não
+  // um título de 8 palavras. 7,5s não dá pra ler o que a sessão decidiu — e uma sentença
+  // que o jogador não conseguiu ler é uma sentença que não aconteceu.
+  setTimeout(fechar, ehOnu ? 13000 : 7500);
 }
