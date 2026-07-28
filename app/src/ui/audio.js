@@ -115,16 +115,26 @@ function tocarNuclear() {
 // — desce o volume em 800ms enquanto a tela vira pra votação. Sem isso o corte
 // soava como um cabo arrancado, e a cena que o dono quis "bonitinha" azedava no
 // último segundo. Também não faz loop: a música é longa demais pra precisar.
+// GENERALIZADA para servir a QUALQUER cinemática (a abertura do Conselho foi a
+// primeira; o fim da era é a segunda). O que ela faz é o que toda cena longa precisa:
+// abaixa a música de fundo, toca a faixa por cima, e devolve um `parar()` que sobe o
+// volume de volta sem corte seco. `tocarConselho()` continua existindo como o nome
+// curto de quem já a chamava.
+//
+// TROCAR A FAIXA DO FIM DA ERA é mudar uma string: ponha o mp3 em `public/audio/` e
+// passe o nome dele em `ui/fimAbertura.js`. Hoje as duas cenas dividem a mesma trilha
+// de suspense porque não existe outra no acervo — e uma cena muda seria pior.
 let conselhoAtual = null;
-export function tocarConselho() {
-  // Duas convocações emendadas (jogador pulou uma e outra sala abriu) não podem
-  // sobrepor duas trilhas: a anterior morre agora.
+export function tocarConselho() { return tocarTrilha('conselho-suspense'); }
+export function tocarTrilha(nome) {
+  // Duas cinemáticas emendadas (jogador pulou uma e outra abriu) não podem sobrepor
+  // duas trilhas: a anterior morre agora.
   if (conselhoAtual) { try { conselhoAtual.pause(); } catch {} conselhoAtual = null; }
   duckando = true;
   musica.volume = volumeMusica();
   const restaurar = () => { duckando = false; musica.volume = volumeMusica(); };
 
-  const a = tocarEfeito('conselho-suspense', { volume: 1 });
+  const a = tocarEfeito(nome, { volume: 1 });
   // Mudo global (ou arquivo faltando): a cinemática roda muda, mas quem chamou
   // ainda recebe um { parar() } válido — não é trabalho dele saber do mute.
   if (!a) { restaurar(); return { parar() {} }; }

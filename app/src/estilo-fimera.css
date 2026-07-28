@@ -1,0 +1,83 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   FIM DA ERA — a cinemática antes do dossiê
+   ═══════════════════════════════════════════════════════════════════════
+   Reusa deliberadamente o chassi da abertura do Conselho (.cab-over, .cab-palco,
+   .cab-pe, .cab-cena, .cab-rot, .cab-tit, .cab-sub, .cab-flag) — era o pedido:
+   "uma coisa meio épica cinemática igual fizemos no conselho". Mesmo vocabulário =
+   mesma sensação. Aqui ficam SÓ as peças que não existiam lá: os quatro números do
+   balanço, o selo da doutrina, o contador do Legado e o veredito.
+
+   O TOM PINTA O FUNDO. Deposição puxa vermelho, império puxa âmbar, fim de mandato
+   fica no azul frio da cabine. É a mesma decisão de `tomDoFim` (jogo/destino.js)
+   levada até a cinemática: quem governou dez anos e entregou o país não pode receber
+   a mesma tela de quem foi arrancado da cadeira. */
+
+.fe-over.tom-derrota { background:
+  radial-gradient(130% 100% at 50% 0%, rgba(60,8,20,.55), rgba(2,4,9,.97)); }
+.fe-over.tom-vitoria { background:
+  radial-gradient(130% 100% at 50% 0%, rgba(60,44,6,.45), rgba(2,4,9,.97)); }
+
+/* ── CENA 1 · O RELÓGIO ─────────────────────────────────────────────── */
+.fe-over.tom-derrota .fe-selo { color: var(--perigo);
+  background: rgba(255,59,92,.1); box-shadow: inset 0 0 0 1px rgba(255,59,92,.45); }
+.fe-over.tom-vitoria .fe-selo { color: #ffc750;
+  background: rgba(255,199,80,.1); box-shadow: inset 0 0 0 1px rgba(255,199,80,.45); }
+.fe-marco { display: flex; align-items: center; gap: 16px; margin-top: 6px; }
+.fe-marco-txt { text-align: left; }
+.fe-marco-txt b { display: block; font-family: var(--disp); font-size: 22px; color: #eaf1ff; letter-spacing: .02em; }
+.fe-marco-txt i { font-style: normal; font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--fraco); }
+
+/* ── CENA 2 · O BALANÇO ─────────────────────────────────────────────── */
+/* auto-fit e não 4 colunas: em tela estreita eles quebram em 2×2 em vez de espremer
+   um PIB de cinco dígitos até virar reticências. */
+.fe-numeros { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; width: min(92vw, 620px); }
+.fe-num { padding: 14px 12px; background: rgba(9,15,26,.8); box-shadow: inset 0 0 0 1px var(--borda), inset 2px 0 0 var(--nc);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  animation: subir .45s ease both; }
+.fe-num:nth-child(2) { animation-delay: .09s; }
+.fe-num:nth-child(3) { animation-delay: .18s; }
+.fe-num:nth-child(4) { animation-delay: .27s; }
+.fe-num i { display: block; font-style: normal; font-family: var(--mono); font-size: 7.5px;
+  letter-spacing: .15em; color: var(--fraco); margin-bottom: 5px; }
+.fe-num b { font-family: var(--disp); font-size: 27px; line-height: 1; color: var(--nc); }
+
+/* ── CENA 3 · A DOUTRINA ────────────────────────────────────────────── */
+.fe-dc { color: var(--dc); }
+.fe-doutrina { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+.fe-dic { display: grid; place-items: center; width: 74px; height: 74px; color: var(--dc);
+  background: color-mix(in srgb, var(--dc) 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dc) 45%, transparent), 0 0 60px -20px var(--dc);
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: subir .5s ease both; }
+.fe-doutrina b { font-family: var(--disp); font-size: clamp(22px, 4vw, 34px); letter-spacing: .04em; color: #eaf1ff; }
+.fe-doutrina i { font-style: normal; font-size: 14px; color: var(--dc); }
+
+/* ── CENA 4 · O LEGADO ──────────────────────────────────────────────── */
+.fe-legado { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+/* tabular-nums é o que impede o número de "tremer" enquanto conta: sem isso cada
+   dígito tem largura própria e a caixa inteira dança a cada quadro. */
+.fe-leg-num { font-family: var(--disp); font-size: clamp(64px, 13vw, 128px); line-height: 1;
+  color: var(--dc); font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 70px color-mix(in srgb, var(--dc) 55%, transparent); }
+.fe-leg-quebra { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.fe-leg-quebra span { padding: 8px 14px; background: rgba(9,15,26,.8); box-shadow: inset 0 0 0 1px var(--borda);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px)); }
+.fe-leg-quebra i { display: block; font-style: normal; font-family: var(--mono); font-size: 7px;
+  letter-spacing: .14em; color: var(--fraco); }
+.fe-leg-quebra b { font-family: var(--disp); font-size: 17px; color: #eaf1ff; }
+.fe-leg-quebra span:first-child b { color: var(--dc); }
+
+/* ── CENA 5 · O VEREDITO ────────────────────────────────────────────── */
+.fe-vc { color: var(--vc); }
+.fe-vtit { color: var(--vc); text-shadow: 0 0 60px color-mix(in srgb, var(--vc) 45%, transparent); }
+.fe-epiteto { display: inline-flex; align-items: center; gap: 9px; padding: 11px 18px; color: #ffc750;
+  background: rgba(255,199,80,.08); box-shadow: inset 2px 0 0 #ffc750;
+  font-family: var(--disp); font-size: clamp(15px, 2.6vw, 21px); letter-spacing: .05em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  animation: subir .5s ease both .2s; }
+.fe-chamada { opacity: .75; animation: piscar 1.8s steps(2) infinite; }
+
+@media (max-width: 620px) {
+  .fe-marco { flex-direction: column; gap: 10px; text-align: center; }
+  .fe-marco-txt { text-align: center; }
+}

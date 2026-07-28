@@ -5873,25 +5873,29 @@ button[data-tip], .tip-q { cursor: pointer; }
 .ppe-devolver:hover { background: rgba(53,224,255,.18); }
 .ppe-devolver i { font-style: normal; width: 100%; text-align: center; font-size: 9px; color: var(--fraco); letter-spacing: .04em; }
 
-/* ── O TERMÔMETRO DO MUNDO (topo) ─────────────────────────────────────────
-   Paz agradece em verde, beira grita em vermelho, e o meio informa sem pesar. É
-   um VISOR, não um botão: não compete com as ações do topo, mas está sempre lá. */
-.clima-visor { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; cursor: help;
-  font-family: var(--mono); font-size: 9px; letter-spacing: .1em; color: var(--fraco);
-  background: rgba(9,15,26,.75); box-shadow: inset 2px 0 0 var(--borda);
-  clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px)); }
-.clima-visor .cl-txt { display: inline-flex; align-items: baseline; gap: 6px; }
-.clima-visor b { font-family: var(--disp); font-size: 12px; letter-spacing: .05em; }
+/* ── O TERMÔMETRO DO MUNDO ────────────────────────────────────────────────
+   Ele NÃO é uma caixa própria. Já existia um painel de tensão global sobre o globo
+   (MUNDO AO VIVO) e eu tinha criado um segundo visor no cabeçalho — duas caixas,
+   dois números, a mesma pergunta. O nível virou a LEGENDA do painel que já estava
+   lá: paz agradece em verde, beira grita em vermelho, e o meio informa sem pesar.
+   A borda do painel inteiro assume a cor do nível, então dá pra ler de relance sem
+   nem olhar a legenda. */
+.mv-clima { display: inline-flex; align-items: center; gap: 5px; margin-left: auto;
+  font-family: var(--mono); font-size: 8px; letter-spacing: .08em; color: var(--fraco); }
+.mv-clima b { font-family: var(--disp); font-size: 9.5px; letter-spacing: .06em; }
 .cl-seta { font-style: normal; font-size: 9px; }
 .cl-seta.caindo { color: var(--verde); } .cl-seta.subindo { color: var(--perigo); } .cl-seta.estavel { color: var(--fraco); }
-.clima-visor[data-nivel="paz"] { color: #9ff0cf; box-shadow: inset 2px 0 0 var(--verde), 0 0 22px -10px var(--verde);
-  background: rgba(34,224,160,.09); } .clima-visor[data-nivel="paz"] b { color: var(--verde); }
-.clima-visor[data-nivel="calmo"] { color: #b9d6ef; box-shadow: inset 2px 0 0 var(--cyan); } .clima-visor[data-nivel="calmo"] b { color: var(--cyan); }
-.clima-visor[data-nivel="tenso"] { box-shadow: inset 2px 0 0 var(--ambar); } .clima-visor[data-nivel="tenso"] b { color: var(--ambar); }
-.clima-visor[data-nivel="fervendo"] { color: #ffc79a; box-shadow: inset 2px 0 0 #ff8c42; background: rgba(255,140,66,.08); }
-.clima-visor[data-nivel="fervendo"] b { color: #ff8c42; }
-.clima-visor[data-nivel="beira"] { color: #ffb3c0; box-shadow: inset 2px 0 0 var(--perigo), 0 0 24px -10px var(--perigo);
-  background: rgba(255,59,92,.1); animation: piscar 1.4s steps(2) infinite; } .clima-visor[data-nivel="beira"] b { color: var(--perigo); }
+.mundo-vivo { cursor: help; transition: box-shadow .3s ease; }
+.mundo-vivo[data-nivel="paz"] { box-shadow: inset 2px 0 0 var(--verde), 0 0 26px -12px var(--verde); }
+.mundo-vivo[data-nivel="paz"] .mv-clima b { color: var(--verde); }
+.mundo-vivo[data-nivel="calmo"] { box-shadow: inset 2px 0 0 var(--cyan); }
+.mundo-vivo[data-nivel="calmo"] .mv-clima b { color: var(--cyan); }
+.mundo-vivo[data-nivel="tenso"] { box-shadow: inset 2px 0 0 var(--ambar); }
+.mundo-vivo[data-nivel="tenso"] .mv-clima b { color: var(--ambar); }
+.mundo-vivo[data-nivel="fervendo"] { box-shadow: inset 2px 0 0 #ff8c42; }
+.mundo-vivo[data-nivel="fervendo"] .mv-clima b { color: #ff8c42; }
+.mundo-vivo[data-nivel="beira"] { box-shadow: inset 2px 0 0 var(--perigo), 0 0 26px -12px var(--perigo); }
+.mundo-vivo[data-nivel="beira"] .mv-clima b { color: var(--perigo); animation: piscar 1.4s steps(2) infinite; }
 
 /* ── A TELA DE FIM, agora com três desfechos ──────────────────────────────
    O 'legado' (fim da era) não é derrota: ganhou cor própria e perdeu a caveira. */

@@ -176,35 +176,76 @@ function decairTensao(estado) {
   return { de: temp, para: estado.temp_guerra, piso };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// O BARÔMETRO DO MUNDO — um número só, e este é ele
+// ═══════════════════════════════════════════════════════════════════════
+// BUG QUE ISTO CONSERTA (relato do dono: "você colocou dois modais de tensão global,
+// a gente já possui isso na tela do globo"): existiam DUAS leituras de "tensão
+// global" na tela ao mesmo tempo, com números DIFERENTES. O painel MUNDO AO VIVO
+// mostrava este cálculo composto (39%) e o visor novo do cabeçalho mostrava
+// `temp_guerra` cru (que pode estar em 4). Duas verdades sobre a mesma coisa, a um
+// palmo uma da outra — o jogador não sabe em qual acreditar, e está certo.
+//
+// A função morava em `ui/globo.js`, que é onde ela foi parar por acaso: temperatura
+// do mundo é regra de jogo, não desenho de planeta. Agora ela vive aqui e é a ÚNICA
+// fonte — `climaGlobal` classifica ESTE número, então rótulo e porcentagem não têm
+// como discordar. É estrutural: não dá pra dessincronizar o que é o mesmo valor.
+//
+// O QUE ELE SOMA (e por que nunca chega a zero): o mundo real nunca está em silêncio
+// — há sempre uma Ucrânia, um Oriente Médio. Daí a BASE de 14. Em cima dela entram o
+// seu próprio clima de guerra, as relações azedas, as suas guerras abertas, as
+// guerras entre NPCs e as pandemias.
+const BASE_TENSAO = 14;
+export function barometroMundial(estado) {
+  const rels = Object.keys(estado).filter((k) => k.startsWith('rel_'));
+  const media = rels.length ? rels.reduce((a, k) => a + estado[k], 0) / rels.length : 0;
+  const npc = (estado.conflitosNPC || []).reduce((a, c) => a + 3 + (c.intensidade || 40) / 20, 0);
+  const pand = (estado.pandemias?.length || 0) * 4;
+  const t = BASE_TENSAO + (Number(estado.temp_guerra || 0) * 0.6) + Math.max(0, -media) * 0.5
+    + (estado.emGuerra?.length || 0) * 9 + npc + pand;
+  return Math.max(0, Math.min(100, Math.round(t)));
+}
+
 // ── LEITURA DO CLIMA (o que a UI mostra permanentemente) ──────────────
 // Puro: não muda nada. Devolve o nível, o número, o piso e POR QUE o piso existe —
 // a UI precisa poder dizer "não dá pra esfriar mais enquanto Rússia×Ucrânia arde",
 // senão o jogador fica olhando uma barra travada sem entender o motivo.
 export function climaGlobal(estado) {
-  const temp = Math.round(Number(estado.temp_guerra || 0) * 10) / 10;
+  const temp = barometroMundial(estado);
+  const meuCalor = Math.round(Number(estado.temp_guerra || 0) * 10) / 10;
   const guerras = (estado.emGuerra || []).filter(Boolean);
   const conflitos = estado.conflitosNPC || [];
   const piso = pisoDeTensao(estado);
   const hist = estado._climaHist || [];
   const deltaRecente = hist.length >= 2 ? Math.round((hist[hist.length - 1] - hist[0]) * 10) / 10 : 0;
 
+  // ── AS FAIXAS, RECORTADAS PARA ESTA ESCALA ──────────────────────────
+  // Os cortes antigos (paz ≤5, calmo ≤25…) eram de `temp_guerra`, que começa perto
+  // do zero. O barômetro tem PISO 14 — com os cortes antigos, um mundo em silêncio
+  // absoluto já nasceria "calmo" e a PAZ MUNDIAL seria inalcançável por aritmética.
+  // Agora: 16 é o mundo sem uma guerra sequer (base + arredondamento), e o resto da
+  // escala foi esticado proporcionalmente até 100.
+  //
   // Guerra ABERTA sua impede qualquer leitura melhor que "tenso", por mais frio que o
   // termômetro esteja: seu país está trocando tiro. Rótulo bonito com sangue no chão
   // seria mentira — e mentira que o jogador flagra na hora.
   let nivel;
-  if (guerras.length) nivel = temp >= 75 ? 'beira' : temp >= 50 ? 'fervendo' : 'tenso';
-  else if (temp <= 5) nivel = 'paz';
-  else if (temp <= 25) nivel = 'calmo';
-  else if (temp <= 50) nivel = 'tenso';
-  else if (temp <= 75) nivel = 'fervendo';
+  if (guerras.length) nivel = temp >= 72 ? 'beira' : temp >= 52 ? 'fervendo' : 'tenso';
+  else if (temp <= 16) nivel = 'paz';
+  else if (temp <= 32) nivel = 'calmo';
+  else if (temp <= 52) nivel = 'tenso';
+  else if (temp <= 72) nivel = 'fervendo';
   else nivel = 'beira';
 
   const seta = deltaRecente <= -1 ? 'caindo' : deltaRecente >= 1 ? 'subindo' : 'estável';
   const maisQuente = [...conflitos].sort((a, b) => (b.intensidade || 0) - (a.intensidade || 0))[0];
   const motivo = guerras.length
     ? `Você tem ${guerras.length} guerra${guerras.length > 1 ? 's' : ''} aberta${guerras.length > 1 ? 's' : ''}.`
-    : temp <= piso && piso > 0 && maisQuente
-      ? `O clima não desce de ${piso} enquanto ${nomeDe(maisQuente.a)} e ${nomeDe(maisQuente.b)} estiverem em guerra.`
+    // O piso é do SEU calor de guerra (temp_guerra), não do barômetro — comparar com
+    // o barômetro aqui faria esta frase nunca aparecer, e ela é justamente a que
+    // explica a barra travada.
+    : meuCalor <= piso && piso > 0 && maisQuente
+      ? `O clima não desce enquanto ${nomeDe(maisQuente.a)} e ${nomeDe(maisQuente.b)} estiverem em guerra.`
       : conflitos.length
         ? `${conflitos.length} guerra${conflitos.length > 1 ? 's' : ''} em curso no mundo, nenhuma sua.`
         : 'Nenhuma guerra em curso no planeta.';
@@ -218,7 +259,7 @@ export function climaGlobal(estado) {
   };
 
   return {
-    nivel, temp, piso, deltaRecente, seta, motivo,
+    nivel, temp, meuCalor, piso, deltaRecente, seta, motivo,
     guerras: guerras.length, guerrasNPC: conflitos.length,
     listaGuerras: guerras,
     texto: TEXTO[nivel],
@@ -278,7 +319,10 @@ export function tickMundoVivo(estado) {
   //    depois (nascimento de guerra, escalada) lê `temp_guerra` já atualizada, então o
   //    alívio vale JÁ neste turno em vez de só no próximo.
   decairTensao(estado);
-  estado._climaHist = [...(estado._climaHist || []), Number(estado.temp_guerra || 0)].slice(-8);
+  // A seta (▲▼) do visor sai da diferença entre a primeira e a última amostra desta
+  // lista. Ela guarda o BARÔMETRO, não `temp_guerra`: guardar outro número faria a
+  // seta contar a história de uma grandeza e o percentual ao lado dela, de outra.
+  estado._climaHist = [...(estado._climaHist || []), barometroMundial(estado)].slice(-8);
 
   // 1) CONFLITOS ATIVOS evoluem: escalam, sangram ou terminam
   //    O `quente` entra na deriva da intensidade: num mundo frio as guerras MINGUAM

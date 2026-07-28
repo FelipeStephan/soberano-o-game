@@ -39,7 +39,7 @@ import { abrirIndiceMundial } from './indiceMundial.js';
 import { statsVivos } from '../jogo/indiceMundial.js';
 import { diagnosticoQueda, obituarioDaQueda, textosDaQueda } from './relatorioQueda.js';
 import { tomDoFim } from '../jogo/destino.js';
-import { climaGlobal, quemReduziuConflito } from '../jogo/mundoVivo.js';
+import { climaGlobal, quemReduziuConflito, barometroMundial } from '../jogo/mundoVivo.js';
 // Socorro a aliado: o motor mora em jogo/coalizao.js, as telas em ui/aliadoSocorro.js.
 import { registrarSocorro, socorroDe, territoriosRetomaveis, expirarSocorros } from '../jogo/coalizao.js';
 import { ehAliado } from '../jogo/aliancas.js';
@@ -49,8 +49,9 @@ import { registrarFeito, fechouAno, placarDoAno, titulosDoAno, limparAno, jaFech
 import { abrirRelatorioAno } from './relatorioAno.js';
 // A DOUTRINA — a espinha da década (ver docs/ENREDO-E-CAMPANHA.md, Fase 1). Motor puro
 // no jogo/, as duas telas (as cinco cartas e o Legado) em ui/doutrina.js.
-import { temDoutrina, acumularAno, calcularLegado, rankingLegado } from '../jogo/doutrinas.js';
+import { temDoutrina, acumularAno, calcularLegado, rankingLegado, epitetoDaDecada } from '../jogo/doutrinas.js';
 import { abrirEscolhaDoutrina, blocoLegadoHTML, insigniaDoutrinaHTML } from './doutrina.js';
+import { abrirFimDaEra } from './fimAbertura.js';
 // Encomendas entre governos: motor puro + as telas.
 import { abrirEncomendas, cartaoPedidoRecebido, badgeEncomendas } from './encomendas.js';
 import { registrarPedidoRecebido, aplicarResposta, tickEncomendas, receberEntrega, aplicarPagamento } from '../jogo/encomendas.js';
@@ -81,7 +82,7 @@ import { ligarFaHover } from './faHover.js';
 import { liderDe } from '../dados/lideres.js';
 import { cartaoDe } from '../dados/registro.js';
 import { blocosDoIso } from '../dados/blocos.js';
-import { montarGlobo, tensaoGlobal } from './globo.js';
+import { montarGlobo } from './globo.js';
 import { ligarOnline } from './online.js';
 import { escaramucaAleatoria, pulsoAoVivo } from '../jogo/mundoVivo.js';
 import { criarTempoReal } from './tempoReal.js';
@@ -189,12 +190,11 @@ export function iniciarJogo(container, jogo, opts = {}) {
         <div class="stat" ${tipAttr('Para onde o seu governo está indo, somando tudo o que você fez até aqui. É a sentença que a História vai escrever se você continuar neste caminho.', { t: 'Destino', k: 'TRAJETÓRIA DO REINADO' })}><span class="rot">Destino${q('Para onde o seu governo está indo, somando tudo o que você fez até aqui. É a sentença que a História vai escrever se você continuar neste caminho.', { t: 'Destino', k: 'TRAJETÓRIA DO REINADO' })}</span><span class="val" id="t-destino">–</span></div>
         <button class="stat stat-btn brent-stat" id="t-brent-stat"><span class="rot">${ico('fuel', 11)} Brent</span><span class="val"><span id="t-brent">–</span> <span class="brent-mov" id="t-brent-mov"></span> <span class="stat-seta">${ico('chevron-down', 13)}</span></span></button>
         <button class="stat stat-btn crises-btn" id="t-focos-stat"><span class="rot">${ico('flame', 11)} Crises</span><span class="val"><span id="t-focos">–</span> <span class="stat-seta">${ico('chevron-down', 13)}</span></span></button>
-        ${/* O TERMÔMETRO DO MUNDO, permanente. O dono pediu as duas pontas: "seria legal
-             ter um aviso na tela quando não tiver conflito, tipo um agradecimento, e um
-             quando tiver muito conflito, de aviso". Ficou no topo e não como popup porque
-             clima não é evento, é ESTADO — e um estado que muda devagar precisa de um
-             lugar fixo pra onde o jogador possa olhar de novo. */''}
-        <div class="clima-visor" id="t-clima" data-nivel=""><span class="cl-ic"></span><span class="cl-txt"></span></div>
+        ${/* O TERMÔMETRO DO MUNDO NÃO FICA AQUI. Ele já existia — é o painel MUNDO AO
+             VIVO, sobre o globo. Eu tinha acrescentado um segundo visor neste ponto do
+             cabeçalho, e os dois mostravam números DIFERENTES da mesma coisa (um lia o
+             barômetro composto, o outro `temp_guerra` cru). O dono flagrou na hora.
+             Agora o nível, a seta e o motivo entram no painel que já estava lá. */''}
         <span class="espaco"></span>
         <div class="topo-acoes">
           <button class="ta-btn conselho" id="btn-conselho" ${tipAttr('Seu gabinete lê o cenário inteiro — economia, guerra, opinião pública — e diz o que faria no seu lugar, com o motivo de cada sugestão. Conselho de quem só enxerga os números; a decisão continua sendo sua.', { t: 'Conselheiro', k: 'GABINETE', cor: 'roxo' })}>${ico('brain', 15)}<span>CONSELHEIRO</span></button>
@@ -212,8 +212,9 @@ export function iniciarJogo(container, jogo, opts = {}) {
       <section class="globo" id="globo-wrap">
         <div class="globo-canvas" id="globo"></div>
 
-        <div class="mundo-vivo">
-          <div class="mv-cab"><span class="mv-dot"></span> MUNDO AO VIVO</div>
+        <div class="mundo-vivo" id="mv-painel" data-nivel="">
+          <div class="mv-cab"><span class="mv-dot"></span> MUNDO AO VIVO
+            <span class="mv-clima" id="mv-clima"></span></div>
           <div class="mv-linha"><span>Tensão global</span><b id="mv-tensao">–</b></div>
           <div class="mv-barra"><div class="mv-fill" id="mv-fill"></div></div>
           <div class="mv-rodape"><span id="mv-relogio">--:--:--</span><span id="mv-focos"></span></div>
@@ -451,20 +452,28 @@ export function iniciarJogo(container, jogo, opts = {}) {
     });
   });
 
-  // ── MUNDO AO VIVO: tensão global + relógio ───────────────────────────
+  // ── MUNDO AO VIVO: um visor só para o clima do planeta ───────────────
+  // Antes eram DUAS funções pintando duas caixas: esta (número + barra) e uma
+  // `pintarClima` que escrevia num visor separado no cabeçalho. Duas caixas, dois
+  // números, a mesma pergunta — e foi exatamente isso que o dono viu na tela. Agora é
+  // uma função só, um número só (`barometroMundial`), e o nível/seta/motivo entram
+  // como legenda DESTE painel, que é o lugar onde o jogador já procurava.
   function renderMundoVivo() {
-    const t = tensaoGlobal(jogo.estado);
     const el2 = container.querySelector('#mv-tensao');
     const fill = container.querySelector('#mv-fill');
     if (!el2) return;
+    let c = null;
+    try { c = climaGlobal(jogo.estado); } catch { /* segue com o número cru */ }
+    const t = c ? c.temp : barometroMundial(jogo.estado);
     el2.textContent = `${t}%`;
     el2.style.color = t >= 70 ? 'var(--perigo)' : t >= 40 ? 'var(--ambar)' : 'var(--verde)';
     fill.style.width = `${Math.max(2, t)}%`;
     // o gradiente é esticado pro tamanho do TRILHO: a cor na ponta = a temperatura real
     fill.style.backgroundSize = `${t > 0 ? (100 / t) * 100 : 100}% 100%`;
     fill.className = `mv-fill ${t >= 70 ? 'alto' : t >= 40 ? 'medio' : ''}`;
-    const focos = (jogo.estado.emGuerra?.length || 0) + (jogo.estado.conquistados?.filter((c) => c.insurgencia >= 60).length || 0);
+    const focos = (jogo.estado.emGuerra?.length || 0) + (jogo.estado.conquistados?.filter((c2) => c2.insurgencia >= 60).length || 0);
     container.querySelector('#mv-focos').textContent = focos ? `${focos} foco(s) quente(s)` : 'sem focos ativos';
+    if (c) pintarClima(c);
   }
   cadenciar(() => {
     const r = container.querySelector('#mv-relogio');
@@ -680,7 +689,7 @@ export function iniciarJogo(container, jogo, opts = {}) {
     // #9 — CAIXA CONGELADO PELO CONSELHO. A pena não some com o dinheiro: ela tira o
     // acesso. Sem marca no topo, o jogador olharia pro tesouro cheio e concluiria que
     // o jogo travou toda vez que uma ordem fosse recusada. O número fica lá, riscado.
-    pintarClima();
+    renderMundoVivo();   // o clima do planeta vive no painel do globo, num visor só
     // A DOUTRINA É PÚBLICA — e informação pública que só aparece na tela final não é
     // pública, é surpresa. O selo fica colado no nome do país, onde o jogador (e o
     // print que ele manda pro grupo) já olha.
@@ -2354,8 +2363,77 @@ export function iniciarJogo(container, jogo, opts = {}) {
     modal.querySelector('.desb-ok').addEventListener('click', () => { modal.remove(); onClose?.(); });
   }
 
+  // ═══════════════════════════════════════════════════════════════════
+  // O FIM DA PARTIDA — cinemática primeiro, dossiê depois
+  // ═══════════════════════════════════════════════════════════════════
+  // O PEDIDO DO DONO: "a tela de fim da era poderia ser um carrossel, uma coisa meio
+  // épica cinemática igual fizemos no conselho da ONU".
+  //
+  // O momento mais importante da partida entrava como um cartão de rolagem com
+  // dezesseis números — tudo o que havia de dramático chegava de uma vez e por baixo
+  // de uma barra de scroll. Agora as cinco cenas contam a história em ordem
+  // (parou → o que ficou de pé → o que você prometeu → quanto valeu → o veredito) e
+  // só então o dossiê completo entra, para quem quiser reler com calma.
+  //
+  // A cinemática NÃO substitui nada: o cartão é idêntico ao que já existia. Cena para
+  // sentir, cartão para conferir.
+  let cancelarCineFim = null;
   function mostrarFim(fim) {
     cancelarFlash();
+    tr?.parar();          // o mundo não bate por baixo de uma cinemática de 15s
+    cancelarCineFim?.();
+    let dados = null;
+    try { dados = dadosDaCinematica(fim); } catch { dados = null; }
+    // Sem dados (algum campo do estado quebrou), o dossiê entra direto. A cinemática
+    // é cerimônia — nunca pode ser o motivo de o jogador não ver o fim da partida.
+    if (!dados) { desenharDossieFim(fim); return; }
+    cancelarCineFim = abrirFimDaEra(dados, () => { cancelarCineFim = null; desenharDossieFim(fim); });
+  }
+
+  // O que a cinemática precisa saber, montado num lugar só. Ela não conhece `jogo`:
+  // recebe texto e número prontos, e por isso pode ser testada e reordenada sem
+  // arrastar meia HUD junto.
+  function dadosDaCinematica(fim) {
+    const e = jogo.estado;
+    const tom = tomDoFim(fim);
+    let leg = null; let rank = null; let epiteto = null;
+    try {
+      if (temDoutrina(e)) {
+        leg = calcularLegado(e, { destino: jogo.destino });
+        rank = rankingLegado(e, { meuLegado: leg.total, meuDestino: jogo.destino });
+        const pos = rank.linhas.find((l) => l.eu)?.pos || 1;
+        epiteto = epitetoDaDecada(leg.doutrina?.id, pos, rank.disputado);
+      }
+    } catch { leg = null; }
+    const apr = Math.round(e.aprovacao || 0);
+    return {
+      tom: fim.tipo, acento: tom.acento, tag: tom.tag, titulo: fim.titulo,
+      iso: e.iso || 'USA', pais: jogo.ficha.pais,
+      presidente: e.presidenteNome || jogo.ficha.presidente || '',
+      meses: jogo.turno,
+      numeros: {
+        territorio: e.territorio || 1, pib: dinheiro(e.pib),
+        aprovacao: `${apr}%`, aprovacaoBaixa: apr < 30,
+        forca: Math.round(forcaCombate(e.forcas)),
+      },
+      // A frase do balanço muda com o desfecho: elogiar o patrimônio de quem acabou
+      // de ser deposto soaria escárnio, e é exatamente o tipo de erro de tom que o
+      // dono já flagrou uma vez nesta mesma tela.
+      frasePatrimonio: fim.tipo === 'derrota'
+        ? 'É o país que fica para o próximo. Ele não vai perguntar como chegou assim.'
+        : 'É o país que você entrega — números fechados, sem arredondamento a seu favor.',
+      doutrina: leg?.doutrina || null,
+      legado: leg,
+      epiteto,
+      fraseLegado: leg
+        ? (rank?.disputado
+          ? `Feito da sua doutrina vale três vezes; o resto, uma. ${rank.campeao?.eu ? 'Ninguém nesta sala fez mais.' : `${rank.campeao?.nome} terminou na frente.`}`
+          : 'Feito da sua doutrina vale três vezes; o resto, uma. É a régua para a próxima década.')
+        : '',
+    };
+  }
+
+  function desenharDossieFim(fim) {
     const venceu = fim.tipo === 'vitoria';
     const e = jogo.estado;
     const diag = diagnosticoQueda(jogo, fim);   // POR QUE caiu — determinístico, sempre existe
@@ -2639,20 +2717,24 @@ export function iniciarJogo(container, jogo, opts = {}) {
   // caindo, estável) é o que transforma um número num movimento: 48 subindo é uma
   // história diferente de 48 caindo, e é a diferença que faz o jogador agir.
   const ICO_CLIMA = { paz: 'dove', calmo: 'sun', tenso: 'cloud-alert', fervendo: 'flame', beira: 'siren' };
+  const ROT_CLIMA = { paz: 'PAZ MUNDIAL', calmo: 'CALMO', tenso: 'TENSO', fervendo: 'FERVENDO', beira: 'NA BEIRA' };
   let ultimoNivelClima = null;
-  function pintarClima() {
-    const el = container.querySelector('#t-clima');
-    if (!el) return;
-    let c;
-    try { c = climaGlobal(jogo.estado); } catch { return; }
-    el.dataset.nivel = c.nivel;
+  // Recebe o clima JÁ CALCULADO por quem chamou (renderMundoVivo). Calcular de novo
+  // aqui seria pedir ao jogo duas leituras do mesmo instante — e é assim que dois
+  // visores começam a discordar.
+  function pintarClima(c) {
+    const painel = container.querySelector('#mv-painel');
+    const el = container.querySelector('#mv-clima');
+    if (!el || !c) return;
+    painel.dataset.nivel = c.nivel;
     el.dataset.seta = c.seta;
-    el.querySelector('.cl-ic').innerHTML = ico(ICO_CLIMA[c.nivel] || 'thermometer', 13);
-    el.querySelector('.cl-txt').innerHTML = `<b>${c.nivel === 'paz' ? 'PAZ MUNDIAL' : `TENSÃO ${Math.round(c.temp)}`}</b>`
+    el.innerHTML = `${ico(ICO_CLIMA[c.nivel] || 'thermometer', 11)}<b>${ROT_CLIMA[c.nivel] || '—'}</b>`
       + `<i class="cl-seta ${c.seta}">${c.seta === 'caindo' ? '▼' : c.seta === 'subindo' ? '▲' : '—'}</i>`;
-    el.setAttribute('data-tip', `${c.texto}\n\n${c.motivo}`);
-    el.setAttribute('data-tip-t', 'Clima global');
-    el.setAttribute('data-tip-k', c.nivel.toUpperCase());
+    // O tooltip vai no PAINEL inteiro: a legenda é pequena demais para ser um alvo de
+    // mouse, e o que o jogador quer explicado é o número grande ao lado dela.
+    painel.setAttribute('data-tip', `${c.texto}\n\n${c.motivo}`);
+    painel.setAttribute('data-tip-t', 'Clima global');
+    painel.setAttribute('data-tip-k', (ROT_CLIMA[c.nivel] || c.nivel).toUpperCase());
 
     // A VIRADA É QUE VIRA NOTÍCIA, não o estado. Publicar "o mundo está calmo" toda
     // batida seria ruído; publicar "o mundo ACABOU de chegar à paz" é um evento — e

@@ -217,21 +217,12 @@ function tooltip(estado, f, selecionado = false) {
 }
 function round2(n) { return Math.round(n * 100) / 100; }
 
-export function tensaoGlobal(estado) {
-  const rels = Object.keys(estado).filter((k) => k.startsWith('rel_'));
-  const media = rels.length ? rels.reduce((a, k) => a + estado[k], 0) / rels.length : 0;
-  // O mundo NUNCA está em paz total — há sempre uma Ucrânia, um Oriente Médio. Uma base
-  // de tensão + o que o Mundo Vivo cospe (guerras entre NPCs, pandemias) somam ao seu
-  // próprio clima de guerra. Atacar um país soberano de peso puxa isto pra cima de
-  // verdade: temp_guerra sobe (escalado pela importância do alvo, ver jogo/guerra.js),
-  // você entra em `emGuerra`, e a relação com o bloco dele despenca.
-  const BASE = 14;
-  const npc = (estado.conflitosNPC || []).reduce((a, c) => a + 3 + (c.intensidade || 40) / 20, 0);
-  const pand = (estado.pandemias?.length || 0) * 4;
-  const t = BASE + (estado.temp_guerra * 0.6) + Math.max(0, -media) * 0.5
-    + (estado.emGuerra?.length || 0) * 9 + npc + pand;
-  return Math.max(0, Math.min(100, Math.round(t)));
-}
+// A TEMPERATURA DO MUNDO MUDOU DE CASA: virou `barometroMundial` em jogo/mundoVivo.js.
+// Ela nunca foi desenho de planeta — é regra de jogo, e estava aqui por acidente. O
+// preço de deixá-la neste arquivo foi concreto: `climaGlobal` acabou classificando
+// OUTRO número (temp_guerra), e a tela passou a mostrar duas "tensões globais"
+// diferentes ao mesmo tempo. Com uma fonte só, rótulo e percentual não têm como
+// discordar. Quem precisa do número importa de mundoVivo.js.
 
 export async function montarGlobo(container, jogo, {
   onPaisClick, onEstadoClick, onPaisSelecionado, onAlvoEstado, onAlvoMar, onDistribuir, onIntervir,

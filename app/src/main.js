@@ -19,6 +19,7 @@ import './estilo-onu-abertura.css';
 import './estilo-relatorio.css';
 import './estilo-aliado.css';
 import './estilo-doutrina.css';
+import './estilo-fimera.css';
 import { mostrarInicio } from './ui/inicio.js';
 import { iniciarJogo } from './ui/jogo.js';
 import { Jogo } from './jogo/motor.js';

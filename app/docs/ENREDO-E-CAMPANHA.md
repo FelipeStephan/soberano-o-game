@@ -303,6 +303,10 @@ Legado no fim (reusa `feitos.js`) + tela final com campeão e coroas.
 >   doutrina. Punição com desconto não é punição.
 > - O relógio local pausa enquanto as cartas estão abertas (`.dt-over` entrou na mesma
 >   lista de `ui/tempoReal.js` que já pausava para modal e cena).
+> - O fim da partida abre com uma **cinemática de 15s** em cinco cenas
+>   (`ui/fimAbertura.js`), no mesmo chassi visual da abertura do Conselho — o dossiê
+>   completo entra depois dela, inalterado. Cena para sentir, cartão para conferir.
+>   Ela serve aos três desfechos: o tom (cor, selo, texto) pergunta a `tomDoFim`.
 > - A calibragem está no comentário de `VALOR` em `doutrinas.js`: uma década ativa
 >   fecha entre 200 e 300, na mesma ordem de grandeza do Destino, para que nenhuma das
 >   duas metades da conta vire decoração.
