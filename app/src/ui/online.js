@@ -21,6 +21,8 @@ import { offsetServidor } from '../net/lobby.js';
 import { estadosDe } from '../jogo/territorio.js';
 import { aliancaCom, ehAliadoMilitar, quebrarPorTraicao, sincronizarBlocos, aliancaDe, registrarAliancaConhecida, ehMilitar } from '../jogo/aliancas.js';
 import { aplicarZonaMorta, marcarNacaoMorta } from '../jogo/nuclear.js';
+// O VOO DA OGIVA: o efeito acontece no IMPACTO, nunca na chegada do bilhete.
+import { faseDoVoo, custoInterceptacao, reforcoDe, FIM_DA_JANELA } from '../jogo/voo.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const nomeDe = (iso) => PAISES[iso]?.nome || iso;
@@ -239,22 +241,17 @@ export function ligarOnline(jogo, net, hooks) {
     // lançou), então cada cliente aplica a MESMA função do motor — uma verdade só.
     // Sem `return`: o fluxo normal abaixo ainda precisa desenhar a ogiva no globo e
     // alertar o alvo, que é outra coisa.
-    if (ev.tipo === 'nuclear' && ev.dados?.zonaMorta && ev.dados?.iso) {
-      const alvoIso = ev.dados.iso;
-      const porIso = ev.dePais || ev.dados.porIso || null;
-      const porNome = ev.deNome || ev.dados.porNome || null;
-      const zona = aplicarZonaMorta(jogo.estado, alvoIso, { porIso, porNome });
-      const morte = marcarNacaoMorta(jogo.estado, alvoIso, { porIso, porNome });
-      if (zona.inedito) {
-        jogo._empilharFeed?.([...(zona.linhas || []), ...(morte.linhas || [])].map((t) => ({
-          tipo: 'sistema', handle: '☢ ZONA MORTA', texto: t, cor: '#78e65a',
-        })));
-        hooks.renderFeed?.();
-      }
-      const gz = hooks.globoCtrl?.();
-      Promise.resolve(gz?.carregarPais?.(alvoIso)).then(() => gz?.atualizar?.()).catch(() => gz?.atualizar?.());
-      hooks.atualizar?.();
-    }
+    // ── A OGIVA: LANÇAMENTO E IMPACTO SÃO DOIS BILHETES ─────────────
+    // O de lançamento não carrega efeito nenhum — carrega o INSTANTE do impacto, e
+    // abre os doze segundos de voo. O efeito entra só no bilhete de impacto (ou no
+    // fallback por relógio, se ele se perder). Ver ogivaLancada/aplicarImpacto.
+    if (ev.tipo === 'nuclear' && ev.dados?.emVoo) { ogivaLancada(ev); return; }
+    if (ev.tipo === 'nuclear_impacto') { aplicarImpacto(ev.dados || {}); return; }
+    // O ALVO COMPROU INTERCEPTAÇÃO e o bilhete voltou para quem lançou. Quem resolve o
+    // dado é o lançador (autoridade num lugar só), e ele ainda não rolou.
+    if (ev.tipo === 'nuclear_defesa') { jogo._reforcoNuclear?.(ev.dados?.id, Number(ev.dados?.reforco)); return; }
+    // BILHETE ANTIGO (cliente não atualizado na sala): aplica direto, sem voo.
+    if (ev.tipo === 'nuclear' && ev.dados?.zonaMorta && ev.dados?.iso) { aplicarImpacto(ev.dados); }
     // #4.1 — O OUTRO LADO SAIU DA GUERRA. Retirada é decisão dele, mas o fim da guerra
     // é decisão dos dois: as tropas dele pararam, as suas não pararam sozinhas. Você
     // escolhe encerrar (o conflito some do seu mapa) ou continuar em cima de um inimigo
@@ -316,7 +313,9 @@ export function ligarOnline(jogo, net, hooks) {
       const para = ev.dados?.para || (ev.alvo ? g.ondeEsta?.(ev.alvo) : null);
       if (de && para) {
         g.desenharLinha?.(para, 'ataque', 9000, de);
-        g.salvaMisseis?.(para, ev.tipo === 'nuclear' ? 1 : 3, de, { som: ev.alvo === meuIso });
+        // Nuclear tem arco próprio (lancarOgiva, doze segundos) — a salva genérica por
+        // cima dele desenharia dois mísseis para o mesmo lançamento.
+        if (ev.tipo !== 'nuclear') g.salvaMisseis?.(para, 3, de, { som: ev.alvo === meuIso });
         g.ondaRadar?.(para, { cor: ev.tipo === 'nuclear' ? 0xff3b5c : 0xffb020, max: 45 });
       }
     }
@@ -344,26 +343,11 @@ export function ligarOnline(jogo, net, hooks) {
             onFim: () => hooks.atualizar?.(),
           });
         }
-      } else if (ev.tipo === 'nuclear') {
-        // JANELA DE REAÇÃO: a ogiva voa ~6s com contagem antes do clarão registrar.
-        contagemIncoming({
-          titulo: '☢ OGIVA A CAMINHO',
-          sub: `${ev.deNome || nomeDe(ev.dePais)} lançou uma ogiva contra você. Impacto iminente.`,
-          segundos: 6,
-        }, () => {
-          alertaUrgente({ titulo: '☢ ATAQUE NUCLEAR CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: true });
-          // #6.2 — VOCÊ FOI APAGADO. O motor já zerou tudo (forças, guarnições, guerras)
-          // e gravou `estado.nacaoMorta` com o retrato do que você era. Aqui a UI precisa
-          // PARAR de fingir que você ainda governa: quem toma essa decisão é o ui/jogo.js,
-          // que tem o relógio e a tela de fim na mão. É a mesma porta do #11 — a sala
-          // continua, e você pode assumir outra nação nela.
-          if (ev.dados?.zonaMorta && jogo.estado.nacaoMorta) {
-            hooks.aoSerApagado?.({
-              por: ev.dePais, porNome: ev.deNome || nomeDe(ev.dePais),
-              registro: jogo.estado.nacaoMorta,
-            });
-          }
-        });
+      } else if (ev.tipo === 'nuclear' || ev.tipo === 'nuclear_impacto') {
+        // NÃO FAZ NADA AQUI. O alarme com contagem, a janela de interceptação e o
+        // efeito são de `ogivaLancada`/`aplicarImpacto`, que rodam antes deste bloco
+        // e já deram `return`. Este ramo existe só para o alerta genérico de ataque
+        // não pipocar por cima do alarme nuclear, que é muito mais informativo.
       } else if (ev.tipo === 'naval') {
         alertaUrgente({ titulo: 'ATAQUE NAVAL CONTRA VOCÊ', texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} atacou você.`, tom: 'ataque', comSom: false });
         // #3.2 — ATAQUE PELO MAR PEDE OUTRA DEFESA. Não houve declaração nem fronteira
@@ -628,6 +612,173 @@ export function ligarOnline(jogo, net, hooks) {
       if (restante <= 0) { clearInterval(incomingTick); el.remove(); onFim?.(); return; }
       pinta();
     }, 1000);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // A OGIVA EM VOO — o formato online (ver jogo/voo.js)
+  // ═══════════════════════════════════════════════════════════════════
+  // BUG QUE ISTO CONSERTA, e que ninguém tinha notado: o cliente do alvo aplicava a
+  // ZONA MORTA no instante em que o bilhete chegava, e só então desenhava uma salva
+  // genérica de mísseis por cima. Ou seja — o país já estava apagado no mapa enquanto
+  // o míssil "voava", e a contagem regressiva de 6s que existia era teatro puro: ela
+  // não segurava nada, porque o efeito já tinha acontecido.
+  //
+  // Agora o bilhete de LANÇAMENTO não carrega efeito nenhum. Ele carrega o INSTANTE do
+  // impacto. Cada cliente desenha os doze segundos de voo com o mesmo relógio, e o
+  // efeito só entra quando chega o bilhete de IMPACTO — ou, se ele se perder, quando o
+  // relógio local cruza a marca (o `fallback` lá embaixo). Duas portas para o mesmo
+  // resultado, porque num relay o bilhete pode simplesmente não vir.
+  function ogivaLancada(ev) {
+    const d = ev.dados || {};
+    const alvoIso = d.iso;
+    if (!alvoIso) return;
+    const souOAlvo = alvoIso === meuIso;
+    const restante = Math.max(0, (Number(d.impactoEm) || 0) - Date.now());
+    const dur = Number(d.duracaoMs) || 12000;
+
+    // ── QUEM CHEGOU TARDE NÃO VÊ CINEMA ──────────────────────────────
+    // Entrou na sala depois, ou a aba estava em segundo plano: um cogumelo de um
+    // lançamento de três minutos atrás confunde mais do que informa. Aplica o
+    // resultado seco e segue.
+    if (restante < 800) { aplicarImpacto({ ...d, zonaMorta: d.zonaMorta !== false }); return; }
+
+    // O ARCO NO MAPA, com a MESMA duração para todo mundo. `semCamera` para quem é só
+    // plateia: arrastar a câmera de quem estava no meio de outra coisa é sequestro de
+    // tela, não cinema. Quem é o alvo tem a câmera puxada — ele precisa ver de onde vem.
+    const g = hooks.globoCtrl?.();
+    if (g?.lancarOgiva && d.para) {
+      g.lancarOgiva(d.para, d.de || null, null, {
+        duracaoMs: restante, interceptado: false, semCamera: !souOAlvo,
+      });
+    }
+
+    if (souOAlvo) {
+      alarmeIncoming(ev, d, restante);
+    } else {
+      // Terceiros: um aviso curto, sem contagem. A ogiva não é deles, mas o tabu
+      // quebrado é de todo mundo — e no Ato III essa informação decide votos na ONU.
+      alertaUrgente({
+        titulo: '☢ LANÇAMENTO NUCLEAR DETECTADO',
+        texto: `${ev.deNome || nomeDe(ev.dePais)} lançou uma ogiva contra ${nomeDe(alvoIso)}. Os radares do mundo inteiro estão vendo.`,
+        tom: 'ataque', comSom: true,
+      });
+    }
+
+    // FALLBACK: se o bilhete de impacto não chegar (o lançador caiu, o pacote se
+    // perdeu), o resultado entra pelo relógio local. Sem isto, uma desconexão no
+    // segundo 11 deixaria um país permanentemente "em voo" no mapa dos outros.
+    clearTimeout(esperaImpacto[d.id]);
+    esperaImpacto[d.id] = setTimeout(() => {
+      if (impactosVistos.has(d.id)) return;
+      aplicarImpacto({ ...d, zonaMorta: true });
+    }, restante + 2500);
+  }
+
+  // O bilhete de impacto: agora sim o efeito. `id` desduplica contra o fallback acima.
+  const impactosVistos = new Set();
+  const esperaImpacto = {};
+  function aplicarImpacto(d) {
+    if (!d?.iso) return;
+    if (d.id) { if (impactosVistos.has(d.id)) return; impactosVistos.add(d.id); }
+    clearTimeout(esperaImpacto[d.id]);
+    fecharAlerta();
+
+    if (d.interceptado) {
+      alertaUrgente({
+        titulo: '🛡 OGIVA ABATIDA',
+        texto: d.iso === meuIso
+          ? 'A ogiva foi interceptada antes de tocar o solo. Desta vez o escudo aguentou.'
+          : `A ogiva contra ${nomeDe(d.iso)} foi abatida no ar.`,
+        tom: 'aviso', comSom: true,
+      });
+      return;
+    }
+
+    // A ZONA MORTA — a mesma função do motor que o lançador rodou. Uma verdade só.
+    const zona = aplicarZonaMorta(jogo.estado, d.iso, { porIso: d.porIso || null, porNome: d.porNome || null });
+    const morte = marcarNacaoMorta(jogo.estado, d.iso, { porIso: d.porIso || null, porNome: d.porNome || null });
+    if (zona.inedito) {
+      jogo._empilharFeed?.([...(zona.linhas || []), ...(morte.linhas || [])].map((t) => ({
+        tipo: 'sistema', handle: '☢ ZONA MORTA', texto: t, cor: '#78e65a',
+      })));
+      hooks.renderFeed?.();
+    }
+    const gz = hooks.globoCtrl?.();
+    Promise.resolve(gz?.carregarPais?.(d.iso)).then(() => gz?.atualizar?.()).catch(() => gz?.atualizar?.());
+    hooks.atualizar?.();
+
+    if (d.iso === meuIso) {
+      alertaUrgente({ titulo: '☢ ATAQUE NUCLEAR CONTRA VOCÊ',
+        texto: `${d.porNome || 'Uma potência'} apagou o seu país do mapa.`, tom: 'ataque', comSom: true });
+      if (jogo.estado.nacaoMorta) {
+        hooks.aoSerApagado?.({ por: d.porIso, porNome: d.porNome, registro: jogo.estado.nacaoMorta });
+      }
+    }
+  }
+
+  // ── O ALARME DO ALVO — a janela de reação ────────────────────────────
+  // Doze segundos de espera passiva é um atraso, não uma cena. Aqui o alvo tem UMA
+  // jogada: gastar caixa numa interceptação de emergência. O bilhete volta para quem
+  // lançou, que ainda não rolou o dado — e é ele quem resolve, mantendo a autoridade
+  // num lugar só (mesma regra do resto do jogo: a batalha resolve no cliente de quem
+  // ataca). Se o bilhete não chegar antes da reentrada, vale o cálculo original.
+  // Quem hesitou, perdeu a janela — e num jogo de rede isso é honesto.
+  function alarmeIncoming(ev, d, restanteMs) {
+    fecharAlerta();
+    const base = Number(d.chanceIntercept) || 0;
+    const custo = custoInterceptacao(jogo.estado, base);
+    const ganho = reforcoDe(base);
+    const el = document.createElement('div');
+    el.className = 'onl-alerta urgente incoming nk-incoming';
+    el.style.setProperty('--oc', '#ff3b5c');
+    document.body.appendChild(el);
+    try { tocarEfeito('alerta-nuclear', { volume: 0.6 }); } catch { /* sem áudio */ }
+
+    const t0 = Date.now();
+    let comprado = false;
+    const pinta = () => {
+      const passou = Date.now() - t0;
+      const pct = Math.min(1, passou / restanteMs);
+      const seg = Math.max(0, Math.ceil((restanteMs - passou) / 1000));
+      const f = faseDoVoo(pct);
+      // A janela FECHA na reentrada: depois dela o interceptador não teria tempo de
+      // subir. É o que impede o alvo de esperar 11,9s e comprar a salvação no último
+      // frame — a decisão precisa ser tomada sob pressão, ou não é decisão.
+      const janelaAberta = pct < FIM_DA_JANELA && !comprado;
+      const podePagar = (jogo.estado.tesouro || 0) >= custo;
+      el.innerHTML = `
+        <div class="onl-cab">${ico('radiation', 15)} <b>OGIVA A CAMINHO</b></div>
+        <div class="onl-txt">${esc(ev.deNome || nomeDe(ev.dePais))} lançou uma ogiva contra você. ${esc(f.rot)}.</div>
+        <div class="nk-in-trilho"><i style="width:${(pct * 100).toFixed(1)}%"></i></div>
+        <div class="onl-contagem">IMPACTO EM <b>${seg}s</b></div>
+        ${comprado
+          ? `<div class="nk-in-ok">${ico('shield-check', 13)} INTERCEPTADORES NO AR — o resultado sai no impacto.</div>`
+          : janelaAberta
+            ? `<button class="nk-in-btn" id="nk-in-btn" ${podePagar ? '' : 'disabled'}>
+                 ${ico('shield', 14)} <span>INTERCEPTAÇÃO DE EMERGÊNCIA</span>
+                 <i>${podePagar ? `US$ ${custo} tri · +${Math.round(ganho * 100)} p.p. de chance` : 'caixa insuficiente'}</i>
+               </button>`
+            : `<div class="nk-in-tarde">${ico('clock', 12)} A janela de interceptação fechou.</div>`}`;
+      const b = el.querySelector('#nk-in-btn');
+      if (b) b.addEventListener('click', () => {
+        if (comprado || (jogo.estado.tesouro || 0) < custo) return;
+        comprado = true;
+        jogo.estado.tesouro = Math.round(((jogo.estado.tesouro || 0) - custo) * 100) / 100;
+        // O bilhete vai DIRETO para quem lançou: é ele que resolve o dado.
+        net.evento('nuclear_defesa', ev.dePais || null,
+          `${jogo.ficha?.pais || meuIso} acionou interceptação de emergência.`,
+          { id: d.id, reforco: ganho });
+        try { tocarEfeito('radar', { volume: 0.6 }); } catch { /* sem áudio */ }
+        hooks.atualizar?.();
+        pinta();
+      });
+    };
+    pinta();
+    clearInterval(incomingTick);
+    incomingTick = setInterval(() => {
+      if (Date.now() - t0 >= restanteMs) { clearInterval(incomingTick); el.remove(); return; }
+      pinta();
+    }, 200);
   }
 
   // ── FROTAS DE OUTROS JOGADORES no seu globo ─────────────────────────

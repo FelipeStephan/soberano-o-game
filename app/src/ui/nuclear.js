@@ -6,6 +6,9 @@
 // com trava — porque o jogo quer que você HESITE. O horror de depois começa aqui,
 // na fricção de antes.
 import { avaliarOgiva, podeDispararOgiva, dispararOgiva, manchetesNucleares, partidaSemNucleares } from '../jogo/nuclear.js';
+// O VOO DE DOZE SEGUNDOS (pedido do dono: "ter um tempo pra bomba cair e ver no mapa
+// ela"). O motor puro mora em jogo/voo.js — aqui fica só o palco.
+import { DUR_VOO_MS, faseDoVoo, registrarVoo, removerVoo, decidirAbate } from '../jogo/voo.js';
 import { bandeira, ISO2_DE } from '../dados/imagens.js';
 import { PAISES } from '../dados/paises.js';
 import { sirene, flashTela } from './efeitos.js';
@@ -94,6 +97,19 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
   });
 
   // ── A EXECUÇÃO ────────────────────────────────────────────────────────
+  // O QUE MUDOU AQUI (pedido do dono): a ogiva agora VOA por doze segundos visíveis em
+  // vez de ~2,8s com a câmera parada no alvo. E, mais importante, o RESULTADO deixa de
+  // ser decidido no instante do lançamento: ele é resolvido no impacto, para que a
+  // interceptação de emergência que o alvo pode comprar durante o voo ainda valha.
+  //
+  // A ordem importa e é o coração do formato online (ver jogo/voo.js):
+  //   1. avisa a sala IMEDIATAMENTE, com o INSTANTE do impacto — todos veem o mesmo voo;
+  //   2. anima os doze segundos;
+  //   3. só então aplica o efeito, com o dado rolado agora.
+  // Fazer o efeito primeiro (como era) significava o país já estar apagado no mapa do
+  // alvo enquanto o míssil dele ainda estava no ar.
+  let reforcoDefesa = 0;   // preenchido se o alvo comprar interceptação durante o voo
+
   async function executar() {
     // fecha o painel: a partir daqui o palco é o globo — com trilha própria
     // (a música de fundo abaixa sozinha enquanto a da bomba toca).
@@ -101,41 +117,71 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
     modal.classList.add('lancando');
     modal.querySelector('.nuke-painel').style.display = 'none';
 
-    const relato = dispararOgiva(jogo.estado, iso, { alvoHumano });
-    // O motor recusou (partida sem nucleares, arsenal vazio, nação já apagada). Nada
-    // voa, nada ecoa na sala — só a explicação. Sem esta saída, o resto da função
-    // encenaria um cogumelo por cima de um lançamento que nunca aconteceu.
-    if (relato.bloqueado) {
+    // A TRAVA VEM ANTES DO VOO. Doze segundos de cinema por cima de um lançamento que
+    // o motor vai recusar é a pior mentira que esta tela poderia contar.
+    if (partidaSemNucleares(jogo.estado) || (jogo.estado.ogivas || 0) <= 0) {
       modal.classList.remove('lancando');
       const p = modal.querySelector('.nuke-painel');
-      if (p) { p.style.display = ''; p.innerHTML = `<div class="nk-bloqueio">${ico('ban', 16)} ${esc(relato.motivo)}</div>`; }
+      const motivo = partidaSemNucleares(jogo.estado)
+        ? 'Esta partida foi criada sem armas nucleares. Não há ogiva a lançar.'
+        : 'Sem ogivas operacionais no arsenal.';
+      if (p) { p.style.display = ''; p.innerHTML = `<div class="nk-bloqueio">${ico('ban', 16)} ${esc(motivo)}</div>`; }
       setTimeout(sair, 2600);
       return;
     }
 
-    // MUNDO ÚNICO: o lançamento nuclear ecoa na sala inteira — todos veem a ogiva.
-    // #6.1 — O PACOTE PRECISA BASTAR. Antes ia só a coordenada e o `interceptado`, e
-    // o outro lado tinha de adivinhar o resto: quem morreu, se sobrou país. Agora vai
-    // tudo que reconstrói a MESMA cratera em qualquer cliente sem inferência —
-    // `zonaMorta` diz se houve impacto de verdade, `iso` diz onde, `de/para` desenham
-    // o arco, `alvoHumano` avisa que quem saiu do mapa era gente.
+    const de = globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA') || null;
+    const para = feature?.properties ? { lat: feature.properties.LABEL_Y, lng: feature.properties.LABEL_X } : null;
+    const voo = {
+      id: `nk_${jogo.estado.iso || 'X'}_${iso}_${Date.now()}`,
+      de: jogo.estado.iso || null, alvo: iso, alvoNome: av.nome,
+      porNome: jogo.ficha?.presidente || jogo.ficha?.pais || null,
+      impactoEm: Date.now() + DUR_VOO_MS, duracaoMs: DUR_VOO_MS,
+      chanceIntercept: av.chanceIntercept, alvoHumano,
+      coordDe: de, coordPara: para,
+    };
+    registrarVoo(jogo.estado, voo);
+
+    // 1 · A SALA SABE AGORA. O bilhete leva o INSTANTE do impacto, não "12 segundos":
+    // quem receber com 300ms de atraso vê 11,7s de voo e o clarão cai na mesma hora
+    // para todo mundo. Leva também as coordenadas, para o arco ser o mesmo arco.
     jogo._relayOnline?.('nuclear', iso,
-      `${jogo.ficha?.presidente || jogo.ficha?.pais || 'Um jogador'} LANÇOU UMA OGIVA NUCLEAR contra ${av.nome}.`,
+      `${voo.porNome || 'Um jogador'} LANÇOU UMA OGIVA NUCLEAR contra ${av.nome}.`,
       {
-        iso,
-        zonaMorta: !relato.interceptado,
-        interceptado: !!relato.interceptado,
-        alvoHumano,
-        porIso: jogo.estado.iso || null,
-        porNome: jogo.ficha?.presidente || jogo.ficha?.pais || null,
-        de: globoCtrl?.ondeEsta?.(jogo.estado.iso || 'USA') || null,
-        para: feature?.properties ? { lat: feature.properties.LABEL_Y, lng: feature.properties.LABEL_X } : null,
+        id: voo.id, iso, emVoo: true,
+        impactoEm: voo.impactoEm, duracaoMs: DUR_VOO_MS,
+        chanceIntercept: av.chanceIntercept,
+        alvoHumano, porIso: jogo.estado.iso || null, porNome: voo.porNome,
+        de, para,
       });
 
-    // o 3D: a ogiva sobe, reentra e — se o escudo do alvo for bom — é ABATIDA no ar.
-    // Interceptada: clarão ciano no céu + radar defensivo gigante, sem clarão de tela.
-    // Não interceptada: cogumelo, sirene e o mundo apagando junto.
-    globoCtrl?.lancarOgiva?.(feature, null, () => {
+    // 2 · O VOO. `interceptado` é uma FUNÇÃO: ela só roda quando o míssil chega ao
+    // ponto de reentrada, e é aí que o reforço comprado pelo alvo entra na conta.
+    let veredito = null;
+    const decidir = () => {
+      veredito = decidirAbate(av.chanceIntercept, reforcoDefesa);
+      return veredito.interceptado;
+    };
+    globoCtrl?.lancarOgiva?.(feature, null, null, {
+      duracaoMs: DUR_VOO_MS,
+      interceptado: decidir,
+      aoInterceptar: () => { sirene({ ruim: true }); },
+    });
+    const painelVoo = abrirPainelVoo(voo);
+    await espera(DUR_VOO_MS + 250);
+    painelVoo?.fechar?.();
+    removerVoo(jogo.estado, voo.id);
+
+    // Se o míssil nunca chegou à reentrada (aba em segundo plano congela o
+    // requestAnimationFrame e a animação não avança), o veredito não foi rolado. Rola
+    // aqui: o resultado não pode depender de o jogador ter deixado a aba na frente.
+    if (!veredito) veredito = decidirAbate(av.chanceIntercept, reforcoDefesa);
+
+    // 3 · O EFEITO, agora. Mesma função de sempre — só com o dado já rolado.
+    const relato = dispararOgiva(jogo.estado, iso, { alvoHumano, forcarIntercepcao: veredito.interceptado });
+    if (relato.bloqueado) { fechar(); onFim?.(); return; }
+
+    if (!veredito.interceptado) {
       sirene({ ruim: true });
       flashTela(true);
       // um clarão branco em tela cheia no instante da detonação
@@ -143,13 +189,16 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
       clarao.className = 'nk-clarao';
       document.body.appendChild(clarao);
       setTimeout(() => clarao.remove(), 1400);
-    }, {
-      interceptado: relato.interceptado,
-      aoInterceptar: () => { sirene({ ruim: true }); },
-    });
+    }
 
-    // enquanto o míssil voa (~4s), deixa o globo respirar
-    await espera(6500);
+    // O RESULTADO ecoa em separado do lançamento: a sala precisa saber se a ogiva
+    // chegou ao chão, e essa informação só passa a existir agora.
+    jogo._relayOnline?.('nuclear_impacto', iso,
+      veredito.interceptado
+        ? `A ogiva contra ${av.nome} foi ABATIDA no ar.`
+        : `A ogiva atingiu ${av.nome}.`,
+      { id: voo.id, iso, zonaMorta: !veredito.interceptado, interceptado: !!veredito.interceptado,
+        alvoHumano, porIso: jogo.estado.iso || null, porNome: voo.porNome, chance: veredito.chance });
 
     // o mundo grita: manchetes nucleares entram no feed
     for (const m of manchetesNucleares(jogo.estado, relato)) {
@@ -165,6 +214,41 @@ export function abrirNuclear(feature, jogo, { onFim, globoCtrl } = {}) {
     fechar();
     mostrarDesfecho(relato);
   }
+
+  // ── O PAINEL DE VOO (de quem lançou) ─────────────────────────────────
+  // Quem aperta o botão também precisa TESTEMUNHAR. Antes o lançador ficava olhando um
+  // globo mudo, sem saber o que estava acontecendo nem quanto faltava. Este painel não
+  // tem botão nenhum, de propósito: a chave já girou, ele é a consequência — não uma
+  // segunda chance de decidir.
+  function abrirPainelVoo(voo) {
+    const el = document.createElement('div');
+    el.className = 'nk-voo';
+    document.body.appendChild(el);
+    const t0 = Date.now();
+    const pinta = () => {
+      const pct = Math.min(1, (Date.now() - t0) / voo.duracaoMs);
+      const f = faseDoVoo(pct);
+      const seg = Math.max(0, Math.ceil((voo.duracaoMs - (Date.now() - t0)) / 1000));
+      el.innerHTML = `
+        <div class="nk-voo-cab">${ico('radiation', 14)} <b>OGIVA EM VOO</b>
+          <span>${esc(String(voo.alvoNome || voo.alvo).toUpperCase())}</span></div>
+        <div class="nk-voo-fase">${esc(f.rot)}</div>
+        <div class="nk-voo-txt">${esc(f.txt)}</div>
+        <div class="nk-voo-trilho"><i style="width:${(pct * 100).toFixed(1)}%"></i></div>
+        <div class="nk-voo-conta">IMPACTO EM <b>${seg}s</b></div>`;
+    };
+    pinta();
+    const t = setInterval(pinta, 120);
+    return { fechar: () => { clearInterval(t); el.classList.add('saindo'); setTimeout(() => el.remove(), 400); } };
+  }
+
+  // O ALVO COMPROU INTERCEPTAÇÃO durante o voo. O bilhete dele chega pelo relay
+  // (ui/online.js) e é incorporado à decisão que ainda não foi tomada. Se chegar depois
+  // da reentrada, o `veredito` já existe e este valor simplesmente não é usado — que é
+  // exatamente a regra da janela: quem hesitou, perdeu.
+  jogo._reforcoNuclear = (id, valor) => {
+    if (Number.isFinite(valor)) reforcoDefesa = Math.max(reforcoDefesa, Number(valor));
+  };
 
   // ── O DESFECHO — a tela do que você fez ──────────────────────────────
   function mostrarDesfecho(relato) {

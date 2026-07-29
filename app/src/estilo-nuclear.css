@@ -83,3 +83,45 @@
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
 }
 .nkd-reversivel b { color: #fff; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   A OGIVA EM VOO — os doze segundos (ver jogo/voo.js)
+   ═══════════════════════════════════════════════════════════════════════
+   Dois visores, um para cada lado da bomba. O de quem LANÇOU não tem botão nenhum:
+   a chave já girou, ele é consequência. O de quem RECEBE tem exatamente um, e ele
+   fecha na reentrada — a decisão precisa ser tomada sob pressão, ou não é decisão.
+   Os dois ficam FORA do centro da tela de propósito: o herói destes doze segundos é
+   o arco cruzando o globo, não a caixa de texto. */
+
+.nk-voo { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); z-index: var(--z-modal);
+  width: min(92%, 420px); display: flex; flex-direction: column; gap: 6px; padding: 14px 18px;
+  pointer-events: none; text-align: center;
+  background: linear-gradient(180deg, rgba(30,6,12,.94), rgba(10,4,8,.94));
+  box-shadow: inset 0 0 0 1px rgba(255,59,92,.45), 0 24px 60px -24px #000;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  animation: subir .4s ease both; }
+.nk-voo.saindo { opacity: 0; transition: opacity .4s ease; }
+.nk-voo-cab { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--perigo); }
+.nk-voo-cab b { font-family: var(--disp); font-size: 13px; letter-spacing: .1em; }
+.nk-voo-cab span { font-family: var(--mono); font-size: 8px; letter-spacing: .12em; color: var(--fraco); }
+.nk-voo-fase { font-family: var(--mono); font-size: 9px; letter-spacing: .22em; color: #ffb3c0; }
+.nk-voo-txt { font-size: 11.5px; line-height: 1.45; color: var(--fraco); }
+.nk-voo-trilho { height: 4px; background: rgba(255,255,255,.08); overflow: hidden; }
+.nk-voo-trilho i { display: block; height: 100%; background: linear-gradient(90deg, #ffb020, var(--perigo)); }
+.nk-voo-conta { font-family: var(--mono); font-size: 8.5px; letter-spacing: .16em; color: var(--fraco); }
+.nk-voo-conta b { font-family: var(--disp); font-size: 17px; color: var(--perigo); margin-left: 5px; }
+
+/* O alarme do ALVO, com a janela de interceptação. */
+.nk-in-trilho { height: 4px; margin: 8px 0 6px; background: rgba(255,255,255,.1); overflow: hidden; }
+.nk-in-trilho i { display: block; height: 100%; background: var(--perigo); }
+.nk-in-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 100%; margin-top: 8px;
+  padding: 11px 14px; border: 0; cursor: pointer; color: #04121c; background: var(--cyan);
+  font-family: var(--disp); font-size: 12.5px; letter-spacing: .06em;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px)); }
+.nk-in-btn:hover:not(:disabled) { filter: brightness(1.12); }
+.nk-in-btn:disabled { opacity: .4; cursor: not-allowed; background: #22304a; color: var(--fraco); }
+.nk-in-btn i { font-style: normal; font-family: var(--mono); font-size: 7.5px; letter-spacing: .1em; opacity: .85; }
+.nk-in-ok { display: flex; align-items: center; gap: 7px; margin-top: 8px; padding: 9px 12px;
+  font-size: 11px; color: var(--cyan); background: rgba(53,224,255,.1); box-shadow: inset 2px 0 0 var(--cyan); }
+.nk-in-tarde { display: flex; align-items: center; gap: 6px; margin-top: 8px;
+  font-family: var(--mono); font-size: 8px; letter-spacing: .12em; color: var(--fraco); }

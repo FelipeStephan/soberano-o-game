@@ -1011,17 +1011,52 @@ export async function montarGlobo(container, jogo, {
   // altíssimo (sai da atmosfera), reentra sobre o alvo, e o que acontece embaixo
   // não é uma bolinha laranja — é flash cegante, cogumelo que sobe e onda de choque
   // que varre o continente. `origem` opcional (sai do seu país por padrão).
+  // ── A OGIVA EM VOO ────────────────────────────────────────────────────
+  // O PEDIDO DO DONO: "a bomba não mostra a bomba caindo — seria muito foda ter um
+  // tempo pra bomba cair e VER no mapa ela".
+  //
+  // Duas coisas impediam isso, e as duas estavam nesta função:
+  //
+  //   1. A VELOCIDADE ERA EM FRAMES, não em tempo. `vel: 0.006` por quadro dá ~2,8s
+  //      num monitor de 60Hz — e, pior, ~1,4s num de 120Hz. O voo tinha duração
+  //      diferente dependendo do monitor do jogador. Agora a velocidade é DERIVADA de
+  //      `duracaoMs`, então doze segundos são doze segundos em qualquer tela, e o
+  //      mesmo número que o motor do voo e o alerta do alvo estão contando.
+  //
+  //   2. A CÂMERA PULAVA PARA O ALVO no instante do lançamento. O jogador olhava um
+  //      país parado enquanto o míssil cruzava metade do planeta fora do quadro, e a
+  //      ogiva entrava em cena meio segundo antes de explodir. Agora a câmera abre no
+  //      MEIO DO CAMINHO e alto (o arco inteiro cabe na tela) e só mergulha no alvo na
+  //      reentrada — que é quando a bomba de fato está caindo, e é isso que ele quis ver.
   function lancarOgiva(alvo, origem = null, aoDetonar = null, opts = {}) {
     const eu = origem || ondeEsta(jogadorIso());
     const c = alvo?.properties ? centro(alvo) : alvo;
-    if (!eu || !c) return;
-    focar(alvo);   // a câmera precisa TESTEMUNHAR
+    if (!eu || !c) return null;
 
+    const duracaoMs = Math.max(1200, Number(opts.duracaoMs) || 12000);
     const p0 = vetor(eu.lat, eu.lng, 0.02);
     const p1 = vetor(c.lat, c.lng, 0.02);
     // apogeu bem alto: um ICBM risca o espaço, não plana como um caça
     const meio = p0.clone().add(p1).multiplyScalar(0.5).normalize().multiplyScalar(R * 1.9);
     const curva = new THREE.QuadraticBezierCurve3(p0, meio, p1);
+
+    // ── A CÂMERA DE TESTEMUNHA ──────────────────────────────────────
+    // Só se ninguém pediu o contrário. `opts.semCamera` existe porque num cliente que
+    // é só espectador do lançamento alheio, arrastar a câmera dele à força no meio de
+    // outra coisa que ele estava fazendo é sequestro de tela, não cinema.
+    if (!opts.semCamera) {
+      const mLat = (eu.lat + c.lat) / 2;
+      // O caminho mais curto no globo pode cruzar a antimeridiana: a média ingênua de
+      // -170 e 170 dá 0 (o lado errado do planeta). Isto corrige a volta.
+      let dLng = c.lng - eu.lng;
+      if (dLng > 180) dLng -= 360; else if (dLng < -180) dLng += 360;
+      const mLng = eu.lng + dLng / 2;
+      const distancia = Math.min(1, Math.abs(dLng) / 180);
+      globe.pointOfView({ lat: mLat, lng: mLng, altitude: 1.9 + distancia * 1.1 }, 1100);
+      // O mergulho no alvo entra na REENTRADA — não antes, senão volta a ser a tela
+      // parada que o dono reclamou.
+      setTimeout(() => { if (!cancelado) focar(alvo); }, duracaoMs * 0.62);
+    }
 
     const m = MODELOS.missil(0.9);
     orbitas.add(m);
@@ -1036,10 +1071,28 @@ export async function montarGlobo(container, jogo, {
     // INTERCEPTAÇÃO: se o alvo tem escudo à altura, a ogiva é abatida na reentrada
     // (uns ~72% do caminho). Em vez de cogumelo, um clarão defensivo no céu + uma
     // varredura de radar gigante no solo. A defesa venceu — desta vez.
-    const interceptaEm = opts.interceptado ? 0.68 + Math.random() * 0.08 : null;
-    missoes.push({ mesh: m, traco, curva, t: 0, vel: 0.006, tipo: 'ogiva', alvo: c, impacta: false,
-      interceptaEm, aoInterceptar: opts.aoInterceptar,
-      aoChegar: () => { detonacaoNuclear(c); aoDetonar?.(); } });
+    //
+    // `interceptado` pode ser uma FUNÇÃO, avaliada no momento do abate e não no
+    // lançamento: é o que permite ao alvo comprar reforço de defesa DURANTE o voo e a
+    // decisão ainda incorporá-lo. Decidir no lançamento tornaria a janela de reação
+    // decorativa — o resultado já estaria escrito antes de o jogador poder reagir.
+    const decidir = typeof opts.interceptado === 'function' ? opts.interceptado : () => !!opts.interceptado;
+    const marcaAbate = 0.68 + Math.random() * 0.08;
+    let cancelado = false;
+    const missao = {
+      mesh: m, traco, curva, t: 0, vel: 1 / (duracaoMs / (1000 / 60)), tipo: 'ogiva', alvo: c, impacta: false,
+      interceptaEm: marcaAbate, decidirAbate: decidir, aoInterceptar: opts.aoInterceptar,
+      aoChegar: () => { detonacaoNuclear(c); aoDetonar?.(); },
+    };
+    missoes.push(missao);
+    // Cancelador: o voo é a única animação do jogo que dura mais que uma cena, e a
+    // partida pode acabar (ou o jogador renascer) no meio dele.
+    return () => {
+      cancelado = true;
+      const i = missoes.indexOf(missao);
+      if (i >= 0) missoes.splice(i, 1);
+      orbitas.remove(m); orbitas.remove(traco);
+    };
   }
 
   // INTERCEPTAÇÃO no ar: clarão ciano de plasma (a arma defensiva) + destroços +
@@ -1133,13 +1186,22 @@ export async function montarGlobo(container, jogo, {
       const m = missoes[i];
       m.t += m.vel;
       // ABATIDA no ar antes de chegar? A defesa do alvo interceptou.
+      // A DECISÃO É TOMADA AQUI, no ponto do abate — e não no lançamento. É o que
+      // permite ao alvo comprar reforço de defesa durante os doze segundos de voo e
+      // essa compra ainda valer: se o resultado já estivesse escrito na largada, a
+      // janela de reação do online seria enfeite.
       if (m.interceptaEm && m.t >= m.interceptaEm) {
-        const pAbate = m.curva.getPointAt(Math.min(0.999, m.interceptaEm));
-        interceptacaoNuclear(pAbate, m.alvo);
-        m.aoInterceptar?.();
-        orbitas.remove(m.mesh);
-        if (m.traco) orbitas.remove(m.traco);
-        missoes.splice(i, 1); continue;
+        let abateu = false;
+        try { abateu = m.decidirAbate ? !!m.decidirAbate() : false; } catch { abateu = false; }
+        if (abateu) {
+          const pAbate = m.curva.getPointAt(Math.min(0.999, m.interceptaEm));
+          interceptacaoNuclear(pAbate, m.alvo);
+          m.aoInterceptar?.();
+          orbitas.remove(m.mesh);
+          if (m.traco) orbitas.remove(m.traco);
+          missoes.splice(i, 1); continue;
+        }
+        m.interceptaEm = null;   // passou da janela: daqui até o solo não há mais defesa
       }
       if (m.t >= 1) {
         // chegou: quem carrega ogiva explode no alvo

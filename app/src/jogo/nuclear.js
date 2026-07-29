@@ -289,7 +289,13 @@ export function marcarNacaoMorta(estado, iso, { porIso = null, porNome = null, t
 
 // ── O LANÇAMENTO ──────────────────────────────────────────────────────
 // Aplica tudo ao estado e devolve um relato rico pra a UI narrar o caos.
-export function dispararOgiva(estado, isoAlvo, { alvoHumano = false, alvoJogador = null } = {}) {
+// `forcarIntercepcao` existe por causa do VOO DE DOZE SEGUNDOS (ver jogo/voo.js): o
+// resultado do abate não pode mais ser sorteado no instante do lançamento, porque o
+// alvo tem a janela do voo para comprar reforço de defesa. Quem chama resolve o dado
+// no IMPACTO, já com o reforço que tiver chegado, e entrega a decisão pronta aqui.
+// Quando vem `null` (o caminho antigo, e o da IA), a função sorteia como sempre — a
+// mudança não obriga ninguém a saber do voo.
+export function dispararOgiva(estado, isoAlvo, { alvoHumano = false, alvoJogador = null, forcarIntercepcao = null } = {}) {
   // A ÚLTIMA TRAVA FICA NO MOTOR, não na tela. Se a partida não tem nucleares, o
   // botão nem devia existir — mas botão sumido não é regra, é decoração. A regra
   // é esta linha: nenhum caminho (atalho, IA, evento, save antigo) fura o acordo.
@@ -305,7 +311,8 @@ export function dispararOgiva(estado, isoAlvo, { alvoHumano = false, alvoJogador
   // ── 0. INTERCEPTAÇÃO ────────────────────────────────────────────────
   // O escudo do alvo pode abater a ogiva no ar. Ela ainda é gasta, mas não há
   // devastação — só a marca indelével de que VOCÊ tentou o impensável e falhou.
-  if (rand() < av.chanceIntercept) {
+  const abateu = forcarIntercepcao == null ? (rand() < av.chanceIntercept) : !!forcarIntercepcao;
+  if (abateu) {
     return dispararInterceptado(estado, av, isoAlvo);
   }
 
