@@ -256,6 +256,36 @@ export function ligarOnline(jogo, net, hooks) {
     // é decisão dos dois: as tropas dele pararam, as suas não pararam sozinhas. Você
     // escolhe encerrar (o conflito some do seu mapa) ou continuar em cima de um inimigo
     // que já recuou — que é uma jogada legítima, e cara na reputação.
+    // ── TRANSFERÊNCIA ENTRE GOVERNOS (dinheiro ou material) ───────────
+    // PEDIDO DO DONO: "permita enviar dinheiro e recursos para o online mesmo sem
+    // guerra". E aqui está a metade que faltava: sem este bilhete, mandar caixa a um
+    // humano só QUEIMAVA o seu — o motor debitava do remetente e subia a relação, e o
+    // destinatário nunca via um centavo. Ajuda que não chega não é ajuda.
+    //
+    // A relação sobe DOS DOIS LADOS, e não só do lado de quem deu: gratidão é mútua no
+    // sentido de que quem recebe passa a dever. É a mesma quantia que o remetente
+    // ganhou, para os dois enxergarem o mesmo laço.
+    if (ev.tipo === 'transferencia' && (ev.alvo === meuIso || ev.paraVoce)) {
+      const d = ev.dados || {};
+      const e = jogo.estado;
+      if (d.tipo === 'dinheiro' && Number(d.valor) > 0) {
+        e.tesouro = Math.round(((e.tesouro || 0) + Number(d.valor)) * 100) / 100;
+      }
+      if (d.unidades) {
+        e.forcas = e.forcas || {};
+        for (const [id, q] of Object.entries(d.unidades)) {
+          if (Number(q) > 0) e.forcas[id] = (e.forcas[id] || 0) + Number(q);
+        }
+      }
+      const k = PAISES[ev.dePais]?.rel;
+      if (k && Number(d.ganhoRel) > 0) e[k] = Math.max(-100, Math.min(100, (e[k] || 0) + Number(d.ganhoRel)));
+      jogo._empilharFeed?.([{ tipo: 'sistema', handle: '🤝 Ajuda recebida', cor: '#22e0a0',
+        texto: ev.texto || `${ev.deNome || nomeDe(ev.dePais)} enviou apoio ao seu país.` }]);
+      hooks.renderFeed?.();
+      alertaUrgente({ titulo: '🤝 APOIO RECEBIDO', texto: ev.texto || '', tom: 'bom', comSom: false });
+      hooks.atualizar?.();
+      return;
+    }
     if (ev.tipo === 'saida_guerra') { retiradaRecebida(ev); return; }
     // ── ENCOMENDAS: o ciclo comercial entre dois governos ──────────────
     // Três bilhetes, três papéis. `pedido_entregue` usa o MESMO tipo nos dois sentidos
@@ -949,6 +979,23 @@ export function ligarOnline(jogo, net, hooks) {
       if (iso === meuIso) continue;                       // a minha própria queda tem outro caminho
       e.ocupacoes[iso] = { ...(e.ocupacoes[iso] || {}), anexado: true, por: a.por };
       for (const est of estadosDe(iso)) e.donoEstado[est.id] = a.por;
+    }
+    // ── AS NAÇÕES QUE A OGIVA APAGOU ──────────────────────────────────
+    // O dono viu isto acontecer: "os EUA haviam sido atacados por uma bomba nuclear e o
+    // país tá vivo para quem retornou com outro país". A sala guardava anexação,
+    // território e frota — mas não a zona morta. Quem renascia (#11) ou entrava depois
+    // recebia um mundo onde a ogiva nunca caiu, com aquele país soberano e intacto no
+    // mapa, oferecendo diplomacia e comércio a um cemitério.
+    //
+    // `semRepercussao`: a conta diplomática do lançamento foi cobrada de quem estava na
+    // sala na hora. Quem chega agora herda o FATO, não o choque — não faz sentido
+    // desabar as relações de alguém por uma bomba que caiu antes de ele existir.
+    for (const [iso, m] of Object.entries(dados.mortas || {})) {
+      if (iso === meuIso) continue;                       // a minha própria morte tem outro caminho
+      try {
+        aplicarZonaMorta(e, iso, { porIso: m.por || null, porNome: m.porNome || null, semRepercussao: true });
+        marcarNacaoMorta(e, iso, { porIso: m.por || null, porNome: m.porNome || null });
+      } catch { /* um país a menos no retrato não pode impedir o resto de entrar */ }
     }
     for (const f of Object.values(dados.frotas || {})) {
       if (f?.dados && f.dePais !== meuIso) upsertFrotaHumana({ dePais: f.dePais, deNome: f.deNome, dados: f.dados });

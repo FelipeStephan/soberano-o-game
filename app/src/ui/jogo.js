@@ -29,7 +29,7 @@ import { nivelEsp } from '../jogo/espionagem.js';
 import { abrirEnvio } from './envio.js';
 import { donoDe as donoDeEstado, paisAnexado } from '../jogo/territorio.js';
 import { abrirPosicaoNaval } from './naval.js';
-import { alvosDeAjuda } from '../jogo/ajuda.js';
+import { alvoDeTransferencia } from '../jogo/ajuda.js';
 import { abrirGuerra, desfechoCarrossel } from './guerra.js';
 import { resolverGuerra } from '../jogo/guerra.js';
 import { multiplicadoresOfensiva } from '../jogo/ofensiva.js';
@@ -1615,7 +1615,18 @@ export function iniciarJogo(container, jogo, opts = {}) {
         ${botaoSairGuerra}
         ${!souEu(code) ? `<button class="pp-espiao" id="pp-espiao">${ico('eye', 15)} <span>ESPIONAR ESTE PAÍS</span><i>US$ 40 bi · rede: ${nivelEsp(jogo.estado, code)}/100</i></button>` : ''}
         ${botaoBase}
-        ${alvosDeAjuda(jogo.estado).some((a) => a.iso === code) ? `<button class="pp-ajuda" id="pp-ajuda">${ico('heart-handshake', 16)} <span>APOIAR NESTA GUERRA</span><i>em conflito</i></button>` : ''}
+        ${/* ENVIAR DINHEIRO E MATERIAL NÃO PRECISA MAIS DE GUERRA (pedido do dono).
+             O botão só some quando de fato não há o que mandar: guerra comigo (aí o
+             que se manda é tropa) ou país que saiu do mapa. O RÓTULO muda com o
+             contexto — "apoiar nesta guerra" e "enviar recursos" são duas jogadas
+             diferentes, e chamar as duas pelo mesmo nome esconde metade da diplomacia. */''}
+        ${(() => {
+          const alvoT = alvoDeTransferencia(jogo.estado, code);
+          if (!alvoT) return '';
+          return alvoT.paz
+            ? `<button class="pp-ajuda" id="pp-ajuda">${ico('heart-handshake', 16)} <span>ENVIAR RECURSOS</span><i>caixa ou material</i></button>`
+            : `<button class="pp-ajuda" id="pp-ajuda">${ico('heart-handshake', 16)} <span>APOIAR NESTA GUERRA</span><i>em conflito</i></button>`;
+        })()}
         ${(jogo.estado.ogivas > 0 && !souEu(code)) ? `<button class="pp-nuke" id="pp-nuke">${ico('radiation', 16)} <span>LANÇAMENTO NUCLEAR</span><i>${jogo.estado.ogivas} ogiva(s)</i></button>` : ''}
         <div class="gp2-dip-rot">${ico('handshake', 12)} DIPLOMACIA</div>
         <div class="gp2-dip">${acoes.map(cardAcaoPais).join('')}</div>

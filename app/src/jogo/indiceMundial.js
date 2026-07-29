@@ -61,6 +61,12 @@ export function statsVivos(estado) {
     //           tabela estática de NPC (ver chanceDeteccaoAlvo).
     guarn: guarnicoesResumo(estado),
     intel: Math.round(estado.inteligencia ?? 0),
+    // QUANTAS GUERRAS ABERTAS EU TENHO. Um número só, e é o que faz a "Tensão global"
+    // ser a MESMA para a sala inteira: cada cliente soma as guerras de todo mundo
+    // (barometroMundial) em vez de medir o planeta pelo próprio termômetro. Antes o
+    // painel dizia "global" em cima de uma conta pessoal — cinco jogadores, cinco
+    // verdades sobre o mesmo mundo.
+    guerras: (estado.emGuerra || []).filter(Boolean).length,
     // ── A CORRIDA DA DÉCADA VIAJA AQUI ────────────────────────────────────
     // O pódio final (rankingLegado) precisa do Legado de cada humano, e este pacote já
     // sai a cada batida para todo mundo na sala. Criar um evento novo só para isso

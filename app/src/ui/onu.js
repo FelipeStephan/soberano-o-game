@@ -79,7 +79,25 @@ const ADESAO_S = 25;
 // perde, convoca de novo, até a sala cansar e aprovar por desgaste. O intervalo vale
 // mesmo quando a convocação é NEGADA — senão bastava perder pra tentar outra vez.
 // 1 mês = 1 batida do mundo (30s), então 2 meses é ~1 minuto real.
-const COOLDOWN_MESES = 2;
+// ── O INTERVALO ENTRE SESSÕES, EM DUAS ALTURAS ─────────────────────────
+// BUG QUE ISTO CONSERTA (relato do dono: "está bloqueado o conselho, por favor
+// permita pelo menos 1 a cada 5 meses"):
+//
+// O intervalo era um só, de 2 meses, e era cobrado da SALA INTEIRA no instante em que
+// QUALQUER pessoa convocava — inclusive quando a sala recusava a sessão. Numa mesa de
+// cinco, bastava cada um tentar uma vez para todo mundo ficar travado; e como recusar
+// também consumia o intervalo, duas recusas seguidas trancavam o Conselho por rodadas
+// inteiras. O sistema punia a sala por usar o próprio mecanismo de veto.
+//
+// Agora são dois números, e a diferença entre eles é a diferença entre "aconteceu" e
+// "tentaram":
+//   • CONVOCAR custa 1 mês. É só para duas pessoas não abrirem mesa ao mesmo tempo.
+//     Se a sala recusar, é ISTO que fica valendo — ninguém mais paga pelo não dos outros.
+//   • UMA SESSÃO DE VERDADE custa 5 meses. Ela é um evento grande, com pena real,
+//     e merece intervalo. É o teto que o dono pediu: no pior caso possível, o Conselho
+//     volta a estar disponível cinco meses depois.
+const COOLDOWN_TENTATIVA = 1;
+const COOLDOWN_SESSAO = 5;
 
 // ── AS PENAS ───────────────────────────────────────────────────────────
 // Cada uma tem de DOER em algum lugar que o jogador já sente. `efeitos` é o golpe
@@ -211,13 +229,17 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
     const ate = Number(jogo.estado?.onuProximaSessao ?? 0);
     return Math.max(0, ate - turnoAgora());
   }
-  function marcarCooldown() {
-    // O ATO III CORTA O INTERVALO PELA METADE (Fase 2 do enredo). É a peça que dá aos
-    // perdedores uma arma institucional contra o líder na reta final — sem ela, quem
-    // abriu vantagem no Ato II só precisa não fazer nada por vinte minutos. O fator
-    // vem de jogo/atos.js: a régua dos atos é uma só para o jogo inteiro.
-    const meses = Math.max(1, Math.round(COOLDOWN_MESES * fatorCooldownONU(turnoAgora())));
-    jogo.estado.onuProximaSessao = turnoAgora() + meses;
+  // O ATO III CORTA O INTERVALO PELA METADE (Fase 2 do enredo). É a peça que dá aos
+  // perdedores uma arma institucional contra o líder na reta final — sem ela, quem
+  // abriu vantagem no Ato II só precisa não fazer nada por vinte minutos. O fator vem
+  // de jogo/atos.js: a régua dos atos é uma só para o jogo inteiro.
+  //
+  // NUNCA ENCURTA um intervalo já marcado (`Math.max`): a sessão que aconteceu vale 5
+  // meses, e uma tentativa posterior de 1 mês não pode servir de atalho para zerar isso.
+  function marcarCooldown(base) {
+    const meses = Math.max(1, Math.round(base * fatorCooldownONU(turnoAgora())));
+    const novo = turnoAgora() + meses;
+    jogo.estado.onuProximaSessao = Math.max(Number(jogo.estado.onuProximaSessao ?? 0), novo);
   }
 
   // Quem pode votar: todos os presentes MENOS o réu. Ele fala, não julga a própria pena.
@@ -315,7 +337,7 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
 
           <div class="onu-aviso">${ico('users', 12)} <span>Primeiro a sala decide <b>se</b> a sessão acontece (maioria de quem responder, em ${ADESAO_S}s).
             Depois vota a <b>pena</b>: maioria dos presentes, empate absolve. O réu fala e usa o microfone, mas <b>não vota a própria pena</b>.
-            Convocar consome o intervalo de <b>${COOLDOWN_MESES} meses</b> — mesmo se a sala recusar.</span></div>
+            Convocar reserva a mesa por <b>1 mês</b>. Se a sala aceitar e a sessão acontecer, o próximo Conselho só em <b>${COOLDOWN_SESSAO} meses</b>.</span></div>
           <button class="onu-convocar" id="onu-go">${ico('gavel', 15)} SELAR O ENVELOPE E CONVOCAR</button>
         </div>` : `
         <div class="onu-vazio">${ico('users', 16)} Não há outro chefe de Estado na sala. O Conselho existe pra julgar gente de carne e osso — chame alguém pra partida.</div>`}
@@ -359,7 +381,9 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
     sessao = novaSessao(publico, meuIso, meuNome());
     sessao.segredo = { titulo, motivo, acusado, pena, turnos: PENAS[pena]?.turnos || 6 };
     sessao.adesoes.set(meuIso, true);            // quem convoca já é um sim
-    marcarCooldown();                            // vale mesmo se a sala recusar
+    // Só 1 mês por enquanto: a sala ainda não decidiu se vai abrir a mesa. Se ela
+    // aceitar, o intervalo sobe para 5 em `sessaoAprovada`.
+    marcarCooldown(COOLDOWN_TENTATIVA);
     net.evento('onu_convocar', null,
       `convocou uma sessão extraordinária do Conselho de Segurança — o motivo está selado.`, publico);
     jogo._empilharFeed?.([{ tipo: 'sistema', handle: '⚖ Conselho de Segurança', cor: '#35e0ff',
@@ -444,9 +468,10 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
         // monta uma sessão em fase de adesão e vota no escuro. Ver `convocar`.
         sessao = novaSessao(d, ev.dePais, ev.deNome);
         sessao.adesoes.set(ev.dePais, true);           // quem convoca é um sim implícito
-        // O intervalo de 2 meses vale pra TODOS: com a mesa ocupada, ninguém mais
-        // convoca — e quando ela fechar, a sala inteira ainda espera o intervalo.
-        marcarCooldown();
+        // Mesa ocupada: 1 mês para ninguém abrir uma segunda sessão por cima. Se esta
+        // for aprovada, vira 5 — mas se a sala recusar, o custo para todo mundo foi só
+        // este mês. Era exatamente aqui que a sala inteira se trancava por recusar.
+        marcarCooldown(COOLDOWN_TENTATIVA);
         iniciarCronometro();
         painelAdesao();
         jogo._empilharFeed?.([{ tipo: 'jogador', handle: `⚖ ${ev.deNome || nomeDe(ev.dePais)}`, paisOrigem: ev.dePais,
@@ -621,6 +646,10 @@ export function montarONU(jogo, net, { onlineCtrl, globoCtrl } = {}) {
   function revelar(d, dePais, deNome) {
     if (!sessao || sessao.id !== d.id || sessao.encerrada) return;
     fecharAdesao();
+    // A SALA ACEITOU — agora sim a mesa vai existir, e agora sim o intervalo longo
+    // entra. Até este ponto era só 1 mês: quem convoca e é recusado não pode trancar o
+    // Conselho para todo mundo, que era exatamente o que travava a sala.
+    marcarCooldown(COOLDOWN_SESSAO);
     sessao.fase = 'abertura';
     sessao.titulo = d.titulo || 'Sessão extraordinária';
     sessao.motivo = d.motivo || '';

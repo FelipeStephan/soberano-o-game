@@ -196,14 +196,35 @@ function decairTensao(estado) {
 // — há sempre uma Ucrânia, um Oriente Médio. Daí a BASE de 14. Em cima dela entram o
 // seu próprio clima de guerra, as relações azedas, as suas guerras abertas, as
 // guerras entre NPCs e as pandemias.
+// ── BUG QUE ESTA VERSÃO CONSERTA (relato do dono) ─────────────────────
+// "Tensão global tá diferente pra cada player online."
+//
+// Estava, e por construção. A fórmula somava TRÊS coisas que só existem no cliente de
+// quem lê: `temp_guerra` (o SEU clima de guerra), a média das suas relações `rel_*`, e
+// `emGuerra` (as SUAS guerras). Cada jogador media a temperatura do planeta com o
+// próprio termômetro — e o painel dizia "Tensão GLOBAL" em cima de um número pessoal.
+// Numa sala de cinco, cinco verdades sobre o mesmo mundo.
+//
+// Agora só entram coisas que TODO MUNDO NA SALA TEM: as guerras entre NPCs e as
+// pandemias (o host relaia por batida) e o número de guerras humanas abertas (cada
+// jogador publica a própria em `statsVivos`, que já viajava). Somando as mesmas
+// parcelas, todo cliente chega ao mesmo número — não por sincronização, mas porque a
+// conta é a mesma. É mais robusto que relaiar o resultado: continua certo ENTRE as
+// batidas, e não quebra se um pacote se perder.
+//
+// O que era pessoal não sumiu: virou `meuCalor` em `climaGlobal`, que é o que a régua
+// de nível já usava para não deixar você chamar de "paz" um mundo onde VOCÊ está
+// trocando tiro.
 const BASE_TENSAO = 14;
 export function barometroMundial(estado) {
-  const rels = Object.keys(estado).filter((k) => k.startsWith('rel_'));
-  const media = rels.length ? rels.reduce((a, k) => a + estado[k], 0) / rels.length : 0;
   const npc = (estado.conflitosNPC || []).reduce((a, c) => a + 3 + (c.intensidade || 40) / 20, 0);
   const pand = (estado.pandemias?.length || 0) * 4;
-  const t = BASE_TENSAO + (Number(estado.temp_guerra || 0) * 0.6) + Math.max(0, -media) * 0.5
-    + (estado.emGuerra?.length || 0) * 9 + npc + pand;
+  // As guerras HUMANAS da sala: as minhas + as que cada outro jogador publica. Offline,
+  // `_statsHumanos` está vazio e sobra a minha — que é a leitura honesta de um mundo
+  // onde os outros são simulação.
+  let guerrasHumanas = (estado.emGuerra || []).length;
+  for (const s of Object.values(estado._statsHumanos || {})) guerrasHumanas += (s?.guerras | 0);
+  const t = BASE_TENSAO + guerrasHumanas * 9 + npc + pand;
   return Math.max(0, Math.min(100, Math.round(t)));
 }
 

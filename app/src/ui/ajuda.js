@@ -5,7 +5,7 @@
 // Você olha um país sangrando, decide se vale comprar a gratidão dele — com caixa
 // ou com ferro — e o painel te mostra na hora quanto sobe a relação e quem, do outro
 // lado, vai anotar o seu nome. Poder brando também é poder.
-import { alvosDeAjuda, ajudarComDinheiro, ajudarComArsenal, mancheteAjuda } from '../jogo/ajuda.js';
+import { alvoDeTransferencia, ajudarComDinheiro, ajudarComArsenal, mancheteAjuda } from '../jogo/ajuda.js';
 import { UNIDADES, DOMINIOS } from '../dados/forcas.js';
 import { PAISES } from '../dados/paises.js';
 import { bandeira, ISO2_DE, FOTO_UNIDADE } from '../dados/imagens.js';
@@ -18,7 +18,9 @@ const nomeDe = (i) => PAISES[i]?.nome || i;
 
 export function abrirAjuda(feature, jogo, { onFim, globoCtrl } = {}) {
   const iso = feature?.properties?.ISO_A3 || feature?.properties?.ADM0_A3 || '';
-  const alvo = alvosDeAjuda(jogo.estado).find((a) => a.iso === iso);
+  // PEDIDO DO DONO: "permita enviar dinheiro e recursos para o online mesmo sem
+  // guerra". Antes o painel só aceitava país sob fogo — ver alvoDeTransferencia.
+  const alvo = alvoDeTransferencia(jogo.estado, iso);
 
   const modal = document.createElement('div');
   modal.className = 'modal-fundo';
@@ -33,7 +35,7 @@ export function abrirAjuda(feature, jogo, { onFim, globoCtrl } = {}) {
       <div class="aj-cab"><span class="aj-simbolo">${ico('heart-handshake', 24)}</span>
         <div class="aj-tit"><h2>AJUDA EXTERNA</h2><div class="aj-sub">Sem conflito ativo</div></div>
         <button class="pp-fechar" id="aj-x">${ico('x', 16)}</button></div>
-      <div class="aj-vazio">${ico('info', 16)} ${esc(nomeDe(iso))} não está numa guerra agora. Você só pode socorrer países sob fogo — quem está em paz não precisa das suas armas.</div>
+      <div class="aj-vazio">${ico('info', 16)} Não dá para mandar nada a ${esc(nomeDe(iso))}: ou vocês estão em guerra — e aí o que se manda é tropa —, ou aquele país não existe mais.</div>
     </div>`;
     modal.querySelector('#aj-x').addEventListener('click', sair);
     modal.addEventListener('click', (ev) => { if (ev.target === modal) sair(); });
@@ -51,18 +53,23 @@ export function abrirAjuda(feature, jogo, { onFim, globoCtrl } = {}) {
     modal.innerHTML = `<div class="ajuda-painel">
       <div class="aj-cab">
         <span class="aj-simbolo">${ico('heart-handshake', 24)}</span>
-        <div class="aj-tit"><h2>APOIAR ${esc(alvo.nome.toUpperCase())}</h2>
-          <div class="aj-sub">Escolher um lado tem preço — e testemunhas</div></div>
+        <div class="aj-tit"><h2>${alvo.paz ? 'ENVIAR A' : 'APOIAR'} ${esc(alvo.nome.toUpperCase())}</h2>
+          <div class="aj-sub">${alvo.paz
+            ? 'Caixa e material, sem guerra no meio. Gentileza também é geopolítica.'
+            : 'Escolher um lado tem preço — e testemunhas'}</div></div>
         ${ISO2_DE[iso] ? `<img class="gp-flag" src="${bandeira(ISO2_DE[iso], 80)}" alt="">` : ''}
         <button class="pp-fechar" id="aj-x">${ico('x', 16)}</button>
       </div>
 
-      <div class="aj-conflito">
+      ${/* O DUELO só existe quando HÁ duelo. Em tempo de paz não se está "apoiando
+           contra" ninguém — se está mandando dinheiro para um vizinho, e desenhar um
+           inimigo inexistente ali seria inventar uma guerra na cabeça do jogador. */''}
+      ${inimigo ? `<div class="aj-conflito">
         <div class="ajc-lado ajc-amigo"><span>APOIAR</span><b>${esc(alvo.nome)}</b></div>
         <span class="ajc-vs">${ico('swords', 15)}</span>
         <div class="ajc-lado ajc-inimigo"><span>CONTRA</span><b>${esc(nomeDe(inimigo))}</b></div>
-      </div>
-      <div class="aj-ctx">${ico('info', 13)} ${esc(alvo.contexto)}. Relação atual com ${esc(alvo.nome)}: <b>${alvo.rel}</b>.</div>
+      </div>` : ''}
+      <div class="aj-ctx">${ico('info', 13)} ${alvo.contexto ? `${esc(alvo.contexto)}. ` : ''}Relação atual com ${esc(alvo.nome)}: <b>${alvo.rel}</b>.</div>
 
       <div class="aj-abas">
         <button class="aj-aba ${aba === 'dinheiro' ? 'on' : ''}" data-aba="dinheiro">${ico('banknote', 14)} Dinheiro</button>
@@ -201,6 +208,18 @@ export function abrirAjuda(feature, jogo, { onFim, globoCtrl } = {}) {
     globoCtrl?.desenharLinha?.(feature, 'comercio', 5000);
     // o mundo registra o gesto
     jogo._empilharFeed?.([{ tipo: 'sistema', handle: 'Ajuda Externa', texto: mancheteAjuda(jogo.estado, res), cor: '#22e0a0' }]);
+    // ── A ENTREGA PRECISA CHEGAR DO OUTRO LADO ──────────────────────
+    // Sem este bilhete, mandar dinheiro a um humano era só QUEIMAR o seu caixa: o
+    // motor debitava de você e subia a relação, e o outro jogador nunca via um
+    // centavo. Ajuda que não chega não é ajuda, é caridade para o vazio.
+    if (jogo.ehOnline) {
+      jogo._relayOnline?.('transferencia', iso,
+        res.tipo === 'dinheiro'
+          ? `${jogo.ficha?.pais || 'Um governo'} enviou ${dinheiro(res.valor)} ao seu país.`
+          : `${jogo.ficha?.pais || 'Um governo'} transferiu material militar ao seu país.`,
+        { tipo: res.tipo, valor: res.valor || 0, unidades: res.unidades || null,
+          deNome: jogo.ficha?.pais || null, ganhoRel: res.ganhoRel || 0 });
+    }
 
     modal.innerHTML = `<div class="ajuda-painel aj-fim">
       <div class="ajf-simbolo">${ico('heart-handshake', 38)}</div>

@@ -25,9 +25,17 @@
 // foto errada já apareceu neste projeto (a Lockheed exibiu o logo da Apple) e é pior
 // que foto genérica.
 
+// O PISO DA HOSTILIDADE, acima do fundo da escala de propósito. `livre` tem
+// `relMin: -100`, que é o fundo — e por isso "venda livre" significava literalmente
+// "vende para todos", incluindo quem está em guerra com o fornecedor. Este piso é a
+// regra que vale para TODAS as políticas: ninguém arma quem o odeia. Calibrado em -25
+// e não em 0 porque comércio de armas entre países que se detestam existe no mundo
+// real — o que não existe é comércio de armas com quem te chama de inimigo declarado.
+export const REL_HOSTIL = -25;
+
 export const POLITICAS = {
   livre:    { rot: 'Venda livre',      relMin: -100, ic: 'globe',      cor: '#22e0a0',
-              txt: 'Vendem pra quem pagar. Não fazem perguntas.' },
+              txt: 'Vendem pra quem pagar. Não fazem perguntas — mas nem eles armam um inimigo declarado.' },
   aliado:   { rot: 'Só para aliados',  relMin: 30,   ic: 'handshake',  cor: '#ffb020',
               txt: 'Exige relação diplomática saudável e um acordo de uso final.' },
   restrito: { rot: 'Altamente restrito', relMin: 65, ic: 'lock',       cor: '#ff8c1a',
@@ -336,6 +344,30 @@ export function fabricaDe(isoCode) {
 // Retorna { pode, motivo, chance } — se o país de origem topa vender pra você.
 // `chance` é a probabilidade de o pedido ser aprovado no fechamento do turno:
 // mesmo com relação boa, venda de armamento sensível não é automática.
+// ── QUEM VENDE PARA VOCÊ, E POR QUÊ NÃO ───────────────────────────────
+// BUG QUE ISTO CONSERTA (relato do dono): "as relações com países e compras de
+// armamento não tá conectado... basicamente eu compro qualquer coisa de um país
+// hostil! Tá tudo bugado."
+//
+// Estava mesmo, e a causa era uma linha: a política `livre` tem `relMin: -100`. Ou
+// seja, "vende pra quem pagar" era literal — o país com quem você estava TROCANDO
+// TIRO continuava te vendendo caça, porque -100 é o fundo da escala e ninguém está
+// abaixo dele. E não havia nenhuma outra checagem: nem guerra, nem embargo do
+// Conselho, nem se o fornecedor ainda existia depois de uma ogiva.
+//
+// Agora existem quatro TRAVAS ABSOLUTAS, avaliadas antes da política do item. Elas
+// não são "relação insuficiente" — são recusas que nenhum preço e nenhuma política de
+// exportação resolve, porque não são sobre confiança, são sobre o mundo:
+//
+//   1. o fornecedor não existe mais (foi apagado do mapa);
+//   2. você está em GUERRA ABERTA com ele;
+//   3. o Conselho de Segurança te pôs sob embargo de armas;
+//   4. a relação está em território hostil — abaixo de -25 ninguém arma quem o odeia,
+//      por mais liberal que seja a política de exportação. É o piso que faltava para
+//      "venda livre" parar de significar "venda para todos, inclusive inimigos".
+//
+// A trava 4 é a que mais muda o jogo no dia a dia: ela transforma a diplomacia em
+// pré-requisito de logística. Azedar com quem te fornece passa a ter preço militar.
 export function podeComprar(item, estado, relValor, meuIso) {
   const p = POLITICAS[item.politica];
 
@@ -343,6 +375,34 @@ export function podeComprar(item, estado, relValor, meuIso) {
   if (item.origem === meuIso) {
     return { pode: true, chance: 1, nacional: true, motivo: 'Produção nacional — a linha de montagem é sua.' };
   }
+
+  const e = estado || {};
+  // 1 · O FORNECEDOR SAIU DO MAPA. Sem isto, o jogo oferecia um Su-57 de uma Rússia
+  // que tinha virado zona radioativa três meses antes.
+  const morto = (e.nacoesMortas || []).some((m) => (m?.iso || m) === item.origem)
+    || (e.zonasRadioativas || []).some((z) => (z?.iso || z) === item.origem);
+  if (morto) {
+    return { pode: false, chance: 0, bloqueio: 'morto',
+      motivo: 'Não há mais indústria nem governo ali. Este fornecedor deixou de existir.' };
+  }
+  // 2 · GUERRA ABERTA. A trava mais óbvia, e a que o dono viu faltando.
+  if ((e.emGuerra || []).includes(item.origem)) {
+    return { pode: false, chance: 0, bloqueio: 'guerra',
+      motivo: 'Vocês estão em guerra aberta. Ninguém vende arma para quem está apontando uma.' };
+  }
+  // 3 · EMBARGO DO CONSELHO DE SEGURANÇA contra você. A pena existia e o mercado não
+  // a consultava — a sala votava um embargo de armas e o embargado seguia comprando.
+  const embargo = (e.penasONU || []).find((x) => x?.tipo === 'embargo_armas' && x?.contra === meuIso && Number(x?.turnos) > 0);
+  if (embargo) {
+    return { pode: false, chance: 0, bloqueio: 'embargo',
+      motivo: `Embargo de armas do Conselho de Segurança — ${embargo.turnos} mês(es) restantes. Nenhum fornecedor estrangeiro assina contrato com você.` };
+  }
+  // 4 · O PISO DA HOSTILIDADE. Abaixo disto, nem "venda livre" vende.
+  if (relValor <= REL_HOSTIL) {
+    return { pode: false, chance: 0, bloqueio: 'hostil',
+      motivo: `Relação ${relValor}: vocês são hostis. Nenhuma política de exportação cobre venda a um adversário declarado.` };
+  }
+
   if (item.politica === 'nunca') {
     return { pode: false, chance: 0, motivo: `${p.txt} Não há preço que resolva isto.` };
   }

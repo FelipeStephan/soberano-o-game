@@ -46,6 +46,38 @@ function relDe(estado, iso) {
   return k ? Number(estado[k] ?? 0) : 0;
 }
 
+// ── O DESTINATÁRIO, HAJA GUERRA OU NÃO ────────────────────────────────
+// BUG QUE ISTO CONSERTA (pedido do dono): "PERMITA enviar dinheiro e recursos para o
+// online mesmo sem guerra."
+//
+// O painel de ajuda recusava qualquer país que não estivesse sob fogo — literalmente:
+// "quem está em paz não precisa das suas armas". Isso fazia sentido quando o único
+// destinatário possível era um NPC sangrando: ajudar era escolher um lado numa guerra
+// alheia. Não faz sentido nenhum quando do outro lado tem UMA PESSOA na sala.
+//
+// Entre humanos, mandar caixa ou material em tempo de paz é metade da diplomacia que
+// existe: comprar um aliado antes de precisar dele, socorrer quem quebrou, pagar por
+// um voto no Conselho, financiar quem vai brigar por você. Bloquear isso não protegia
+// nada — só obrigava os jogadores a esperarem uma guerra para poderem cooperar.
+//
+// `alvosDeAjuda` continua sendo a lista de "quem está sob fogo agora" (é o que a
+// etiqueta APOIAR NESTA GUERRA usa). Esta função responde outra pergunta: "posso
+// mandar alguma coisa para este país?" — e a resposta é sim, para qualquer um que não
+// esteja em guerra COMIGO e não tenha saído do mapa.
+export function alvoDeTransferencia(estado, iso) {
+  const eu = estado.iso || 'USA';
+  if (!iso || iso === eu) return null;
+  if ((estado.emGuerra || []).includes(iso)) return null;          // a esse você não manda, manda tropa
+  if ((estado.nacoesMortas || []).some((m) => (m.iso || m) === iso)) return null;  // não se socorre cratera
+  const emGuerra = alvosDeAjuda(estado).find((a) => a.iso === iso);
+  if (emGuerra) return emGuerra;                                   // sob fogo: mantém o contexto do conflito
+  return {
+    iso, nome: PAISES[iso]?.nome || iso,
+    contexto: null, conflito: null, inimigo: null,
+    rel: relDe(estado, iso), paz: true,
+  };
+}
+
 // ── AJUDA FINANCEIRA ──────────────────────────────────────────────────
 export function ajudarComDinheiro(estado, iso, valorTri) {
   if (valorTri <= 0) return { falha: 'Valor inválido.' };
@@ -73,8 +105,9 @@ export function ajudarComArsenal(estado, iso, deploy) {
     if (!q) continue;
     if ((estado.forcas[id] || 0) < q) return { falha: `Você não tem ${q} de ${UNIDADE_POR_ID[id]?.nome || id}.` };
   }
+  const enviadas = {};
   for (const [id, q] of Object.entries(deploy)) {
-    if (q) estado.forcas[id] = Math.max(0, (estado.forcas[id] || 0) - q);
+    if (q) { estado.forcas[id] = Math.max(0, (estado.forcas[id] || 0) - q); enviadas[id] = q; }
   }
 
   const k = PAISES[iso]?.rel;
@@ -92,7 +125,7 @@ export function ajudarComArsenal(estado, iso, deploy) {
   if (ik) estado[ik] = clamp((estado[ik] || 0) - 12, -100, 100);
   const efeitos = aplicarEfeitos(estado, { soft_power: 6, temp_guerra: 4 });
 
-  return { tipo: 'arsenal', iso, deploy, ganhoRel: ganho, efeitos, inimigo };
+  return { tipo: 'arsenal', unidades: enviadas, iso, deploy, ganhoRel: ganho, efeitos, inimigo };
 }
 
 // Empurra a intensidade do conflito na direção do favorecido. Se a ajuda for grande

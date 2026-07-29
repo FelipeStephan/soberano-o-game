@@ -385,6 +385,15 @@ export class Jogo {
     return {
       turno: this.turno,
       preco_petroleo: e.preco_petroleo,
+      // ── BUG QUE ISTO CONSERTA (relato do dono: "o preço de petróleo" diferente) ──
+      // O PREÇO já viajava, mas a SETA e o MOTIVO não. O convidado roda `beatMundo()`
+      // local em sincronia e depois recebe o retrato do host por cima: o preço virava
+      // o do host, mas `brent_delta`/`brent_motivo` continuavam sendo os que ELE mesmo
+      // calculou. Resultado: o topo mostrava "▲ 5" ao lado de um preço que tinha caído,
+      // e um motivo que não explicava aquele número. Duas metades da mesma informação,
+      // vindas de dois mundos diferentes.
+      brent_delta: e.brent_delta ?? 0,
+      brent_motivo: e.brent_motivo || '',
       temp_guerra_mundo: e.temp_guerra,           // referência do clima (não sobrescreve o do jogador)
       conflitosNPC: e.conflitosNPC || [],
       pandemias: e.pandemias || [],
@@ -403,7 +412,11 @@ export class Jogo {
     const e = this.estado;
     // O CALENDÁRIO é o da sala — o convidado adota o mês do host na hora.
     if (Number.isFinite(d.turno) && d.turno > this.turno) { this.turno = d.turno; e.turno = d.turno; }
+    // O BARRIL VIAJA INTEIRO: preço, variação e motivo. Adotar só o preço fazia a seta
+    // e a explicação do convidado contarem a história do mundo dele, não a do da sala.
     if (Number.isFinite(d.preco_petroleo)) e.preco_petroleo = d.preco_petroleo;
+    if (Number.isFinite(d.brent_delta)) e.brent_delta = d.brent_delta;
+    if (typeof d.brent_motivo === 'string') e.brent_motivo = d.brent_motivo;
     if (Array.isArray(d.conflitosNPC)) e.conflitosNPC = d.conflitosNPC;
     if (Array.isArray(d.pandemias)) e.pandemias = d.pandemias;
     if (d.estreitos) e.estreitosFechados = d.estreitos;

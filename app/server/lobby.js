@@ -82,7 +82,7 @@ function difundirEvento(sala, obj, exceto) {
 // DURÁVEIS (quem tomou qual território, quais frotas estão no mar) e reenvia a quem (re)entra.
 // Não é simulação: é a memória do que os humanos fizeram uns aos outros.
 function acumularMundoSala(sala, ev) {
-  const ms = sala.mundoSala || (sala.mundoSala = { donoEstado: {}, conflitos: {}, frotas: {}, anexacoes: {} });
+  const ms = sala.mundoSala || (sala.mundoSala = { donoEstado: {}, conflitos: {}, frotas: {}, anexacoes: {}, mortas: {} });
   if (!ms.anexacoes) ms.anexacoes = {};   // salas criadas antes deste campo existir
   const atacante = ev.dePais;
   const d = ev.dados || {};
@@ -94,6 +94,21 @@ function acumularMundoSala(sala, ev) {
   // devolução de soberania apaga o registro, que é a operação inversa exata.
   if (ev.tipo === 'anexacao' && d.iso) { ms.anexacoes[d.iso] = { por: atacante, nome: d.nome || d.iso }; return; }
   if (ev.tipo === 'devolucao' && d.iso) { delete ms.anexacoes[d.iso]; return; }
+  // ── NAÇÃO APAGADA POR OGIVA — o fato mais irreversível de todos ────
+  // BUG QUE ISTO CONSERTA (relato do dono): "os EUA haviam sido atacados por uma bomba
+  // nuclear e o país tá vivo para quem retornou com outro país". Estava certo. A
+  // anexação era guardada aqui desde o #8, mas a ZONA MORTA nunca foi — então quem
+  // renascia na sala (#11) ou entrava depois recebia um mundo onde a ogiva nunca caiu:
+  // território, frotas e anexações chegavam, e os EUA apareciam soberanos e intactos,
+  // com governo, exército e diplomacia disponíveis. Duas salas dentro da mesma sala.
+  //
+  // Não tem operação inversa: `devolucao` desfaz uma anexação porque devolver soberania
+  // é uma jogada real. Ninguém desirradia um país.
+  if (!ms.mortas) ms.mortas = {};                 // salas criadas antes deste campo existir
+  if ((ev.tipo === 'nuclear_impacto' || ev.tipo === 'nuclear') && d.iso && d.zonaMorta) {
+    ms.mortas[d.iso] = { por: d.porIso || atacante, porNome: d.porNome || ev.deNome || null };
+    return;
+  }
   if (ev.tipo === 'guerra_resultado') {
     for (const id of (d.caem || [])) { ms.donoEstado[id] = atacante; ms.conflitos[id] = { por: atacante, intensidade: 45 }; }
   } else if (ev.tipo === 'ataque_estado' && d.estadoId) {
