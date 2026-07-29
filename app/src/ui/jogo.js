@@ -58,6 +58,9 @@ import { situacaoDoFim } from '../dados/copyFim.js';
 import { emitirMandato, julgarMandato, mandatoDoTurno, cofreMandato, placarDeMandatos, roman, ANOS_POR_MANDATO, TOTAL_MANDATOS } from '../jogo/mandatos.js';
 import { abrirCobranca, abrirVeredito, faixaMandatoHTML } from './mandato.js';
 import { viradaDeAto } from '../jogo/atos.js';
+// CENA 4 DO ENREDO (Fase 3): três decisões obrigatórias do gabinete que são, ao mesmo
+// tempo, a primeira jogada real e a apresentação da cabine. A história É o tutorial.
+import { abrirPrimeiroConselho } from './primeiroConselho.js';
 // Encomendas entre governos: motor puro + as telas.
 import { abrirEncomendas, cartaoPedidoRecebido, badgeEncomendas } from './encomendas.js';
 import { registrarPedidoRecebido, aplicarResposta, tickEncomendas, receberEntrega, aplicarPagamento } from '../jogo/encomendas.js';
@@ -2881,17 +2884,29 @@ export function iniciarJogo(container, jogo, opts = {}) {
     abrirEscolhaDoutrina(jogo, {
       onEscolher: (d) => {
         renderTopo();
-        // O MANDATO I ENTRA COLADO NA ESCOLHA. É a Cena 5 do documento de enredo: você
-        // escolhe o rumo e o país imediatamente diz o que espera de você. Deixar para
-        // a próxima batida quebraria a única sequência dramática que a abertura tem.
-        emitirEAnunciar(1);
         // A escolha é PÚBLICA, e público começa em casa: o país inteiro fica sabendo
-        // que rumo o governo assumiu. É a primeira linha do enredo daquela partida.
+        // que rumo o governo assumiu. É a primeira linha do enredo daquela partida —
+        // e por isso vai ao feed ANTES das cenas seguintes, não depois delas.
         jogo._empilharFeed?.([{
           tipo: 'sistema', handle: '📜 Doutrina de Estado', cor: '#ffc750',
           texto: `${jogo.ficha.pais} adota a doutrina ${d.nome}. ${d.promessa} A década começa a ser medida a partir de agora.`,
         }]);
         renderFeed();
+
+        // ── A SEQUÊNCIA DE ABERTURA, CENA A CENA ────────────────────
+        // Doutrina (3) → Primeiro Conselho (4) → Mandato I (5). Encadeadas por
+        // CALLBACK e não por timer: cada uma espera a anterior terminar, porque o
+        // jogador lê no ritmo dele e um `setTimeout` atropelaria quem lê devagar.
+        //
+        // A guarda `primeiroConselhoFeito` mora no ESTADO (viaja no save): quem
+        // retoma uma partida não pode ser obrigado a refazer o primeiro conselho —
+        // aquelas decisões já foram tomadas e já estão nos números.
+        const seguirParaMandato = () => { renderHud(); renderTopo(); emitirEAnunciar(1); };
+        if (jogo.estado.primeiroConselhoFeito) { seguirParaMandato(); return; }
+        abrirPrimeiroConselho(jogo, {
+          onDecidiu: () => { renderHud(); renderTopo(); renderFeed(); },
+          onFim: () => { jogo.estado.primeiroConselhoFeito = true; seguirParaMandato(); },
+        });
       },
     });
   } else if (temDoutrina(jogo.estado) && jogo.fase !== 'fim' && !jogo.espectador

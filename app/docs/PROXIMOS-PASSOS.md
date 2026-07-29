@@ -45,10 +45,20 @@ plantão). E o mundo passou a ter **três Atos**: frio nos anos 1-3, duro nos 4-
 8-10 a Corrida — guerra nasce mais e o Conselho de Segurança pode ser convocado no
 dobro da frequência. Motores em `jogo/mandatos.js` e `jogo/atos.js`.
 
-**O que vem a seguir:** Fase 3 (a abertura em cinco cenas, com o tutorial embutido) →
-Fase 4 (o Rival e a cadeia de missões offline) → Fase 5 (o Estraga-Prazeres). Três
-decisões do dono continuam abertas na seção 13 do documento, e nenhuma bloqueia a
-Fase 3.
+**A Fase 3 fecha a abertura (2026-07-28):** a partida começa com uma cinemática de
+20s que diz o que está em jogo (o ano, as outras dezenove cadeiras, a década e os três
+desfechos), e logo depois da Doutrina o gabinete apresenta **três decisões
+obrigatórias** — cada uma é uma jogada real E apresenta uma peça da cabine, com um
+holofote sobre ela no fim. **O tutorial é a história**: não há overlay de setas, e a
+primeira jogada já é irreversível. Em `ui/abertura.js` e `ui/primeiroConselho.js`.
+
+A sequência de abertura completa hoje: **o mundo (20s) → escolher o país → escolher a
+Doutrina → o Primeiro Conselho de Ministros → o Mandato I.**
+
+**O que vem a seguir:** Fase 4 (o Rival NPC e a cadeia de missões offline, com finais
+múltiplos) → Fase 5 (o Estraga-Prazeres, o papel de quem caiu no online). Três
+decisões do dono continuam abertas na seção 13 do documento; a #4 (offline é modo
+próprio ou tutorial?) é a única que a Fase 4 realmente precisa.
 
 ---
 

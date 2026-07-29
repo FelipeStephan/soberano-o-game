@@ -16,6 +16,10 @@ import { resumoSave, apagarSave } from '../jogo/save.js';
 import { conectarLobby } from '../net/lobby.js';
 import { ico } from './icones.js';
 import { montarControleAudio, tocarEfeito } from './audio.js';
+// CENA 1 DO ENREDO (Fase 3): os vinte segundos que dizem o que está em jogo antes de
+// o jogador escolher uma bandeira. Toca uma vez por navegador; o link de rever fica
+// no rodapé para quem quiser de novo.
+import { abrirAbertura, jaViuAbertura } from './abertura.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const TEX = 'https://cdn.jsdelivr.net/npm/three-globe/example/img';
@@ -60,6 +64,7 @@ export function mostrarInicio(container, onStart) {
         <span class="hm-aviso">Trabalho acadêmico ficcional. Países e veículos de imprensa são reais;
           líderes, declarações e acontecimentos são inventados. Marcas pertencem aos seus titulares,
           que não endossam nem participam deste projeto.</span>
+        <button class="hm-rever" id="hm-rever">${ico('play-circle', 11)} REVER A ABERTURA</button>
         <span class="hm-versao">SOBERANO · PROTÓTIPO</span>
       </footer>
     </div>`;
@@ -346,13 +351,28 @@ export function mostrarInicio(container, onStart) {
     // MODO (tela 1)
     container.querySelectorAll('.hmm-op').forEach((b) => b.addEventListener('click', () => {
       const m = b.dataset.modo;
-      if (m === 'offline') { tela = 'pais'; voarPara(sel); render(); return; }
-      modoOnline = m; tela = 'lobby'; erroLobby = '';
-      abrirConexao();
-      render();
-      if (m === 'hospedar') net?.criar({ pais: sel, aberta: true });
-      else net?.listar();
+      // A ABERTURA ENTRA AQUI, e não no carregamento da página: é o instante em que o
+      // jogador DECIDIU jogar. Antes disso ele pode só estar olhando o planeta girar —
+      // e uma cinemática de 20s por cima de quem ainda não escolheu nada é intromissão.
+      const seguir = () => {
+        if (m === 'offline') { tela = 'pais'; voarPara(sel); render(); return; }
+        modoOnline = m; tela = 'lobby'; erroLobby = '';
+        abrirConexao();
+        render();
+        if (m === 'hospedar') net?.criar({ pais: sel, aberta: true });
+        else net?.listar();
+      };
+      if (jaViuAbertura()) seguir(); else abrirAbertura(seguir);
     }));
+    // O rodapé é estático (não passa por `render()`), mas `ligarInteracoes` roda a
+    // CADA render — sem esta marca o listener empilharia e o quinto clique tentaria
+    // abrir cinco aberturas. A marca é no nó, e não numa variável, porque o nó é o
+    // que sobrevive intacto entre renders.
+    const rever = container.querySelector('#hm-rever');
+    if (rever && !rever.dataset.ligado) {
+      rever.dataset.ligado = '1';
+      rever.addEventListener('click', () => abrirAbertura(null));
+    }
 
     // REGRA DA PARTIDA (as duas telas usam a mesma caixa; só o id muda)
     container.querySelectorAll('#hmf-semnuke, #lb-semnuke').forEach((cb) => cb.addEventListener('change', () => {

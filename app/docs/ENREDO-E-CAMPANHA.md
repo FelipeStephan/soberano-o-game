@@ -332,7 +332,26 @@ Legado no fim (reusa `feitos.js`) + tela final com campeão e coroas.
 >   `:not`, a cobrança seguinte batia no veredito que ainda saía de cena e o jogador
 >   ficava dois anos sem objetivo.
 
-**Fase 3 — A abertura.** As cinco cenas com o tutorial embutido.
+**Fase 3 — A abertura. 🟢 FEITA em 2026-07-28.** As cinco cenas com o tutorial embutido.
+
+> **O que entrou:** `ui/abertura.js` (Cena 1 — 20s, quatro batidas, uma vez por
+> navegador), `ui/primeiroConselho.js` (Cena 4 — três decisões do gabinete com efeito
+> real + holofote na peça da cabine que cada uma apresenta) e `estilo-abertura.css`.
+> As Cenas 2, 3 e 5 já existiam (país, doutrina, Mandato I) e agora estão **encadeadas
+> por callback**, não por timer: cada uma espera a anterior terminar.
+>
+> **Detalhes que valem lembrar antes de mexer:**
+> - A abertura toca **uma vez por navegador** (`localStorage`), e pular conta como
+>   visto. Cinemática obrigatória na quinta partida é pedágio. O link "REVER A
+>   ABERTURA" fica no rodapé da home.
+> - Ela dispara ao ESCOLHER O MODO, não ao carregar a página: antes disso o jogador
+>   pode só estar olhando o planeta girar.
+> - O **holofote** lê a posição real do elemento no instante em que acende — sobrevive
+>   a mudança de layout. Se o alvo não existir, ele não acende e a sequência segue:
+>   tutorial nunca pode travar o jogo.
+> - As três decisões têm **efeito real e irreversível**. Decisão de tutorial sem
+>   consequência ensina que decidir não importa.
+> - `estado.primeiroConselhoFeito` viaja no save: quem retoma não refaz o conselho.
 
 **Fase 4 — A campanha offline.** Rival + cadeia de missões + finais múltiplos.
 
